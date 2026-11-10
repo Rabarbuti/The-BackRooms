@@ -1,0 +1,185 @@
+# The BackRooms — plano do jogo em Co-Op
+
+Complementa `Docs/contexto-backrooms.md` (referências do gênero). Este documento define **como montar o jogo**.
+
+Estado do projeto em 10/11/2026: Unity 6000.3.26f1, HDRP 17.3, Input System, template ainda presente (`OutdoorsScene`, `TutorialInfo`, `Readme.asset`), repositório git sem commits.
+
+**Etapa 1 (sala de teste) feita em 10/11/2026:** cena `Assets/_Game/Scenes/Level0_Test.unity`, gerada pelo menu **BackRooms > Montar Level 0**. O mapa é construído em tempo de execução pelo `LevelBuilder` a partir de uma seed (já determinístico, base da etapa 3). Outros menus: **Capturar prévia do Level 0** (imagens em `Logs/Previews`) e **Testar Level 0 (fumaça)**. Ainda sem rede: o jogador é local.
+
+**Ajustes de 10/11/2026 após o primeiro teste:**
+- Luminárias viraram luzes pontuais com sombra em cache (6 faces cada). Para isso `maxShadowRequests` subiu de 128 para 1024 nos três assets do HDRP em `Assets/Settings`. O limite comporta ~170 luminárias; mapas maiores vão precisar ligar e desligar sombras por distância.
+- Paredes grossas com nicho (`AlcoveSouth`/`AlcoveWest` no `LevelData`): entrada baixa, só agachado. O volume `HidingSpot` marca `PlayerController.IsHidden`, que a entidade vai consultar na etapa 4.
+- Saída: porta com placa EXIT na célula mais distante do spawn (`LevelExit`, por enquanto só registra no log). As setas rabiscadas seguem o caminho mais curto até ela.
+- Marcas por decalque (HDRP Decal Projector), todas definidas pela seed: sangue preto, poças no chão, palavras (HELP!, RUN, IT HEARS YOU) e setas.
+- Passos: cadência corrigida (era 3,7 passos/s andando; agora ~2) e som refeito sem chiado. A primeira versão sem chiado ficou inaudível (98% da energia abaixo de 150 Hz); a atual concentra o som entre 150 Hz e 1 kHz e normaliza cada clipe.
+- Sujeira e desgaste: encardido embutido nas texturas de papel de parede e carpete (que passaram a cobrir 2 m por repetição) e ~230 decalques por seed — escorridos do teto, umidade subindo do rodapé, manchas, riscos de atrito, trechos úmidos e gastos no carpete. Quantidades em `LevelGenerator.PlaceGrime`; cores e força em `Level0Setup.BuildScene`.
+- O teste de fumaça agora anda de verdade (segura W por 2 s) e confere distância, passos disparados e volume dos clipes.
+
+**Etapa 2 (rede) feita em 10/11/2026, por IP direto:**
+- `GameSession` (objeto `Sessao`, junto do `NetworkManager`) hospeda ou entra por IP na porta 7777. Jogar sozinho é hospedar sem ninguém entrar.
+- O host sorteia a seed e a envia a cada cliente por mensagem nomeada (`BackRooms.Seed`); cada máquina gera o mapa localmente. A gerência de cenas do Netcode está desligada.
+- O jogador é um prefab de rede criado na conexão. `PlayerNetwork` liga controle, câmera e lanterna só na máquina do dono; nas outras o prefab é o corpo daquele jogador (traje amarelo provisório). Posição pelo `NetworkTransform` com autoridade do dono; inclinação da cabeça, agachar e lanterna por `NetworkVariable`. Os passos dos outros jogadores tocam em 3D.
+- Menu em UI Toolkit (`ConnectionMenu`) com atalhos H (hospedar) e J (entrar). O mapa de fundo do menu usa a seed 1998.
+- Linha de comando: `-brHost` e `-brJoin <endereço>`.
+- Testes: menu **BackRooms > Testar Level 0** (sozinho, pelo atalho H) e, por linha de comando, `Level0SmokeTest.BatchHost` / `BatchJoin` em dois editores — o cliente confere que recebeu o mesmo mapa e que vê o host andar e acender a lanterna.
+- **Falta:** entrar por código de sala (Relay da Unity). O projeto já tem `cloudProjectId`, mas é preciso ativar o Relay no painel da Unity Cloud. Até lá, jogar pela internet exige abrir a porta 7777 no roteador de quem hospeda ou usar uma VPN de jogo.
+- **Para testar com dois jogadores no editor:** Window > Multiplayer > Multiplayer Play Mode, ative o Player 2, aperte Play, H na janela principal e J na do Player 2.
+
+Pacotes adicionados ao `Packages/manifest.json` (versões recomendadas pelo editor 6000.3.26f1): Netcode for GameObjects 2.13.3, Multiplayer Services 2.3.3, Multiplayer Play Mode 2.0.2, AI Navigation 2.0.15. Vivox (16.11.0) entra só na etapa 5.
+
+---
+
+## 1. Conceito
+
+**1 a 4 jogadores caem juntos no Level 0 e precisam achar a saída antes que o lugar os separe.**
+
+O jogo inteiro se apoia em uma tensão de quatro forças:
+
+| Força | Empurra o grupo para | Como aparece no jogo |
+|---|---|---|
+| Sanidade | **ficar junto** | Sozinho, a sanidade cai rápido; perto de um colega, ela se recupera |
+| Objetivos | **se separar** | A saída exige ações em pontos distantes ao mesmo tempo |
+| Coordenação | **falar** | Códigos, direções e avisos só passam por voz |
+| Entidade | **ficar calado** | Ela ouve passos, objetos e a voz real dos jogadores |
+
+Toda mecânica nova deve reforçar uma dessas forças. Se não reforça, não entra.
+
+---
+
+## 2. O que muda por ser co-op
+
+### 2.1 Voz por proximidade
+- Voz 3D: quem está longe não é ouvido. Paredes abafam.
+- O volume da voz de cada jogador gera **ruído** que a entidade investiga.
+- **Walkie-talkie** (item, bateria limitada): fala com o grupo todo à distância, mas o aparelho de quem recebe também faz barulho.
+
+### 2.2 Captura em vez de morte
+Quando a entidade pega um jogador, ele não morre — some e reaparece trancado em uma **sala de contenção** em outro ponto do labirinto.
+- O capturado continua jogando: pode gritar por socorro (voz por proximidade) e ouvir quem se aproxima.
+- A porta só abre **por fora**, por um colega.
+- Todos capturados = derrota; o nível recomeça com outro layout.
+
+Isso evita o maior problema do co-op de terror: o jogador morto que fica assistindo.
+
+### 2.3 Objetivos que exigem mais de uma pessoa
+A saída do Level 0 é um elevador sem energia. Para ligá-lo:
+1. Achar os **disjuntores** espalhados (quantidade = jogadores + 1, mínimo 2). Cada um emite um zumbido elétrico audível de longe — é a pista, não é caça às cegas.
+2. Dois disjuntores precisam ser armados **dentro de uma janela de tempo curta**, por pessoas diferentes em lugares diferentes.
+3. Um painel mostra um código que só aparece em **outro** ponto do mapa: um lê, outro digita.
+
+Com 1 jogador, as regras de simultaneidade são desligadas (o jogo continua jogável sozinho, mas é pensado para grupo).
+
+### 2.4 Recursos compartilhados
+- Lanterna com bateria; pilhas são poucas e ficam no chão para qualquer um pegar.
+- Almond Water restaura sanidade; pode ser entregue a um colega.
+- Spray de tinta para marcar paredes — as marcas são vistas por todos.
+
+### 2.5 Sanidade em grupo
+- Cai com: estar sozinho, escuro, proximidade da entidade.
+- Sobe com: estar perto de um colega, área iluminada, Almond Water.
+- Baixa sanidade gera alucinações **só para aquele jogador** (passos falsos, um colega que não está lá, voz distorcida). Os outros não veem — o que gera desconfiança e conversa.
+
+---
+
+## 3. Arquitetura de rede
+
+### 3.1 Modelo
+- **Host autoritativo (listen server):** um jogador hospeda, os outros entram. Sem servidor dedicado.
+- **Entrada por código de sala**, usando relay — ninguém precisa abrir porta no roteador.
+- Como é PvE entre amigos, trapaça não é preocupação: prioridade é resposta rápida do controle.
+
+### 3.2 Pacotes
+| Função | Pacote | Observação |
+|---|---|---|
+| Sincronização | Netcode for GameObjects (`com.unity.netcode.gameobjects`) | Solução oficial da Unity; o Multiplayer Center já instalado recomenda e instala |
+| Sala e relay | Multiplayer Services (`com.unity.services.multiplayer`) | Criar/entrar em sessão por código; exige conta Unity Cloud vinculada ao projeto |
+| Voz | Vivox (`com.unity.services.vivox`) | Canal posicional 3D; conferir limites da faixa gratuita |
+| Teste local | Multiplayer Play Mode (`com.unity.multiplayer.playmode`) | Roda 2–4 jogadores dentro do editor |
+| IA | AI Navigation (`com.unity.ai.navigation`) | NavMesh gerado em runtime |
+
+Alternativa futura para publicar na Steam: trocar o transporte por Steam Networking. A arquitetura abaixo não muda.
+
+### 3.3 Quem é dono de quê
+| Coisa | Autoridade | Como sincroniza |
+|---|---|---|
+| Layout do labirinto | Host sorteia a **seed** | Um inteiro; cada cliente gera o mesmo mapa localmente |
+| Posição do jogador | O próprio jogador (owner) | NetworkTransform com autoridade do dono |
+| Lanterna, agachar, item na mão | Owner | NetworkVariable |
+| Entidade (posição, estado) | Host | NetworkTransform + NetworkVariable de estado |
+| Portas, disjuntores, itens, marcas de spray | Host | Cliente pede por RPC, host valida e replica |
+| Sanidade | Host calcula | NetworkVariable lida pelo dono |
+| Ruído (passos, objeto, voz) | Cliente reporta | RPC para o host, que alimenta a IA |
+| Alucinações | Local | Não trafega na rede |
+| Voz | Vivox | Canal separado do Netcode |
+
+### 3.4 Geração procedural determinística
+- O mapa **não** é sincronizado peça por peça: só a seed. Isso mantém a banda baixa mesmo com labirinto grande.
+- Regras para todos os clientes gerarem o mesmo mapa: usar `System.Random(seed)` próprio (nunca `UnityEngine.Random` global), lista de peças em ordem fixa, nenhuma decisão dependente de tempo ou física.
+- Peças estáticas (parede, piso, teto, luminária) são objetos locais comuns. Só o que muda de estado (porta, disjuntor, item, entidade) é objeto de rede, criado pelo host.
+- Após gerar, o host constrói o NavMesh em runtime. Clientes não precisam de NavMesh.
+
+### 3.5 Entidade
+- Roda só no host: NavMeshAgent + máquina de estados (patrulhar → investigar ruído → perseguir → procurar → capturar).
+- Entrada principal é o **mapa de ruído**: cada evento tem posição, intensidade e alcance.
+- Sempre anunciada por som posicional antes de ser vista; nunca nasce perto de um jogador.
+
+---
+
+## 4. Renderização (HDRP)
+
+O projeto já está em HDRP, que entrega o visual realista de The Complex. Custos a administrar:
+
+- **Luz:** mapa procedural não permite lightmap assado. Usar painéis emissivos no teto + luzes em tempo real **sem sombra**, com fade por distância. Sombra só na lanterna dos jogadores.
+- **Peças repetidas:** GPU instancing / GPU Resident Drawer e oclusão por setor.
+- **VHS:** Custom Post Process do HDRP (ruído, aberração cromática, distorção, scanlines, carimbo de data).
+- **Perfis:** manter os três assets de qualidade do template (Performant / Balanced / High Fidelity) como opção gráfica do jogo.
+
+Decisão: o jogo fica em HDRP. Para PCs modestos, a saída é o perfil "Performant" nas opções gráficas, não trocar de pipeline.
+
+---
+
+## 5. Estrutura de pastas
+
+```
+Assets/_Game/
+  Scenes/        Boot, MainMenu, Level0
+  Scripts/
+    Network/     sessão, spawn, seed
+    Player/      movimento, câmera, lanterna, interação
+    World/       gerador, peças, portas, disjuntores
+    Entities/    IA, mapa de ruído
+    Systems/     sanidade, captura, objetivo
+    Audio/       ambiência, passos, voz
+    UI/          menu, sala, HUD mínimo
+  Prefabs/       Player, Entity, peças do kit, itens
+  Art/           materiais, texturas, modelos
+  Audio/
+  Settings/      volumes, perfis HDRP
+```
+
+---
+
+## 6. Etapas
+
+A rede entra na etapa 2, não no fim: adaptar um jogo solo pronto para multiplayer costuma exigir reescrever tudo.
+
+| # | Etapa | Pronto quando |
+|---|---|---|
+| 0 | **Fundação** — commit inicial, remover template, pastas, instalar pacotes | Projeto abre limpo, pacotes compilam |
+| 1 | **Sala de teste** — jogador em primeira pessoa, kit modular do Level 0 montado à mão, luz, zumbido | Dá para andar numa sala amarela que "parece Backrooms" |
+| 2 | **Rede** — hospedar/entrar por código, 2+ jogadores se veem andando, lanterna sincronizada | Dois jogadores do editor (Multiplayer Play Mode) se enxergam |
+| 3 | **Labirinto por seed** — gerador determinístico + NavMesh em runtime | Todos os clientes veem exatamente o mesmo mapa |
+| 4 | **Entidade** — IA no host, mapa de ruído, esconderijos, captura e resgate | Dá para ser pego e ser solto por um colega |
+| 5 | **Voz** — Vivox posicional, voz gera ruído, walkie-talkie | Falar alto atrai a entidade |
+| 6 | **Loop completo** — disjuntores, código, elevador, sanidade, vitória/derrota | Uma partida do Level 0 tem começo, meio e fim |
+| 7 | **Acabamento** — VHS, menu, sala de espera, opções gráficas, build | Dá para mandar o jogo para amigos |
+| 8+ | **Mais níveis** — Level 1 (garagem), Poolrooms etc., cada um com regra própria | — |
+
+---
+
+## 7. Decisões em aberto
+
+1. ~~HDRP ou URP~~ — **decidido em 10/11/2026: manter HDRP.**
+2. **Distribuição** — só entre amigos (relay da Unity basta) ou publicar na Steam depois.
+3. **Corpo do jogador** — modelo humanoide animado (mais trabalho) ou algo simples no início (cápsula com lanterna e câmera).
+4. **Arte** — modelar o kit do Level 0 ou partir de assets prontos.

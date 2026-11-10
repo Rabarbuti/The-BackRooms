@@ -128,7 +128,9 @@ Packages/packages-lock.json linguist-generated
 *.jpeg                  lfs
 *.jpg                   lfs
 *.pict                  lfs
-*.png                   lfs
+# PNG fica direto no Git: a conta do GitHub está sem orçamento de LFS e as
+# texturas do projeto são pequenas. Para voltar ao LFS, troque "binary" por "lfs".
+*.png                   binary
 *.psd                   lfs
 *.tga                   lfs
 *.tif                   lfs
