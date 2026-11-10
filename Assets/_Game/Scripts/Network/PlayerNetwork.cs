@@ -22,6 +22,8 @@ namespace BackRooms.Net
         public Transform cameraPivot;
         [Tooltip("Corpo visto pelos outros jogadores. O dono não vê o próprio.")]
         public GameObject body;
+        [Tooltip("Caneta do jogador. O painel da filmadora lê daqui se ela está na mão.")]
+        public BackRooms.Items.PenTool pen;
 
         const float SendInterval = 1f / 15f;
 
@@ -39,6 +41,9 @@ namespace BackRooms.Net
         float _shownEye;
         bool _ready;
 
+        /// <summary>O jogador desta máquina, quando já está no mapa. Nulo no menu.</summary>
+        public static PlayerNetwork Local { get; private set; }
+
         public override void OnNetworkSpawn()
         {
             _shownEye = controller.standingEyeHeight;
@@ -50,6 +55,7 @@ namespace BackRooms.Net
         public override void OnNetworkDespawn()
         {
             _ready = false;
+            if (Local == this) Local = null;
         }
 
         IEnumerator BeginLocal()
@@ -68,6 +74,7 @@ namespace BackRooms.Net
             flashlight.inputEnabled = true;
             controller.enabled = true;
             _ready = true;
+            Local = this;
 
             if (session != null) session.NotifyLocalPlayerReady();
         }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using BackRooms.Audio;
+using BackRooms.Items;
 using BackRooms.Net;
 using BackRooms.Player;
 using BackRooms.UI;
@@ -36,6 +37,14 @@ namespace BackRooms.EditorTools
         const string PlayerPrefabPath = PrefabFolder + "/Player.prefab";
 
         static readonly string[] Phrases = { "HELP!", "RUN", "IT HEARS YOU" };
+
+        /// <summary>
+        /// Versão do conteúdo gerado (cena, texturas, materiais). Aumente sempre que mudar
+        /// algo que só aparece depois de recriar tudo — texturas, materiais, objetos da cena
+        /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
+        /// gravado na cena e oferece recriar.
+        /// </summary>
+        public const int ContentVersion = 9;
 
         [MenuItem("BackRooms/Montar Level 0 (sala de teste)")]
         public static void Build()
@@ -84,6 +93,12 @@ namespace BackRooms.EditorTools
             Texture2D ceilingNormal = EnsureTexture("Ceiling_Normal", 256, PaintCeilingHeight, normalFromHeight: true);
 
             Material wall = EnsureMaterial("Wallpaper", Color.white, wallAlbedo, null, 0.2f, Color.black);
+
+            // Versões limpas, só para a sala inicial.
+            Texture2D wallCleanAlbedo = EnsureTexture("Wallpaper_Clean_Albedo", 1024, PaintWallpaperClean, normalFromHeight: false);
+            Texture2D carpetCleanAlbedo = EnsureTexture("Carpet_Clean_Albedo", 1024, PaintCarpetClean, normalFromHeight: false);
+            Material wallClean = EnsureMaterial("Wallpaper_Clean", Color.white, wallCleanAlbedo, null, 0.2f, Color.black);
+            Material floorClean = EnsureMaterial("Carpet_Clean", Color.white, carpetCleanAlbedo, carpetNormal, 0.05f, Color.black);
             Material floor = EnsureMaterial("Carpet", Color.white, carpetAlbedo, carpetNormal, 0.05f, Color.black);
             Material ceiling = EnsureMaterial("Ceiling", Color.white, ceilingAlbedo, ceilingNormal, 0.1f, Color.black);
             Material baseboard = EnsureMaterial("Baseboard", Rgb(184, 160, 64), null, null, 0.35f, Color.black);
@@ -164,9 +179,17 @@ namespace BackRooms.EditorTools
             ambience.AddComponent<AudioSource>().playOnAwake = false;
             ambience.AddComponent<FluorescentHum>();
 
+            // Tintas da caneta, na ordem das cores (PenTool.ColorNames).
+            Material[] inks =
+            {
+                EnsureInk("Ink_Black", Rgb(14, 14, 16)),
+                EnsureInk("Ink_Red", Rgb(196, 20, 20)),
+                EnsureInk("Ink_Blue", Rgb(26, 58, 205))
+            };
+
             Material hazmat = EnsureMaterial("Hazmat", Rgb(214, 186, 36), null, null, 0.35f, Color.black);
             Material visor = EnsureMaterial("Visor", Rgb(10, 10, 12), null, null, 0.85f, Color.black);
-            GameObject playerPrefab = CreatePlayerPrefab(hazmat, visor);
+            GameObject playerPrefab = CreatePlayerPrefab(hazmat, visor, inks[0]);
 
             var level = new GameObject("Level0");
             var builder = level.AddComponent<LevelBuilder>();
@@ -176,6 +199,9 @@ namespace BackRooms.EditorTools
             builder.baseboardMaterial = baseboard;
             builder.panelOnMaterial = panelOn;
             builder.panelOffMaterial = panelOff;
+            builder.contentVersion = ContentVersion;
+            builder.cleanWallMaterial = wallClean;
+            builder.cleanFloorMaterial = floorClean;
             builder.bloodDecals = blood;
             builder.poolDecals = pools;
             builder.textDecals = texts;
@@ -220,12 +246,50 @@ namespace BackRooms.EditorTools
 
             new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
 
+            CreateCamcorder();
+
+            // Onde ficam os riscos de caneta de todos os jogadores.
+            var drawings = new GameObject("Rabiscos");
+            drawings.AddComponent<DrawingBoard>().inkMaterials = inks;
+
             EditorSceneManager.SaveScene(scene, ScenePath);
             AddSceneToBuild(ScenePath);
             AssetDatabase.SaveAssets();
 
             Selection.activeGameObject = level;
             Debug.Log("[BackRooms] Level 0 montado em " + ScenePath + ". Aperte Play e escolha Hospedar (tecla H) ou Entrar (tecla J). WASD anda, Shift corre, Ctrl agacha, Espaço pula, F liga a lanterna.");
+        }
+
+        // Filmadora: o painel (REC, relógio, bateria) e o efeito VHS em tela cheia, que o
+        // HDRP aplica depois do pós-processamento por meio de um Custom Pass.
+        static void CreateCamcorder()
+        {
+            const string materialPath = SettingsFolder + "/CamcorderVHS.mat";
+
+            var material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+            if (material == null)
+            {
+                Shader shader = Shader.Find("BackRooms/CamcorderVHS");
+                if (shader == null)
+                {
+                    Debug.LogError("[BackRooms] Shader BackRooms/CamcorderVHS não encontrado (Assets/_Game/Shaders/CamcorderVHS.shader).");
+                    return;
+                }
+
+                material = new Material(shader) { name = "CamcorderVHS" };
+                AssetDatabase.CreateAsset(material, materialPath);
+            }
+
+            var camcorderObject = new GameObject("Filmadora");
+            camcorderObject.AddComponent<Camcorder>();
+
+            var volume = camcorderObject.AddComponent<CustomPassVolume>();
+            volume.isGlobal = true;
+            volume.injectionPoint = CustomPassInjectionPoint.AfterPostProcess;
+
+            var pass = volume.AddPassOfType<CamcorderPass>();
+            pass.name = "VHS";
+            pass.material = material;
         }
 
         static PanelSettings EnsurePanelSettings()
@@ -255,7 +319,7 @@ namespace BackRooms.EditorTools
 
         // O prefab nasce com controle, câmera e ouvinte desligados: quem liga é o
         // PlayerNetwork, só na máquina do dono. Nas outras ele é a figura daquele jogador.
-        static GameObject CreatePlayerPrefab(Material hazmat, Material visor)
+        static GameObject CreatePlayerPrefab(Material hazmat, Material visor, Material ink)
         {
             var player = new GameObject("Player");
 
@@ -344,6 +408,26 @@ namespace BackRooms.EditorTools
             network.listener = listener;
             network.cameraPivot = pivot.transform;
             network.body = body;
+
+            // Caneta. Na mão ela é um cilindro fino no canto de baixo da visão; só o dono vê.
+            GameObject penModel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            penModel.name = "CanetaNaMao";
+            Object.DestroyImmediate(penModel.GetComponent<Collider>());
+            penModel.transform.SetParent(pivot.transform, false);
+            penModel.transform.localPosition = new Vector3(0.17f, -0.14f, 0.34f);
+            penModel.transform.localRotation = Quaternion.Euler(62f, -18f, 0f);
+            penModel.transform.localScale = new Vector3(0.011f, 0.07f, 0.011f);
+
+            var penRenderer = penModel.GetComponent<MeshRenderer>();
+            penRenderer.sharedMaterial = ink;
+            penRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            penModel.SetActive(false);
+
+            var pen = player.AddComponent<PenTool>();
+            pen.aim = pivot.transform;
+            pen.viewModel = penModel;
+            pen.viewModelRenderer = penRenderer;
+            network.pen = pen;
 
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(player, PlayerPrefabPath);
             Object.DestroyImmediate(player);
@@ -510,6 +594,19 @@ namespace BackRooms.EditorTools
             return EnsureDecal(name, texture, smoothness, Color.white, 1f, true, 0);
         }
 
+        // Tinta da caneta: fosca e sem receber decalques, para as manchas de sujeira
+        // não passarem por cima do que os jogadores riscam.
+        static Material EnsureInk(string name, Color color)
+        {
+            Material material = EnsureMaterial(name, color, null, null, 0.3f, Color.black);
+            if (material == null) return null;
+
+            material.SetFloat("_SupportDecals", 0f);
+            HDMaterial.ValidateMaterial(material);
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
         // Decalque que só pinta cor (e, se pedido, brilho de molhado) por cima da superfície,
         // sem mexer no relevo.
         static Material EnsureDecal(string name, Texture2D texture, float smoothness, Color tint, float blend,
@@ -622,6 +719,17 @@ namespace BackRooms.EditorTools
         // Papel de parede: losangos vazados em fileiras alternadas, 8 repetições por metro.
         static Color32 PaintWallpaper(int x, int y, int size, System.Random rng)
         {
+            return WallpaperPixel(x, y, size, rng, true);
+        }
+
+        // Papel de parede da sala inicial: o mesmo desenho, sem nenhum encardido.
+        static Color32 PaintWallpaperClean(int x, int y, int size, System.Random rng)
+        {
+            return WallpaperPixel(x, y, size, rng, false);
+        }
+
+        static Color32 WallpaperPixel(int x, int y, int size, System.Random rng, bool grime)
+        {
             var baseColor = new Color32(200, 181, 96, 255);
             var patternColor = new Color32(183, 164, 80, 255);
 
@@ -637,6 +745,7 @@ namespace BackRooms.EditorTools
             Color32 c = motif ? patternColor : baseColor;
             float shade = Noise(rng) * 0.03f + Blotch(x, y, size) * 0.02f;
             if (stripe) shade -= 0.03f;
+            if (!grime) return Shade(c, shade);
 
             // Encardido embutido no papel: nuvens largas de sujeira e veios verticais de
             // umidade antiga. Os dois ruídos fecham nas bordas da textura.
@@ -646,19 +755,31 @@ namespace BackRooms.EditorTools
             float veins = StainPainter.TileableFbm(tu, tv, 22, 2, 23);
             float speckle = StainPainter.TileableFbm(tu, tv, 40, 40, 37, 2);
 
-            shade -= Mathf.Max(0f, clouds - 0.48f) * 0.36f;
-            shade -= Mathf.Max(0f, veins - 0.56f) * 0.3f;
-            shade -= Mathf.Max(0f, speckle - 0.7f) * 0.35f;
+            shade -= Mathf.Max(0f, clouds - 0.48f) * 0.16f;
+            shade -= Mathf.Max(0f, veins - 0.56f) * 0.12f;
+            shade -= Mathf.Max(0f, speckle - 0.7f) * 0.12f;
 
             return Shade(c, shade);
         }
 
         static Color32 PaintCarpet(int x, int y, int size, System.Random rng)
         {
+            return CarpetPixel(x, y, size, rng, true);
+        }
+
+        // Carpete da sala inicial: só a fibra, sem manchas.
+        static Color32 PaintCarpetClean(int x, int y, int size, System.Random rng)
+        {
+            return CarpetPixel(x, y, size, rng, false);
+        }
+
+        static Color32 CarpetPixel(int x, int y, int size, System.Random rng, bool grime)
+        {
             var baseColor = new Color32(166, 149, 90, 255);
             // Fibra: ruído fino. A variação larga é fraca de propósito — quem dá as
             // diferenças de tom no chão são os decalques de umidade e desgaste.
             float shade = Noise(rng) * 0.16f + Blotch(x, y, size) * 0.03f;
+            if (!grime) return Shade(baseColor, shade);
 
             // Carpete velho: manchas escuras largas, pontos de sujeira e trechos pisados
             // mais claros. Tudo fecha nas bordas da textura.
@@ -668,9 +789,9 @@ namespace BackRooms.EditorTools
             float spots = StainPainter.TileableFbm(u, v, 18, 18, 67, 3);
             float worn = StainPainter.TileableFbm(u, v, 3, 5, 83);
 
-            shade -= Mathf.Max(0f, dirt - 0.47f) * 0.42f;
-            shade -= Mathf.Max(0f, spots - 0.66f) * 0.4f;
-            shade += Mathf.Max(0f, worn - 0.58f) * 0.3f;
+            shade -= Mathf.Max(0f, dirt - 0.47f) * 0.18f;
+            shade -= Mathf.Max(0f, spots - 0.66f) * 0.18f;
+            shade += Mathf.Max(0f, worn - 0.58f) * 0.1f;
 
             return Shade(baseColor, shade);
         }

@@ -24,12 +24,23 @@ namespace BackRooms.EditorTools
             if (folder != null) EditorUtility.RevealInFinder(folder);
         }
 
-        /// <summary>Uso em linha de comando: monta a cena, captura e fecha o editor.</summary>
+        /// <summary>Uso em linha de comando: recria tudo (assets e cena), captura e fecha o editor.</summary>
         public static void BatchBuildAndCapture()
+        {
+            BatchBuild(regenerateAssets: true);
+        }
+
+        /// <summary>Uso em linha de comando: recria só a cena, mantendo texturas e materiais, captura e fecha.</summary>
+        public static void BatchSceneAndCapture()
+        {
+            BatchBuild(regenerateAssets: false);
+        }
+
+        static void BatchBuild(bool regenerateAssets)
         {
             try
             {
-                Level0Setup.BuildScene(regenerateAssets: true);
+                Level0Setup.BuildScene(regenerateAssets);
                 string folder = ArgumentAfter("-previewOut") ?? DefaultFolder();
                 bool ok = Capture(folder) != null;
                 EditorApplication.Exit(ok ? 0 : 2);
@@ -89,8 +100,14 @@ namespace BackRooms.EditorTools
             try
             {
                 builder.Rebuild();
+
+                // Fora do Play o painel da filmadora não se atualiza sozinho: desenha um quadro
+                // de exemplo (gravando há 3 min 27 s, bateria em 80%).
+                var camcorder = UnityEngine.Object.FindFirstObjectByType<BackRooms.UI.Camcorder>();
+                if (camcorder != null) camcorder.Draw(true, 207.47f, 207.47f, 0.8f, false);
+
                 Transform player = playerObject.transform;
-                player.position = builder.CellCenter(builder.Data.SpawnX, builder.Data.SpawnZ) + Vector3.up * 0.05f;
+                player.position = builder.SpawnCenter + Vector3.up * 0.05f;
                 var torch = player.GetComponentInChildren<Light>(true);
                 if (torch != null) torch.enabled = false;
 
@@ -120,6 +137,22 @@ namespace BackRooms.EditorTools
 
                 if (player != null) ShootFeatures(builder, player, camera, torch, target, readback, folder);
 
+                if (player != null) ShootPenSample(builder, player, camera, target, readback, folder);
+
+                // Quatro vistas de uma área distante do início, onde o desgaste é total.
+                if (player != null)
+                {
+                    int farX = Mathf.Clamp(builder.Data.SpawnX - 5, 0, builder.Data.Width - 1);
+                    int farZ = Mathf.Clamp(builder.Data.SpawnZ - 4, 0, builder.Data.Height - 1);
+                    player.position = builder.CellCenter(farX, farZ) + Vector3.up * 0.05f;
+
+                    for (int i = 0; i < 4; i++)
+                    {
+                        player.rotation = Quaternion.Euler(0f, i * 90f, 0f);
+                        Shoot(camera, target, readback, Path.Combine(folder, $"level0_longe_{i * 90}.png"));
+                    }
+                }
+
                 Debug.Log("[BackRooms] Prévia salva em " + folder);
                 return folder;
             }
@@ -134,6 +167,64 @@ namespace BackRooms.EditorTools
                 // Reabre a cena do disco para descartar o mapa gerado só para a foto.
                 EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
             }
+        }
+
+        // Risca uma seta, um X e um círculo na parede norte da sala inicial, um de cada cor,
+        // e fotografa. Serve para conferir como a caneta aparece sem precisar jogar.
+        static void ShootPenSample(LevelBuilder builder, Transform player, Camera camera,
+                                   RenderTexture target, Texture2D readback, string folder)
+        {
+            var board = UnityEngine.Object.FindFirstObjectByType<BackRooms.Items.DrawingBoard>();
+            if (board == null) return;
+
+            LevelData data = builder.Data;
+            float wallZ = (data.RoomZ0 + data.RoomHeight) * LevelBuilder.Cell - LevelBuilder.WallThickness * 0.5f;
+            Vector3 origin = builder.transform.TransformPoint(new Vector3(data.SpawnCenterX * LevelBuilder.Cell - 2.6f, 1.5f, wallZ));
+            Vector3 normal = Vector3.back;
+
+            var points = new System.Collections.Generic.List<Vector3>();
+
+            // Seta para a direita (preta).
+            points.Add(origin + new Vector3(0f, 0.25f, 0f));
+            for (int i = 1; i <= 30; i++) points.Add(origin + new Vector3(i * 0.02f, 0.25f + Mathf.Sin(i * 0.4f) * 0.004f, 0f));
+            board.Append(9001, 0, normal, points);
+            points.Clear();
+            for (int i = 0; i <= 8; i++) points.Add(origin + new Vector3(0.6f - i * 0.02f, 0.25f + i * 0.015f, 0f));
+            board.Append(9002, 0, normal, points);
+            points.Clear();
+            for (int i = 0; i <= 8; i++) points.Add(origin + new Vector3(0.6f - i * 0.02f, 0.25f - i * 0.015f, 0f));
+            board.Append(9003, 0, normal, points);
+
+            // X (vermelho).
+            points.Clear();
+            for (int i = 0; i <= 14; i++) points.Add(origin + new Vector3(0.95f + i * 0.02f, 0.4f - i * 0.02f, 0f));
+            board.Append(9004, 1, normal, points);
+            points.Clear();
+            for (int i = 0; i <= 14; i++) points.Add(origin + new Vector3(0.95f + i * 0.02f, 0.12f + i * 0.02f, 0f));
+            board.Append(9005, 1, normal, points);
+
+            // Círculo (azul).
+            points.Clear();
+            for (int i = 0; i <= 40; i++)
+            {
+                float a = i / 40f * Mathf.PI * 2f;
+                points.Add(origin + new Vector3(1.75f + Mathf.Cos(a) * 0.16f, 0.26f + Mathf.Sin(a) * 0.16f, 0f));
+            }
+            board.Append(9006, 2, normal, points);
+
+            // Um risco no chão, em frente à parede.
+            points.Clear();
+            Vector3 floor = builder.transform.TransformPoint(new Vector3(data.SpawnCenterX * LevelBuilder.Cell - 2.4f, 0f, wallZ - 0.7f));
+            for (int i = 0; i <= 50; i++) points.Add(floor + new Vector3(i * 0.03f, 0f, Mathf.Sin(i * 0.3f) * 0.05f));
+            board.Append(9007, 0, Vector3.up, points);
+
+            player.position = builder.transform.TransformPoint(new Vector3(data.SpawnCenterX * LevelBuilder.Cell - 1.7f, 0.05f, wallZ - 1.9f));
+            player.rotation = Quaternion.identity;
+
+            var camcorder = UnityEngine.Object.FindFirstObjectByType<BackRooms.UI.Camcorder>();
+            if (camcorder != null) camcorder.Draw(true, 207.47f, 207.47f, 0.8f, false, "PEN BLACK");
+
+            Shoot(camera, target, readback, Path.Combine(folder, "caneta.png"));
         }
 
         static GameObject CreateCameraRig(GameObject prefab, out Camera camera)

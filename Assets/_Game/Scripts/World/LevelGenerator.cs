@@ -69,6 +69,9 @@ namespace BackRooms.World
 
         /// <summary>Sujeira e desgaste: espelha a textura, para variar.</summary>
         public bool Flip;
+
+        /// <summary>Sujeira e desgaste: opacidade de 0 a 1. Cresce com a distância do início. Zero = usar 1.</summary>
+        public float Strength;
     }
 
     /// <summary>
@@ -96,6 +99,47 @@ namespace BackRooms.World
         /// <summary>Idem para a parede oeste. 1 = abertura para o oeste (-X), 2 = para o leste (+X).</summary>
         public byte[,] AlcoveWest;
 
+        /// <summary>
+        /// Sala inicial: retângulo fechado de células onde os jogadores começam. As paredes
+        /// dela são limpas (sem marcas) e não podem ser derrubadas nem virar esconderijo.
+        /// </summary>
+        public int RoomX0;
+        public int RoomZ0;
+        public int RoomWidth;
+        public int RoomHeight;
+
+        /// <summary>Parede que pertence à sala inicial. Mesmos índices de WallSouth / WallWest.</summary>
+        public bool[,] RoomSouth;
+        public bool[,] RoomWest;
+
+        /// <summary>
+        /// Vão de porta: a parede existe, mas com uma abertura. Para andar conta como
+        /// passagem livre, então WallSouth / WallWest ficam falsos nesses índices.
+        /// </summary>
+        public bool[,] DoorSouth;
+        public bool[,] DoorWest;
+
+        /// <summary>Centro da sala inicial, em células. Pode cair num vértice da grade.</summary>
+        public float SpawnCenterX => RoomX0 + RoomWidth * 0.5f;
+        public float SpawnCenterZ => RoomZ0 + RoomHeight * 0.5f;
+
+        public bool InRoom(int x, int z)
+        {
+            return x >= RoomX0 && x < RoomX0 + RoomWidth && z >= RoomZ0 && z < RoomZ0 + RoomHeight;
+        }
+
+        public bool IsRoomWall(int x, int z, WallSide side)
+        {
+            switch (side)
+            {
+                case WallSide.South: return RoomSouth[x, z];
+                case WallSide.North: return RoomSouth[x, z + 1];
+                case WallSide.West: return RoomWest[x, z];
+                case WallSide.East: return RoomWest[x + 1, z];
+                default: return false;
+            }
+        }
+
         /// <summary>Pilar no vértice (x, z) da grade. Tamanho [Width + 1, Height + 1].</summary>
         public bool[,] Pillar;
 
@@ -111,6 +155,9 @@ namespace BackRooms.World
         public WallSide ExitSide;
 
         public List<Decoration> Decorations = new List<Decoration>();
+
+        /// <summary>Células do caminho mais curto do início até a saída, em ordem. Cada item é x + z * Width.</summary>
+        public List<int> PathCells = new List<int>();
 
         public bool HasWall(int x, int z, WallSide side)
         {
@@ -153,6 +200,18 @@ namespace BackRooms.World
         const double AlcoveChance = 0.07;
         const double ArrowChance = 0.55;
 
+        // O entorno do ponto de início é novo; o desgaste aparece conforme se afasta dele.
+        // Distâncias em células (4 m cada), em linha reta a partir da célula inicial.
+        const float CleanRadius = 1.8f;
+
+        // Sala inicial: lado em células e número de vãos de porta.
+        const int SpawnRoomSize = 2;
+        const int SpawnRoomDoors = 1;
+        const float WornRadius = 7f;
+
+        // Sangue, palavras e poças só aparecem onde o desgaste já passou deste valor.
+        const float MarkMinWear = 0.35f;
+
         public const int BloodVariants = 3;
         public const int TextVariants = 3;
         public const int PoolVariants = 2;
@@ -160,6 +219,17 @@ namespace BackRooms.World
         public const int FloorWetVariants = 2;
 
         static readonly WallSide[] Sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
+
+        /// <summary>Desgaste da célula, de 0 (nova, perto do início) a 1 (totalmente gasta).</summary>
+        public static float WearAt(LevelData d, int x, int z)
+        {
+            // Distância do centro da célula ao centro da sala inicial.
+            float dx = x + 0.5f - d.SpawnCenterX;
+            float dz = z + 0.5f - d.SpawnCenterZ;
+            float distance = (float)Math.Sqrt(dx * dx + dz * dz);
+            float t = Math.Min(1f, Math.Max(0f, (distance - CleanRadius) / (WornRadius - CleanRadius)));
+            return t * t * (3f - 2f * t);
+        }
 
         public static LevelData Generate(int seed, int width, int height)
         {
@@ -176,6 +246,10 @@ namespace BackRooms.World
                 WallWest = new bool[width + 1, height],
                 AlcoveSouth = new byte[width, height + 1],
                 AlcoveWest = new byte[width + 1, height],
+                RoomSouth = new bool[width, height + 1],
+                RoomWest = new bool[width + 1, height],
+                DoorSouth = new bool[width, height + 1],
+                DoorWest = new bool[width + 1, height],
                 Pillar = new bool[width + 1, height + 1],
                 Lights = new LightState[width, height],
                 SpawnX = width / 2,
@@ -186,10 +260,12 @@ namespace BackRooms.World
             // senão a mesma seed passa a produzir outro mapa.
             ScatterWalls(data, rng);
             CarveHalls(data, rng);
+            CarveSpawnRoom(data, rng);
             CloseBoundary(data);
             ConnectEverything(data);
             ScatterPillars(data, rng);
             ScatterLights(data, rng);
+            FinishSpawnRoom(data);
             ScatterAlcoves(data, rng);
 
             int[,] parent = FindExit(data);
@@ -251,6 +327,69 @@ namespace BackRooms.World
             }
         }
 
+        // Sala inicial: 2 x 2 células (8 x 8 m) fechadas por paredes, com o ponto de início
+        // no centro e um único vão de porta, sorteado entre os trechos do contorno.
+        static void CarveSpawnRoom(LevelData d, Random rng)
+        {
+            d.RoomWidth = SpawnRoomSize;
+            d.RoomHeight = SpawnRoomSize;
+            d.RoomX0 = d.SpawnX - SpawnRoomSize / 2;
+            d.RoomZ0 = d.SpawnZ - SpawnRoomSize / 2;
+
+            int x0 = d.RoomX0, z0 = d.RoomZ0;
+            int x1 = x0 + d.RoomWidth, z1 = z0 + d.RoomHeight;
+
+            // Por dentro, nenhuma parede.
+            for (int z = z0 + 1; z < z1; z++)
+                for (int x = x0; x < x1; x++)
+                    d.WallSouth[x, z] = false;
+
+            for (int x = x0 + 1; x < x1; x++)
+                for (int z = z0; z < z1; z++)
+                    d.WallWest[x, z] = false;
+
+            // Contorno inteiro fechado.
+            var edges = new List<(bool south, int x, int z)>();
+            for (int x = x0; x < x1; x++)
+            {
+                edges.Add((true, x, z0));
+                edges.Add((true, x, z1));
+            }
+            for (int z = z0; z < z1; z++)
+            {
+                edges.Add((false, x0, z));
+                edges.Add((false, x1, z));
+            }
+
+            foreach (var (south, x, z) in edges)
+            {
+                if (south) { d.WallSouth[x, z] = true; d.RoomSouth[x, z] = true; }
+                else { d.WallWest[x, z] = true; d.RoomWest[x, z] = true; }
+            }
+
+            for (int i = 0; i < SpawnRoomDoors && edges.Count > 0; i++)
+            {
+                int pick = rng.Next(edges.Count);
+                var (south, x, z) = edges[pick];
+                edges.RemoveAt(pick);
+
+                if (south) { d.WallSouth[x, z] = false; d.DoorSouth[x, z] = true; }
+                else { d.WallWest[x, z] = false; d.DoorWest[x, z] = true; }
+            }
+        }
+
+        // Depois de pilares e luzes sorteados: a sala fica sem pilares e com todas as luzes acesas.
+        static void FinishSpawnRoom(LevelData d)
+        {
+            for (int z = d.RoomZ0; z <= d.RoomZ0 + d.RoomHeight; z++)
+                for (int x = d.RoomX0; x <= d.RoomX0 + d.RoomWidth; x++)
+                    d.Pillar[x, z] = false;
+
+            for (int z = d.RoomZ0; z < d.RoomZ0 + d.RoomHeight; z++)
+                for (int x = d.RoomX0; x < d.RoomX0 + d.RoomWidth; x++)
+                    d.Lights[x, z] = LightState.On;
+        }
+
         static void CloseBoundary(LevelData d)
         {
             for (int x = 0; x < d.Width; x++)
@@ -286,10 +425,11 @@ namespace BackRooms.World
                     {
                         if (visited[x, z]) continue;
 
-                        if (x > 0 && visited[x - 1, z]) d.WallWest[x, z] = false;
-                        else if (x < d.Width - 1 && visited[x + 1, z]) d.WallWest[x + 1, z] = false;
-                        else if (z > 0 && visited[x, z - 1]) d.WallSouth[x, z] = false;
-                        else if (z < d.Height - 1 && visited[x, z + 1]) d.WallSouth[x, z + 1] = false;
+                        // As paredes da sala inicial ficam de fora: ela só se liga pelo vão de porta.
+                        if (x > 0 && visited[x - 1, z] && !d.RoomWest[x, z]) d.WallWest[x, z] = false;
+                        else if (x < d.Width - 1 && visited[x + 1, z] && !d.RoomWest[x + 1, z]) d.WallWest[x + 1, z] = false;
+                        else if (z > 0 && visited[x, z - 1] && !d.RoomSouth[x, z]) d.WallSouth[x, z] = false;
+                        else if (z < d.Height - 1 && visited[x, z + 1] && !d.RoomSouth[x, z + 1]) d.WallSouth[x, z + 1] = false;
                         else continue;
 
                         Flood(d, visited, stack, x, z);
@@ -357,6 +497,12 @@ namespace BackRooms.World
             }
 
             d.Lights[d.SpawnX, d.SpawnZ] = LightState.On;
+
+            // Na área nova em volta do início não há lâmpada queimada nem piscando.
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                    if (d.Lights[x, z] != LightState.None && WearAt(d, x, z) <= 0f)
+                        d.Lights[x, z] = LightState.On;
         }
 
         // Algumas paredes internas viram paredes grossas com um nicho para se esconder.
@@ -368,7 +514,7 @@ namespace BackRooms.World
                 {
                     bool roll = rng.NextDouble() < AlcoveChance;
                     byte opening = (byte)(1 + rng.Next(2));
-                    if (roll && d.WallSouth[x, z]) d.AlcoveSouth[x, z] = opening;
+                    if (roll && d.WallSouth[x, z] && !d.RoomSouth[x, z]) d.AlcoveSouth[x, z] = opening;
                 }
             }
 
@@ -378,7 +524,7 @@ namespace BackRooms.World
                 {
                     bool roll = rng.NextDouble() < AlcoveChance;
                     byte opening = (byte)(1 + rng.Next(2));
-                    if (roll && d.WallWest[x, z]) d.AlcoveWest[x, z] = opening;
+                    if (roll && d.WallWest[x, z] && !d.RoomWest[x, z]) d.AlcoveWest[x, z] = opening;
                 }
             }
         }
@@ -425,7 +571,7 @@ namespace BackRooms.World
 
                     foreach (WallSide side in Sides)
                     {
-                        if (!d.HasWall(x, z, side) || d.IsAlcove(x, z, side)) continue;
+                        if (!d.HasWall(x, z, side) || d.IsAlcove(x, z, side) || d.IsRoomWall(x, z, side)) continue;
 
                         best = distance[x, z];
                         d.ExitX = x;
@@ -458,11 +604,13 @@ namespace BackRooms.World
         static void PlaceArrows(LevelData d, Random rng, int[,] parent, HashSet<int> usedFaces)
         {
             int cx = d.ExitX, cz = d.ExitZ;
+            d.PathCells.Add(cx + cz * d.Width);
 
             while (parent[cx, cz] >= 0)
             {
                 int px = parent[cx, cz] % d.Width;
                 int pz = parent[cx, cz] / d.Width;
+                d.PathCells.Add(px + pz * d.Width);
                 int dirX = cx - px;
                 int dirZ = cz - pz;
 
@@ -502,11 +650,15 @@ namespace BackRooms.World
                 cx = px;
                 cz = pz;
             }
+
+            // Foi montado da saída para o início; guarda do início para a saída.
+            d.PathCells.Reverse();
         }
 
         static bool IsFreeFace(LevelData d, int x, int z, WallSide side, HashSet<int> usedFaces)
         {
-            return d.HasWall(x, z, side) && !d.IsAlcove(x, z, side) && !usedFaces.Contains(FaceKey(d, x, z, side));
+            return d.HasWall(x, z, side) && !d.IsAlcove(x, z, side) && !d.IsRoomWall(x, z, side) &&
+                   !usedFaces.Contains(FaceKey(d, x, z, side));
         }
 
         // Sangue preto escorrido e palavras rabiscadas, em paredes livres sorteadas.
@@ -533,6 +685,7 @@ namespace BackRooms.World
                 float height = baseHeight + (float)rng.NextDouble() * heightRange;
                 int variant = rng.Next(variants);
 
+                if (WearAt(d, x, z) < MarkMinWear) continue;
                 if (!IsFreeFace(d, x, z, side, usedFaces)) continue;
 
                 usedFaces.Add(FaceKey(d, x, z, side));
@@ -556,22 +709,25 @@ namespace BackRooms.World
         {
             int cells = d.Width * d.Height;
 
-            PlaceWallGrime(d, rng, DecorationKind.WallStain, cells * 50 / 100, WallStainVariants);
-            PlaceWallGrime(d, rng, DecorationKind.WallScuff, cells * 18 / 100, 1);
-            PlaceFloorGrime(d, rng, DecorationKind.FloorWet, cells * 22 / 100, FloorWetVariants);
-            PlaceFloorGrime(d, rng, DecorationKind.FloorWear, cells * 20 / 100, 1);
+            PlaceWallGrime(d, rng, DecorationKind.WallStain, cells * 85 / 100, WallStainVariants);
+            PlaceWallGrime(d, rng, DecorationKind.WallScuff, cells * 22 / 100, 1);
+            PlaceFloorGrime(d, rng, DecorationKind.FloorWet, cells * 42 / 100, FloorWetVariants);
+            PlaceFloorGrime(d, rng, DecorationKind.FloorWear, cells * 30 / 100, 1);
         }
 
         static void PlaceWallGrime(LevelData d, Random rng, DecorationKind kind, int count, int variants)
         {
             int exitFace = FaceKey(d, d.ExitX, d.ExitZ, d.ExitSide);
-            int placed = 0;
 
-            for (int attempt = 0; attempt < count * 20 && placed < count; attempt++)
+            // Número fixo de tentativas. Cada uma só vira mancha se cair numa parede e
+            // passar no sorteio do desgaste: perto do início quase nenhuma passa.
+            for (int attempt = 0; attempt < count * 2; attempt++)
             {
                 int x = rng.Next(d.Width);
                 int z = rng.Next(d.Height);
                 WallSide side = Sides[rng.Next(Sides.Length)];
+                float roll = (float)rng.NextDouble();
+                float wear = WearAt(d, x, z);
                 var mark = new Decoration
                 {
                     Kind = kind,
@@ -582,13 +738,15 @@ namespace BackRooms.World
                     Height = (float)rng.NextDouble(),
                     Scale = (float)rng.NextDouble(),
                     Variant = rng.Next(variants),
-                    Flip = rng.Next(2) == 0
+                    Flip = rng.Next(2) == 0,
+                    Strength = 0.55f + 0.45f * wear
                 };
 
-                if (!d.HasWall(x, z, side) || d.IsAlcove(x, z, side) || FaceKey(d, x, z, side) == exitFace) continue;
+                if (roll >= wear) continue;
+                if (!d.HasWall(x, z, side) || d.IsAlcove(x, z, side) || d.IsRoomWall(x, z, side)) continue;
+                if (FaceKey(d, x, z, side) == exitFace) continue;
 
                 d.Decorations.Add(mark);
-                placed++;
             }
         }
 
@@ -596,19 +754,26 @@ namespace BackRooms.World
         {
             for (int i = 0; i < count; i++)
             {
-                d.Decorations.Add(new Decoration
+                int x = rng.Next(d.Width);
+                int z = rng.Next(d.Height);
+                float roll = (float)rng.NextDouble();
+                float wear = WearAt(d, x, z);
+                var mark = new Decoration
                 {
                     Kind = kind,
-                    X = rng.Next(d.Width),
-                    Z = rng.Next(d.Height),
+                    X = x,
+                    Z = z,
                     Side = WallSide.Floor,
                     Along = (float)(rng.NextDouble() * 2.0 - 1.0),
                     Height = (float)(rng.NextDouble() * 2.0 - 1.0),
                     Scale = (float)rng.NextDouble(),
                     Variant = rng.Next(variants),
                     Yaw = (float)rng.NextDouble() * 360f,
-                    Flip = rng.Next(2) == 0
-                });
+                    Flip = rng.Next(2) == 0,
+                    Strength = 0.55f + 0.4f * wear
+                };
+
+                if (roll < wear) d.Decorations.Add(mark);
             }
         }
 
@@ -618,7 +783,7 @@ namespace BackRooms.World
 
             for (int i = 0; i < count; i++)
             {
-                d.Decorations.Add(new Decoration
+                var pool = new Decoration
                 {
                     Kind = DecorationKind.FloorPool,
                     X = rng.Next(d.Width),
@@ -628,7 +793,9 @@ namespace BackRooms.World
                     Height = (float)(rng.NextDouble() * 2.0 - 1.0),
                     Variant = rng.Next(PoolVariants),
                     Yaw = (float)rng.NextDouble() * 360f
-                });
+                };
+
+                if (WearAt(d, pool.X, pool.Z) >= MarkMinWear) d.Decorations.Add(pool);
             }
         }
     }

@@ -12,7 +12,8 @@ namespace BackRooms.World
     public sealed class LevelBuilder : MonoBehaviour
     {
         public const float Cell = 4f;
-        public const float WallHeight = 2.7f;
+        // Pé-direito de 4,05 m: 1,5 vez o de um escritório comum (2,7 m).
+        public const float WallHeight = 4.05f;
         public const float WallThickness = 0.2f;
 
         const float CeilingTile = 0.6f;
@@ -29,6 +30,10 @@ namespace BackRooms.World
         const float AlcoveOpeningHalfWidth = 0.45f;
         const float AlcoveOpeningHeight = 1.25f;
 
+        // Vão de porta da sala inicial.
+        const float DoorHalfWidth = 0.7f;
+        const float DoorHeight = 2.3f;
+
         [Header("Geração")]
         public int seed = 1998;
         [Min(4)] public int width = 16;
@@ -41,11 +46,14 @@ namespace BackRooms.World
         public Material baseboardMaterial;
         public Material panelOnMaterial;
         public Material panelOffMaterial;
+        [Tooltip("Papel de parede e carpete sem nenhum encardido, usados só na sala inicial.")]
+        public Material cleanWallMaterial;
+        public Material cleanFloorMaterial;
 
         [Header("Luminárias")]
         [Tooltip("Intensidade em candela.")]
-        public float lightCandela = 1200f;
-        public float lightRange = 12f;
+        public float lightCandela = 2300f;
+        public float lightRange = 15f;
         public float lightTemperature = 6000f;
         [Tooltip("Sombra em cache (renderizada uma vez). Impede a luz de vazar pelas paredes.")]
         public bool ceilingShadows = true;
@@ -69,6 +77,9 @@ namespace BackRooms.World
         public Material exitDoorMaterial;
         public Material exitSignMaterial;
 
+        [Tooltip("Versão do Level0Setup que gerou esta cena. O editor usa isso para avisar quando o conteúdo ficou velho.")]
+        [HideInInspector] public int contentVersion;
+
         [Header("Uso sem rede")]
         [Tooltip("Constrói sozinho ao iniciar. Deixe desligado quando houver um GameSession na cena.")]
         public bool buildOnAwake;
@@ -90,7 +101,7 @@ namespace BackRooms.World
 
         /// <summary>
         /// Ponto de início do jogador de índice <paramref name="index"/>: os quatro cantos
-        /// de um quadrado no meio da célula inicial, para ninguém nascer dentro de ninguém.
+        /// de um quadrado no centro da sala inicial, para ninguém nascer dentro de ninguém.
         /// </summary>
         public Vector3 SpawnPosition(int index)
         {
@@ -98,7 +109,29 @@ namespace BackRooms.World
 
             int slot = Mathf.Abs(index) % 4;
             var offset = new Vector3(slot % 2 == 0 ? -0.7f : 0.7f, 0.05f, slot < 2 ? -0.7f : 0.7f);
-            return CellCenter(Data.SpawnX, Data.SpawnZ) + offset;
+            return SpawnCenter + offset;
+        }
+
+        /// <summary>Centro da sala inicial, no chão.</summary>
+        public Vector3 SpawnCenter
+        {
+            get
+            {
+                if (Data == null) return transform.position;
+                return transform.TransformPoint(new Vector3(Data.SpawnCenterX * Cell, 0f, Data.SpawnCenterZ * Cell));
+            }
+        }
+
+        /// <summary>
+        /// Um ponto com vista aberta do mapa, a 60% do caminho entre o início e a saída.
+        /// Serve de posição para a câmera do menu, já que a sala inicial é fechada.
+        /// </summary>
+        public Vector3 ScenicPosition()
+        {
+            if (Data == null || Data.PathCells.Count == 0) return SpawnCenter;
+
+            int index = Data.PathCells[Mathf.Min(Data.PathCells.Count - 1, Data.PathCells.Count * 6 / 10)];
+            return CellCenter(index % Data.Width, index / Data.Width);
         }
 
         /// <summary>Remove tudo que este componente gerou.</summary>
@@ -134,13 +167,25 @@ namespace BackRooms.World
             // O papel de parede também cobre 2 m por repetição.
             var walls = new MeshBuilder(2f);
             var baseboards = new MeshBuilder(1f);
+            // Sala inicial: mesmas peças, com materiais limpos.
+            var cleanFloor = new MeshBuilder(2f);
+            var cleanWalls = new MeshBuilder(2f);
 
             GameObject colliders = CreateChild("Colisores");
             GameObject hidingSpots = CreateChild("Esconderijos");
 
-            // Piso e teto: um quad cada, com colisor espesso para ninguém atravessar.
-            floor.AddQuad(new Vector3(0f, 0f, 0f), new Vector3(0f, 0f, sizeZ),
-                          new Vector3(sizeX, 0f, sizeZ), new Vector3(sizeX, 0f, 0f), Vector3.up);
+            // Piso: um quad por célula, para a sala inicial poder usar outro material.
+            // O colisor é um só, espesso, para ninguém atravessar.
+            for (int z = 0; z < Data.Height; z++)
+            {
+                for (int x = 0; x < Data.Width; x++)
+                {
+                    MeshBuilder target = Data.InRoom(x, z) ? cleanFloor : floor;
+                    float fx = x * Cell, fz = z * Cell;
+                    target.AddQuad(new Vector3(fx, 0f, fz), new Vector3(fx, 0f, fz + Cell),
+                                   new Vector3(fx + Cell, 0f, fz + Cell), new Vector3(fx + Cell, 0f, fz), Vector3.up);
+                }
+            }
             AddCollider(colliders, new Vector3(sizeX * 0.5f, -0.25f, sizeZ * 0.5f), new Vector3(sizeX + 2f, 0.5f, sizeZ + 2f));
 
             ceiling.AddQuad(new Vector3(0f, WallHeight, 0f), new Vector3(0f, WallHeight, sizeZ),
@@ -154,14 +199,22 @@ namespace BackRooms.World
             {
                 for (int x = 0; x < Data.Width; x++)
                 {
+                    var origin = new Vector3((x + 0.5f) * Cell, 0f, z * Cell);
+
+                    if (Data.DoorSouth[x, z])
+                    {
+                        AddDoorway(cleanWalls, baseboards, colliders, origin, Vector3.right, Vector3.forward);
+                        continue;
+                    }
+
                     if (!Data.WallSouth[x, z]) continue;
 
-                    var origin = new Vector3((x + 0.5f) * Cell, 0f, z * Cell);
                     if (Data.AlcoveSouth[x, z] != 0)
                         AddAlcove(walls, baseboards, colliders, hidingSpots, origin, Vector3.right, Vector3.forward,
                                   Data.AlcoveSouth[x, z] == 1 ? -1f : 1f);
                     else
-                        AddWall(walls, baseboards, colliders, origin, new Vector3(wallLength, WallHeight, WallThickness));
+                        AddWall(Data.RoomSouth[x, z] ? cleanWalls : walls, baseboards, colliders, origin,
+                                new Vector3(wallLength, WallHeight, WallThickness));
                 }
             }
 
@@ -169,14 +222,22 @@ namespace BackRooms.World
             {
                 for (int z = 0; z < Data.Height; z++)
                 {
+                    var origin = new Vector3(x * Cell, 0f, (z + 0.5f) * Cell);
+
+                    if (Data.DoorWest[x, z])
+                    {
+                        AddDoorway(cleanWalls, baseboards, colliders, origin, Vector3.forward, Vector3.right);
+                        continue;
+                    }
+
                     if (!Data.WallWest[x, z]) continue;
 
-                    var origin = new Vector3(x * Cell, 0f, (z + 0.5f) * Cell);
                     if (Data.AlcoveWest[x, z] != 0)
                         AddAlcove(walls, baseboards, colliders, hidingSpots, origin, Vector3.forward, Vector3.right,
                                   Data.AlcoveWest[x, z] == 1 ? -1f : 1f);
                     else
-                        AddWall(walls, baseboards, colliders, origin, new Vector3(WallThickness, WallHeight, wallLength));
+                        AddWall(Data.RoomWest[x, z] ? cleanWalls : walls, baseboards, colliders, origin,
+                                new Vector3(WallThickness, WallHeight, wallLength));
                 }
             }
 
@@ -194,6 +255,13 @@ namespace BackRooms.World
             CreateRenderer("Piso", floor.ToMesh("Piso"), floorMaterial, ShadowCastingMode.Off);
             CreateRenderer("Teto", ceiling.ToMesh("Teto"), ceilingMaterial, ShadowCastingMode.Off);
             CreateRenderer("Paredes", walls.ToMesh("Paredes"), wallMaterial, ShadowCastingMode.On);
+
+            if (!cleanFloor.IsEmpty)
+                CreateRenderer("PisoDaSalaInicial", cleanFloor.ToMesh("PisoDaSalaInicial"),
+                               cleanFloorMaterial != null ? cleanFloorMaterial : floorMaterial, ShadowCastingMode.Off);
+            if (!cleanWalls.IsEmpty)
+                CreateRenderer("ParedesDaSalaInicial", cleanWalls.ToMesh("ParedesDaSalaInicial"),
+                               cleanWallMaterial != null ? cleanWallMaterial : wallMaterial, ShadowCastingMode.On);
             CreateRenderer("Rodapes", baseboards.ToMesh("Rodapes"), baseboardMaterial, ShadowCastingMode.Off);
 
             BuildLights();
@@ -210,6 +278,41 @@ namespace BackRooms.World
             // Rodapé: 2 cm mais largo que a parede, com tampa em cima.
             var baseboardSize = new Vector3(size.x + 0.04f, BaseboardHeight, size.z + 0.04f);
             baseboards.AddBox(basePosition + Vector3.up * (BaseboardHeight * 0.5f), baseboardSize, caps: true);
+        }
+
+        /// <summary>
+        /// Parede comum com um vão de porta no meio (1,4 m de largura por 2,3 m de altura),
+        /// com uma guarnição fina em volta. Não tem folha de porta: é só a passagem.
+        /// </summary>
+        void AddDoorway(MeshBuilder walls, MeshBuilder baseboards, GameObject colliders, Vector3 origin, Vector3 along, Vector3 depth)
+        {
+            float halfLength = Cell * 0.5f + WallThickness * 0.5f;
+            float half = WallThickness * 0.5f;
+
+            AlcoveBox(walls, baseboards, colliders, origin, along, depth, -halfLength, -DoorHalfWidth, -half, half, 0f, WallHeight);
+            AlcoveBox(walls, baseboards, colliders, origin, along, depth, DoorHalfWidth, halfLength, -half, half, 0f, WallHeight);
+            AlcoveBox(walls, baseboards, colliders, origin, along, depth, -DoorHalfWidth, DoorHalfWidth, -half, half, DoorHeight, WallHeight);
+
+            // Batente: reveste o vão por dentro e sobra 7 cm em volta dele. Nenhuma face pode
+            // ficar exatamente no mesmo plano de uma face da parede ou do rodapé — duas
+            // superfícies no mesmo lugar ficam piscando. Por isso o batente avança 1,5 cm para
+            // dentro do vão e 3 cm para fora de cada face da parede (o rodapé sai 2 cm).
+            const float trim = 0.07f;
+            const float inset = 0.015f;
+            float trimDepth = WallThickness + 0.06f;
+
+            float jambWidth = trim + inset;
+            float jambCenter = DoorHalfWidth - inset + jambWidth * 0.5f;
+            float jambHeight = DoorHeight - inset;
+            Vector3 jamb = Abs(along) * jambWidth + Abs(depth) * trimDepth + Vector3.up * jambHeight;
+
+            // A travessa de cima é um fio mais funda que as laterais, pelo mesmo motivo.
+            float headHeight = trim + inset;
+            Vector3 head = Abs(along) * ((DoorHalfWidth + trim) * 2f + 0.004f) + Abs(depth) * (trimDepth + 0.004f) + Vector3.up * headHeight;
+
+            baseboards.AddBox(origin + along * -jambCenter + Vector3.up * (jambHeight * 0.5f), jamb, caps: true);
+            baseboards.AddBox(origin + along * jambCenter + Vector3.up * (jambHeight * 0.5f), jamb, caps: true);
+            baseboards.AddBox(origin + Vector3.up * (DoorHeight - inset + headHeight * 0.5f), head, caps: true);
         }
 
         /// <summary>
@@ -555,7 +658,7 @@ namespace BackRooms.World
                 }
 
                 Vector3 wallPosition = center + normal * 0.06f + tangent * along + Vector3.up * centerHeight;
-                AddDecal(root.transform, material, wallPosition, rotation, new Vector3(size.x, size.y, 0.16f), isGrime && mark.Flip);
+                AddDecal(root.transform, material, wallPosition, rotation, new Vector3(size.x, size.y, 0.16f), isGrime && mark.Flip, mark.Strength);
             }
         }
 
@@ -566,7 +669,7 @@ namespace BackRooms.World
             {
                 case 0:
                     // Escorrido: encosta no teto e desce.
-                    size = new Vector2(Mathf.Lerp(1.0f, 2.6f, mark.Scale), Mathf.Lerp(1.1f, 2.5f, mark.Height));
+                    size = new Vector2(Mathf.Lerp(1.4f, 3.8f, mark.Scale), Mathf.Lerp(1.6f, WallHeight, mark.Height));
                     centerHeight = WallHeight - size.y * 0.5f;
                     break;
                 case 1:
@@ -576,7 +679,7 @@ namespace BackRooms.World
                     break;
                 default:
                     // Mancha solta, em qualquer altura.
-                    float side = Mathf.Lerp(0.9f, 2.3f, mark.Scale);
+                    float side = Mathf.Lerp(1.1f, 3.0f, mark.Scale);
                     size = new Vector2(side, side * 0.85f);
                     centerHeight = Mathf.Lerp(size.y * 0.5f, WallHeight - size.y * 0.5f, mark.Height);
                     break;
@@ -607,7 +710,7 @@ namespace BackRooms.World
             if (material == null) return;
 
             var position = new Vector3((mark.X + 0.5f) * Cell + mark.Along * 1.2f, 0.1f, (mark.Z + 0.5f) * Cell + mark.Height * 1.2f);
-            AddDecal(root, material, position, Quaternion.Euler(90f, mark.Yaw, 0f), new Vector3(size, size, 0.2f), mark.Flip);
+            AddDecal(root, material, position, Quaternion.Euler(90f, mark.Yaw, 0f), new Vector3(size, size, 0.2f), mark.Flip, mark.Strength);
         }
 
         static Material Pick(Material[] materials, int variant)
@@ -616,7 +719,7 @@ namespace BackRooms.World
             return materials[Mathf.Abs(variant) % materials.Length];
         }
 
-        static void AddDecal(Transform parent, Material material, Vector3 position, Quaternion rotation, Vector3 size, bool flip = false)
+        static void AddDecal(Transform parent, Material material, Vector3 position, Quaternion rotation, Vector3 size, bool flip = false, float strength = 0f)
         {
             var go = new GameObject("Marca");
             go.transform.SetParent(parent, false);
@@ -629,6 +732,8 @@ namespace BackRooms.World
             projector.pivot = new Vector3(0f, 0f, size.z * 0.5f);
             projector.drawDistance = 60f;
             projector.fadeScale = 0.85f;
+            // Força zero significa que não foi informada: vale a opacidade cheia do material.
+            projector.fadeFactor = strength > 0f ? Mathf.Clamp01(strength) : 1f;
 
             if (flip)
             {

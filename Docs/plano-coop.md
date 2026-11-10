@@ -25,6 +25,41 @@ Estado do projeto em 10/11/2026: Unity 6000.3.26f1, HDRP 17.3, Input System, tem
 - **Falta:** entrar por código de sala (Relay da Unity). O projeto já tem `cloudProjectId`, mas é preciso ativar o Relay no painel da Unity Cloud. Até lá, jogar pela internet exige abrir a porta 7777 no roteador de quem hospeda ou usar uma VPN de jogo.
 - **Para testar com dois jogadores no editor:** Window > Multiplayer > Multiplayer Play Mode, ative o Player 2, aperte Play, H na janela principal e J na do Player 2.
 
+**Interface de filmadora (10/11/2026):**
+- `Camcorder` (objeto `Filmadora` na cena) desenha o painel numa textura de 480x270 com uma fonte de pixels 5x7 própria: REC piscando, contador da fita, bateria (ligada à bateria da lanterna), hora e data (começa em 10/11/1998, 2h13) e aviso LIGHT com a lanterna acesa. No menu mostra STBY.
+- `CamcorderPass` é um Custom Pass do HDRP (After Post Process) que aplica `Shaders/CamcorderVHS.shader`: tremido por linha, faixa de tracking, cor sangrando, linhas de varredura, ruído, falhas brancas e bordas escuras. O painel entra antes da degradação, então sofre os mesmos defeitos.
+- Intensidades no material `Assets/_Game/Settings/CamcorderVHS.mat`. `Camcorder.Instance.Glitch(força, segundos)` dispara interferência — reservado para a entidade.
+- Referência usada: `Docs/referencia-your-happy-place.md`.
+
+**Ajustes de equilíbrio (10/11/2026, segunda rodada):**
+- **Desgaste por distância:** `LevelGenerator.WearAt` vai de 0 (até 1,5 célula do início) a 1 (a partir de 7 células). Decalques de sujeira só passam num sorteio com essa chance e ficam mais opacos quanto mais longe; sangue, palavras e poças só aparecem com desgaste acima de 0,35; perto do início não há lâmpada queimada nem piscando. As texturas de base ficaram quase limpas, porque são as mesmas no mapa inteiro.
+- **Pé-direito:** `LevelBuilder.WallHeight` passou de 2,7 m para 4,05 m. As luminárias subiram de 1200 para 2300 candela para manter o chão iluminado.
+- **Falhas brancas da filmadora:** removidas por completo (terceira rodada). O efeito mantém tremido por linha, faixa de tracking, cor sangrando, linhas de varredura, ruído e bordas escuras; o ruído da faixa de tracking ficou neutro, sem clarear a imagem.
+- **Sala inicial (terceira rodada):** os jogadores começam no centro de uma sala fechada de 2 x 2 células (8 x 8 m), com um único vão de porta sorteado no contorno (`CarveSpawnRoom`, constantes `SpawnRoomSize` e `SpawnRoomDoors`). Paredes e piso da sala usam materiais próprios sem encardido (`Wallpaper_Clean`, `Carpet_Clean`); nenhuma marca, seta, esconderijo ou pilar é colocado nela, e as quatro luzes ficam acesas. O desgaste passou a ser medido a partir do centro da sala. A câmera do menu foi para um ponto do caminho até a saída (`ScenicPosition`), já que a sala é fechada.
+- **Mapa 2D:** menu **BackRooms > Gerar mapa 2D do Level 0** salva `Docs/level0-mapa-seed<seed>.png` a partir do mesmo gerador do jogo. Cada seed dá outro mapa; o da seed 1998 é o do menu e dos testes.
+- `PixelFont` (matriz 5x7) passou a ser compartilhada entre a filmadora e o mapa.
+
+**Conteúdo gerado tem versão (10/11/2026):** a cena, as texturas e os materiais do Level 0 são gerados pelo `Level0Setup`. Quando o gerador muda e ninguém recria, o jogo roda código novo sobre conteúdo velho — foi assim que a sala inicial apareceu suja. Agora `Level0Setup.ContentVersion` é gravado na cena (`LevelBuilder.contentVersion`) e o `Level0AutoUpdate` oferece recriar tudo quando o editor abre ou recompila com a cena atrasada. **Ao mudar texturas, materiais, objetos da cena ou valores padrão do `LevelBuilder`, aumente `ContentVersion`.**
+
+**Cena certa no Play (10/11/2026):** depois de ferramentas rodadas por linha de comando o editor abria numa cena vazia sem nome, e o Play não mostrava o jogo. O `Level0AutoUpdate` agora abre `Level0_Test` sozinho quando encontra essa cena vazia e, se alguém der Play numa cena sem nome, troca para a do jogo e inicia. As ferramentas de linha de comando passaram a deixar a cena do jogo aberta antes de fechar.
+
+**Primeiro item: caneta (10/11/2026):**
+- `PenTool` (no prefab do jogador): tecla 1 pega e guarda, botão esquerdo risca paredes, chão e teto a até 2,2 m, R troca a cor (preto, vermelho, azul). Com a caneta na mão o painel da filmadora mostra `PEN <cor>` e um ponto de mira no centro.
+- `DrawingBoard` (objeto `Rabiscos` na cena): cada traço é uma fita de malha de 2,4 cm colada à superfície. Materiais `Ink_*` não recebem decalques, para a sujeira não cobrir os riscos.
+- Rede: quem risca vê na hora; os pontos vão ao host a cada 0,1 s (`SubmitRpc`) e o host repassa aos outros (`BroadcastRpc`). Quem entra depois recebe todos os traços por mensagem nomeada (`BackRooms.Stroke`). Os riscos somem ao começar ou encerrar uma sessão.
+- Limites: 300 pontos por traço (continua em outro traço), 1500 traços no total (os mais antigos somem).
+- **Ainda não existe:** pegar a caneta no cenário (todos começam com ela), tinta que acaba, borracha.
+- Teste: o teste de fumaça pega a caneta e risca; em dois editores confere que o cliente recebe os riscos enquanto o host desenha (`BatchHost`/`BatchJoin`) e ao entrar depois (`BatchHostDrawFirst`/`BatchJoinLate`).
+- `PlayerController.MouseCaptured` passou a ser a única fonte de "o mouse está preso ao jogo" (câmera e itens consultam isso).
+- Batente da porta da sala inicial: deixou de piscar. Nenhuma face dele fica no mesmo plano da parede ou do rodapé.
+
+**Caneta riscando no ar (10/11/2026):**
+- Causa: o raio da caneta acertava o colisor do próprio jogador. O colisor do `CharacterController` só acompanha o corpo no passo de física seguinte; pulando, correndo ou recuando, a câmera sai de dentro dele por um instante e o raio batia nele — o traço ficava solto no ar, onde o jogador estava um instante antes. Reproduzido no teste: 5.819 de 34.264 raios acertaram o próprio jogador.
+- Correção: `PenTool.TryAim` ignora os colisores do próprio jogador e só aceita superfície parada (outro jogador na frente interrompe o traço em vez de receber tinta).
+- **Regra para os próximos itens:** todo raio que sai da câmera do jogador (interagir, pegar, mirar) precisa ignorar o próprio jogador, pelo mesmo motivo.
+- Teste: o teste de fumaça agora recua, corre e pula olhando para o chão, pergunta à caneta onde ela encostaria a cada quadro e reprova se for fora do cenário. Depois da correção: 0 em 32.819, com o raio comum ainda acertando o jogador 5.696 vezes no mesmo percurso.
+- Ferramenta nova: menu BackRooms > Conferir colisores do Level 0 (`Level0ColliderCheck`) compara, com milhares de raios em várias seeds, o que é sólido com o que aparece na tela. Resultado atual: 0 diferenças em 48.000 raios.
+
 Pacotes adicionados ao `Packages/manifest.json` (versões recomendadas pelo editor 6000.3.26f1): Netcode for GameObjects 2.13.3, Multiplayer Services 2.3.3, Multiplayer Play Mode 2.0.2, AI Navigation 2.0.15. Vivox (16.11.0) entra só na etapa 5.
 
 ---

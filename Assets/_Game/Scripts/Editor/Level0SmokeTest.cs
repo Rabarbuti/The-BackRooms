@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Reflection;
+using BackRooms.Items;
 using BackRooms.Net;
 using BackRooms.Player;
 using BackRooms.World;
@@ -23,6 +24,7 @@ namespace BackRooms.EditorTools
         const string ScenePath = "Assets/_Game/Scenes/Level0_Test.unity";
         const string RoleKey = "BackRooms.SmokeTest.Role";
         const string BatchKey = "BackRooms.SmokeTest.Batch";
+        const string LateKey = "BackRooms.SmokeTest.LateJoin";
 
         const string Solo = "solo";
         const string HostRole = "host";
@@ -38,6 +40,13 @@ namespace BackRooms.EditorTools
         static int _steps;
         static Vector3 _start;
         static Keyboard _keyboard;
+        static Mouse _mouse;
+        static double _lastMouseEvent;
+        static double _penReady;
+        static int _rayChecks;
+        static int _rayOffLevel;
+        static int _raySelfHits;
+        static string _rayFirst;
         static PlayerNetwork _local;
         static PlayerNetwork _remote;
         static Vector3 _remoteStart;
@@ -58,6 +67,11 @@ namespace BackRooms.EditorTools
         public static void BatchRun() { Run(Solo, true); }
         public static void BatchHost() { Run(HostRole, true); }
         public static void BatchJoin() { Run(ClientRole, true); }
+
+        // Variante "quem entra depois": o host risca sozinho e só então o cliente chega.
+        // Confere o envio de todos os riscos já existentes na conexão.
+        public static void BatchHostDrawFirst() { SessionState.SetBool(LateKey, true); Run(HostRole, true); }
+        public static void BatchJoinLate() { SessionState.SetBool(LateKey, true); Run(ClientRole, true); }
 
         static void Run(string role, bool batch)
         {
@@ -94,6 +108,7 @@ namespace BackRooms.EditorTools
         }
 
         static double Now => EditorApplication.timeSinceStartup;
+        static bool LateJoin => SessionState.GetBool(LateKey, false);
 
         static void Tick()
         {
@@ -108,6 +123,8 @@ namespace BackRooms.EditorTools
                 Finish(false, "tempo esgotado na etapa " + _stage + " (fase da sessão: " + session.Phase + ", estado: " + session.Status + ")");
                 return;
             }
+
+            if (_stage >= 2) AuditPenRay();
 
             switch (_stage)
             {
@@ -124,6 +141,9 @@ namespace BackRooms.EditorTools
                         else if (Now - _began > 10.0) Finish(false, "o atalho H do menu não abriu a sessão");
                         break;
                     }
+
+                    // Na variante de quem entra depois, o cliente espera o host acabar de riscar.
+                    if (_role == ClientRole && LateJoin && Now - _began < 35.0) break;
 
                     if (_role == ClientRole) session.Join("127.0.0.1");
                     else session.Host(localOnly: true);
@@ -148,7 +168,7 @@ namespace BackRooms.EditorTools
 
                 case 2:
                     // O host só continua quando o segundo jogador chegou.
-                    if (_role == HostRole && session.PlayerCount < 2) break;
+                    if (_role == HostRole && !LateJoin && session.PlayerCount < 2) break;
                     if (Now - _phaseStart < 1.0) break;
 
                     FindPlayers();
@@ -165,8 +185,10 @@ namespace BackRooms.EditorTools
 
                     if (_role == ClientRole)
                     {
-                        // O cliente fica parado olhando o host: passa assim que o vê andar.
-                        if (_remoteMoved > 1.0f || Now - _phaseStart > 40.0) Evaluate(session);
+                        // O cliente fica parado olhando o host: passa quando o vê andar e
+                        // quando os riscos de caneta dele chegam pela rede.
+                        bool sawEverything = (LateJoin || _remoteMoved > 1.0f) && BoardPoints() >= 10;
+                        if (sawEverything || Now - _phaseStart > 60.0) Evaluate(session);
                         break;
                     }
 
@@ -178,7 +200,90 @@ namespace BackRooms.EditorTools
                         break;
                     }
 
-                    Evaluate(session);
+                    // Depois de andar: recua, e então corre, pula e recua olhando para o chão.
+                    // É o pior caso para o raio da caneta, que não pode bater no próprio jogador.
+                    double acrobatics = Now - _phaseStart - walk;
+
+                    if (acrobatics < 1.5)
+                    {
+                        InputSystem.QueueStateEvent(_keyboard, new KeyboardState(Key.S));
+                        break;
+                    }
+
+                    if (acrobatics < 4.5)
+                    {
+                        bool tap = (int)(acrobatics * 5.0) % 2 == 0;
+                        Key move = acrobatics < 3.0 ? Key.W : Key.S;
+                        InputSystem.QueueStateEvent(_keyboard, tap ? new KeyboardState(move, Key.LeftShift, Key.Space)
+                                                                   : new KeyboardState(move, Key.LeftShift));
+                        Look(_local.controller.Pitch < 60f ? -10f : 0f);
+                        break;
+                    }
+
+                    if (acrobatics < 8.0)
+                    {
+                        // Volta a olhar em frente e encosta de novo na parede, para riscar.
+                        InputSystem.QueueStateEvent(_keyboard, new KeyboardState(Key.W));
+                        Look(_local.controller.Pitch > 2f ? 10f : 0f);
+                        break;
+                    }
+
+                    Next();
+                    break;
+
+                case 4:
+                    // Já encostado na parede: pega a caneta (tecla 1) e risca arrastando o mouse.
+                    FindPlayers();
+                    Observe();
+                    PenTool held = _local != null ? _local.pen : null;
+
+                    if (held != null && !held.Equipped && Now - _phaseStart < 8.0)
+                    {
+                        // Alterna apertado e solto a cada décimo de segundo, até a caneta estar na mão.
+                        bool down = (int)((Now - _phaseStart) * 10.0) % 2 == 0;
+                        InputSystem.QueueStateEvent(_keyboard, down ? new KeyboardState(Key.Digit1) : new KeyboardState());
+                        _penReady = Now;
+                        break;
+                    }
+
+                    double t = Now - _penReady;
+
+                    if (t < 0.2)
+                    {
+                        InputSystem.QueueStateEvent(_keyboard, new KeyboardState());
+                    }
+                    else if (t < 2.0)
+                    {
+                        InputSystem.QueueStateEvent(_keyboard, new KeyboardState());
+
+                        // Um evento de mouse a cada 1/60 s; mais que isso giraria rápido demais.
+                        if (Now - _lastMouseEvent > 1.0 / 60.0)
+                        {
+                            _lastMouseEvent = Now;
+                            InputSystem.QueueStateEvent(_mouse, new MouseState { delta = new Vector2(4f, 0f) }.WithButton(MouseButton.Left));
+                        }
+                    }
+                    else if (t < 3.5)
+                    {
+                        // Solta tudo e dá tempo de os riscos chegarem ao outro editor.
+                        InputSystem.QueueStateEvent(_mouse, new MouseState());
+                    }
+                    else if (_role == HostRole && LateJoin)
+                    {
+                        Next();
+                    }
+                    else
+                    {
+                        Evaluate(session);
+                    }
+                    break;
+
+                case 5:
+                    // Variante: já riscou; agora espera o cliente entrar e receber tudo.
+                    FindPlayers();
+                    // Vale ter visto o cliente uma vez: ele sai assim que recebe os riscos.
+                    if (_mostPlayers < 2) { _phaseStart = Now; break; }
+                    if (Now - _phaseStart > 2.0) Evaluate(session);
                     break;
             }
         }
@@ -224,6 +329,47 @@ namespace BackRooms.EditorTools
             InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
 
             _keyboard = InputSystem.AddDevice<Keyboard>();
+            _mouse = InputSystem.AddDevice<Mouse>();
+
+            // Sem janela o cursor não fica preso; avisa o jogo para agir como se estivesse.
+            PlayerController.AssumeMouseCaptured = true;
+        }
+
+        // Gira a câmera para cima ou para baixo, um evento de mouse a cada 1/60 s.
+        static void Look(float deltaY)
+        {
+            if (Mathf.Approximately(deltaY, 0f) || Now - _lastMouseEvent < 1.0 / 60.0) return;
+            _lastMouseEvent = Now;
+            InputSystem.QueueStateEvent(_mouse, new MouseState { delta = new Vector2(0f, deltaY) });
+        }
+
+        // A cada quadro, pergunta à caneta onde ela encostaria e confere que é no cenário.
+        // Um raio comum, sem o filtro dela, acerta o colisor do próprio jogador quando ele
+        // pula, corre ou recua (o colisor anda um passo de física atrás do corpo): era o
+        // defeito de "riscar no ar". Esse número também é contado, para o teste provar que
+        // passou pela situação.
+        static void AuditPenRay()
+        {
+            PenTool pen = _local != null ? _local.pen : null;
+            if (pen == null || pen.aim == null) return;
+
+            _rayChecks++;
+
+            if (Physics.Raycast(pen.aim.position, pen.aim.forward, out RaycastHit raw, pen.reach, ~0, QueryTriggerInteraction.Ignore) &&
+                raw.collider.transform.root == _local.transform.root)
+                _raySelfHits++;
+
+            if (!pen.TryAim(out RaycastHit hit)) return;
+            if (hit.collider.GetComponentInParent<LevelBuilder>() != null) return;
+
+            _rayOffLevel++;
+            if (_rayFirst == null)
+                _rayFirst = $"{hit.collider.name} [{hit.collider.GetType().Name}] a {hit.distance:F2} m; câmera em {pen.aim.position}, ponto {hit.point}, jogador em {_local.transform.position}";
+        }
+
+        static int BoardPoints()
+        {
+            return DrawingBoard.Instance != null ? DrawingBoard.Instance.PointCount : 0;
         }
 
         static void OnStepped(float loudness)
@@ -249,21 +395,61 @@ namespace BackRooms.EditorTools
             string report = $"papel={_role} erros={Errors.Count} apoiado={grounded} luminarias={lights} marcas={marks} " +
                             $"seed={session.Seed} mapa={LevelHash(builder):X8} jogadores_vistos={players}";
 
+            int strokes = DrawingBoard.Instance != null ? DrawingBoard.Instance.StrokeCount : 0;
+            int inkPoints = BoardPoints();
+            PenTool pen = _local != null ? _local.pen : null;
+            report += $" caneta_na_mao={(pen != null && pen.Equipped)}";
+            if (pen == null) report += " (jogador sem caneta)";
+            else if (!pen.Equipped) report += $" (ligada={pen.isActiveAndEnabled} na_rede={pen.IsSpawned} dono={pen.IsOwner})";
+            ok &= _rayOffLevel == 0;
+            report += $" miras_da_caneta={_rayChecks} fora_do_cenario={_rayOffLevel} raio_comum_no_proprio_jogador={_raySelfHits}";
+            if (_rayFirst != null) report += $" primeiro=[{_rayFirst}]";
+
             if (_role == ClientRole)
             {
-                // O cliente não anda; precisa ter visto o outro jogador se mexer.
-                ok &= players >= 2 && _remoteMoved > 1.0f;
-                report += $" host_andou={_remoteMoved:F2}m lanterna_do_host_vista={_sawRemoteFlashlight}";
+                // O cliente não anda nem risca; precisa ter visto o outro jogador se mexer
+                // e ter recebido os riscos dele.
+                ok &= players >= 2 && (LateJoin || _remoteMoved > 1.0f) && inkPoints >= 10;
+                report += $" host_andou={_remoteMoved:F2}m lanterna_do_host_vista={_sawRemoteFlashlight} riscos_recebidos={strokes} pontos={inkPoints}";
             }
             else
             {
-                ok &= moved > 0.5f && _steps > 0;
-                report += $" andou={moved:F2}m passos={_steps} pico_do_clipe_de_passo={stepPeak:F2}";
+                ok &= moved > 0.5f && _steps > 0 && inkPoints >= 5;
+                report += $" andou={moved:F2}m passos={_steps} pico_do_clipe_de_passo={stepPeak:F2} riscos={strokes} pontos={inkPoints}";
                 if (_role == HostRole) ok &= players >= 2;
             }
 
-            if (Errors.Count > 0) report += "\nPrimeiro erro: " + Errors[0];
+            // Censo do que é sólido durante a partida, por objeto. Ajuda a achar um colisor
+            // que não devia existir (algo invisível em que a caneta consiga riscar, por exemplo).
+            var census = new SortedDictionary<string, int>();
+            foreach (Collider collider in Object.FindObjectsByType<Collider>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                Transform parent = collider.transform.parent;
+                string key = (parent != null ? parent.name + "/" : "") + collider.name + " [" + collider.GetType().Name +
+                             (collider.isTrigger ? ", gatilho" : "") +
+                             (collider.enabled && collider.gameObject.activeInHierarchy ? "" : ", desligado") + "]";
+                census[key] = census.TryGetValue(key, out int count) ? count + 1 : 1;
+            }
 
+            if (pen != null && pen.aim != null && controller != null)
+            {
+                // Caso extremo: o jogador recua vários palmos num único quadro e a caneta mira
+                // em seguida. O colisor dele ficou para trás, bem na frente da câmera.
+                foreach (float step in new[] { 0.1f, 0.3f, 0.6f })
+                {
+                    controller.Move(-_local.transform.forward * step);
+                    bool any = pen.TryAim(out RaycastHit probe);
+                    bool self = any && probe.collider.transform.root == _local.transform.root;
+                    ok &= !self;
+                    report += $" recuo_{step * 100f:F0}cm={(any ? probe.collider.name : "nada")}";
+                }
+            }
+
+            var lines = new List<string>();
+            foreach (KeyValuePair<string, int> entry in census) lines.Add(entry.Value + " x " + entry.Key);
+            Debug.Log("[BackRooms] Colisores em jogo: " + string.Join(" | ", lines));
+
+            if (Errors.Count > 0) report += "\nPrimeiro erro: " + Errors[0];
             Finish(ok, report);
         }
 
@@ -322,8 +508,12 @@ namespace BackRooms.EditorTools
             EditorApplication.update -= Tick;
             Application.logMessageReceived -= OnLog;
             SessionState.SetString(RoleKey, "");
+            SessionState.SetBool(LateKey, false);
 
             if (_local != null && _local.controller != null) _local.controller.Stepped -= OnStepped;
+
+            if (_mouse != null) InputSystem.RemoveDevice(_mouse);
+            PlayerController.AssumeMouseCaptured = false;
 
             if (_keyboard != null)
             {

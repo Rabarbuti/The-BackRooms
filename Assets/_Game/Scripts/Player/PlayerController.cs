@@ -54,6 +54,18 @@ namespace BackRooms.Player
         public bool IsSprinting { get; private set; }
         public bool IsCrouching { get; private set; }
 
+        /// <summary>
+        /// Para testes automáticos sem janela: lá o cursor nunca chega a ficar preso, então
+        /// o teste liga isto para o jogo se comportar como se estivesse.
+        /// </summary>
+        public static bool AssumeMouseCaptured;
+
+        /// <summary>
+        /// Verdadeiro quando o mouse está preso ao jogo. Com ele solto (Esc), mover o mouse
+        /// não gira a câmera e clicar não usa itens.
+        /// </summary>
+        public static bool MouseCaptured => AssumeMouseCaptured || Cursor.lockState == CursorLockMode.Locked;
+
         /// <summary>Verdadeiro enquanto o jogador está dentro de um esconderijo.</summary>
         public bool IsHidden => _hidingSpots > 0;
 
@@ -188,7 +200,7 @@ namespace BackRooms.Player
 
         void UpdateLook(float dt)
         {
-            if (Cursor.lockState != CursorLockMode.Locked) return;
+            if (!MouseCaptured) return;
 
             // O delta do mouse já é por quadro; o analógico é uma taxa e precisa do dt.
             Vector2 look = _lookMouse.ReadValue<Vector2>() * mouseSensitivity

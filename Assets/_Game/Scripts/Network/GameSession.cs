@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using BackRooms.Items;
 using BackRooms.World;
 using Unity.Collections;
 using Unity.Netcode;
@@ -109,6 +110,7 @@ namespace BackRooms.Net
             _transport.SetConnectionData("127.0.0.1", port, localOnly ? "127.0.0.1" : "0.0.0.0");
             Subscribe();
             LevelReady = false;
+            ClearDrawings();
             SetPhase(SessionPhase.Connecting, "Abrindo a sessão...");
 
             if (!_net.StartHost())
@@ -133,6 +135,7 @@ namespace BackRooms.Net
             _transport.SetConnectionData(address, port);
             Subscribe();
             LevelReady = false;
+            ClearDrawings();
             Address = address;
             SetPhase(SessionPhase.Connecting, "Conectando a " + address + ":" + port + "...");
 
@@ -144,6 +147,8 @@ namespace BackRooms.Net
 
             // O host manda a seed assim que a conexão é aceita.
             _net.CustomMessagingManager.RegisterNamedMessageHandler(SeedMessage, OnSeedMessage);
+            // E, em seguida, os rabiscos que já existirem nas paredes.
+            _net.CustomMessagingManager.RegisterNamedMessageHandler(DrawingBoard.StrokeMessage, OnStrokeMessage);
             return true;
         }
 
@@ -191,6 +196,19 @@ namespace BackRooms.Net
                 writer.WriteValueSafe(Seed);
                 _net.CustomMessagingManager.SendNamedMessage(SeedMessage, clientId, writer);
             }
+
+            if (DrawingBoard.Instance != null) DrawingBoard.Instance.SendAll(_net, clientId);
+        }
+
+        void OnStrokeMessage(ulong senderClientId, FastBufferReader reader)
+        {
+            if (DrawingBoard.Instance != null) DrawingBoard.Instance.Receive(senderClientId, reader);
+        }
+
+        // Os rabiscos pertencem à sessão: somem quando ela começa e quando termina.
+        static void ClearDrawings()
+        {
+            if (DrawingBoard.Instance != null) DrawingBoard.Instance.Clear();
         }
 
         void OnSeedMessage(ulong senderClientId, FastBufferReader reader)
@@ -226,6 +244,7 @@ namespace BackRooms.Net
             if (_building != null) StopCoroutine(_building);
             _building = null;
             LevelReady = false;
+            ClearDrawings();
 
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
@@ -276,7 +295,7 @@ namespace BackRooms.Net
 
             if (menuCamera != null)
             {
-                Vector3 eye = level.SpawnPosition(0);
+                Vector3 eye = level.ScenicPosition();
                 menuCamera.transform.position = new Vector3(eye.x, 1.65f, eye.z);
             }
 
