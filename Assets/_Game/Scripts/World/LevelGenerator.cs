@@ -338,7 +338,9 @@ namespace BackRooms.World
             return t * t * (3f - 2f * t);
         }
 
-        public static LevelData Generate(int seed, int width, int height)
+        /// <param name="pits">Falso no Level 1: sem buracos (lá o perigo do chão são os móveis).</param>
+        /// <param name="alcoves">Falso no Level 1: sem nichos nas paredes (os móveis encostam nelas).</param>
+        public static LevelData Generate(int seed, int width, int height, bool pits = true, bool alcoves = true)
         {
             width = Math.Max(4, width);
             height = Math.Max(4, height);
@@ -377,10 +379,12 @@ namespace BackRooms.World
             ScatterLights(data, rng);
             FinishSpawnRoom(data);
             LimitLights(data, rng);
-            ScatterAlcoves(data, rng);
+            // Desligar nichos ou buracos muda o que o gerador consome dali em diante; com os dois
+            // ligados (o padrão, o Level 0) a mesma seed continua dando o mesmo mapa.
+            if (alcoves) ScatterAlcoves(data, rng);
 
             FindExit(data);
-            DigPits(data, rng);
+            if (pits) DigPits(data, rng);
             data.PathCells = ShortestPath(data, overStrips: true);
             data.SafePathCells = ShortestPath(data, overStrips: false);
 

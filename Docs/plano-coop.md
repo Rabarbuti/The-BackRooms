@@ -1,128 +1,134 @@
-# The BackRooms — plano do jogo em Co-Op
+# The BackRooms — estado atual e plano
 
-Complementa `Docs/contexto-backrooms.md` (referências do gênero). Este documento define **como montar o jogo**.
+Como ler os documentos do projeto:
 
-Estado do projeto em 10/11/2026: Unity 6000.3.26f1, HDRP 17.3, Input System, template ainda presente (`OutdoorsScene`, `TutorialInfo`, `Readme.asset`), repositório git sem commits.
+- **Este arquivo** — o que o jogo tem hoje, o que falta e para onde vai. Leia antes de começar.
+- **`CLAUDE.md`** (na raiz) — ambiente, onde fica cada coisa no código, regras que não podem ser
+  quebradas e como testar.
+- **`historico.md`** — o registro cronológico de cada rodada, com causas de defeitos e números de
+  teste. Só quando precisar entender uma decisão antiga.
+- **`level1-mostruario.md`** — projeto da segunda fase (a loja de móveis copiada, cheia de
+  objetos) e do inimigo dela, o Capitão. Existe uma versão de teste jogável e o corpo do Capitão.
+- **`modelos-blender.md`** — como os modelos são feitos no Blender por script e entram no Unity,
+  e como dividir lotes de modelos entre agentes.
+- `contexto-backrooms.md`, `prompt-fases-visual-fisica.md`, `referencia-your-happy-place.md` —
+  referências de design do gênero.
 
-**Etapa 1 (sala de teste) feita em 10/11/2026:** cena `Assets/_Game/Scenes/Level0_Test.unity`, gerada pelo menu **BackRooms > Montar Level 0**. O mapa é construído em tempo de execução pelo `LevelBuilder` a partir de uma seed (já determinístico, base da etapa 3). Outros menus: **Capturar prévia do Level 0** (imagens em `Logs/Previews`) e **Testar Level 0 (fumaça)**. Ainda sem rede: o jogador é local.
+Atualizado em 11/11/2026.
 
-**Ajustes de 10/11/2026 após o primeiro teste:**
-- Luminárias viraram luzes pontuais com sombra em cache (6 faces cada). Para isso `maxShadowRequests` subiu de 128 para 1024 nos três assets do HDRP em `Assets/Settings`. O limite comporta ~170 luminárias; mapas maiores vão precisar ligar e desligar sombras por distância.
-- Paredes grossas com nicho (`AlcoveSouth`/`AlcoveWest` no `LevelData`): entrada baixa, só agachado. O volume `HidingSpot` marca `PlayerController.IsHidden`, que a entidade vai consultar na etapa 4.
-- Saída: porta com placa EXIT na célula mais distante do spawn (`LevelExit`, por enquanto só registra no log). As setas rabiscadas seguem o caminho mais curto até ela.
-- Marcas por decalque (HDRP Decal Projector), todas definidas pela seed: sangue preto, poças no chão, palavras (HELP!, RUN, IT HEARS YOU) e setas.
-- Passos: cadência corrigida (era 3,7 passos/s andando; agora ~2) e som refeito sem chiado. A primeira versão sem chiado ficou inaudível (98% da energia abaixo de 150 Hz); a atual concentra o som entre 150 Hz e 1 kHz e normaliza cada clipe.
-- Sujeira e desgaste: encardido embutido nas texturas de papel de parede e carpete (que passaram a cobrir 2 m por repetição) e ~230 decalques por seed — escorridos do teto, umidade subindo do rodapé, manchas, riscos de atrito, trechos úmidos e gastos no carpete. Quantidades em `LevelGenerator.PlaceGrime`; cores e força em `Level0Setup.BuildScene`.
-- O teste de fumaça agora anda de verdade (segura W por 2 s) e confere distância, passos disparados e volume dos clipes.
+---
 
-**Etapa 2 (rede) feita em 10/11/2026, por IP direto:**
-- `GameSession` (objeto `Sessao`, junto do `NetworkManager`) hospeda ou entra por IP na porta 7777. Jogar sozinho é hospedar sem ninguém entrar.
-- O host sorteia a seed e a envia a cada cliente por mensagem nomeada (`BackRooms.Seed`); cada máquina gera o mapa localmente. A gerência de cenas do Netcode está desligada.
-- O jogador é um prefab de rede criado na conexão. `PlayerNetwork` liga controle, câmera e lanterna só na máquina do dono; nas outras o prefab é o corpo daquele jogador (traje amarelo provisório). Posição pelo `NetworkTransform` com autoridade do dono; inclinação da cabeça, agachar e lanterna por `NetworkVariable`. Os passos dos outros jogadores tocam em 3D.
-- Menu em UI Toolkit (`ConnectionMenu`) com atalhos H (hospedar) e J (entrar). O mapa de fundo do menu usa a seed 1998.
-- Linha de comando: `-brHost` e `-brJoin <endereço>`.
-- Testes: menu **BackRooms > Testar Level 0** (sozinho, pelo atalho H) e, por linha de comando, `Level0SmokeTest.BatchHost` / `BatchJoin` em dois editores — o cliente confere que recebeu o mesmo mapa e que vê o host andar e acender a lanterna.
-- **Falta:** entrar por código de sala (Relay da Unity). O projeto já tem `cloudProjectId`, mas é preciso ativar o Relay no painel da Unity Cloud. Até lá, jogar pela internet exige abrir a porta 7777 no roteador de quem hospeda ou usar uma VPN de jogo.
-- **Para testar com dois jogadores no editor:** Window > Multiplayer > Multiplayer Play Mode, ative o Player 2, aperte Play, H na janela principal e J na do Player 2.
+## Estado atual
 
-**Interface de filmadora (10/11/2026):**
-- `Camcorder` (objeto `Filmadora` na cena) desenha o painel numa textura de 480x270 com uma fonte de pixels 5x7 própria: REC piscando, contador da fita, bateria (ligada à bateria da lanterna), hora e data (começa em 10/11/1998, 2h13) e aviso LIGHT com a lanterna acesa. No menu mostra STBY.
-- `CamcorderPass` é um Custom Pass do HDRP (After Post Process) que aplica `Shaders/CamcorderVHS.shader`: tremido por linha, faixa de tracking, cor sangrando, linhas de varredura, ruído, falhas brancas e bordas escuras. O painel entra antes da degradação, então sofre os mesmos defeitos.
-- Intensidades no material `Assets/_Game/Settings/CamcorderVHS.mat`. `Camcorder.Instance.Glitch(força, segundos)` dispara interferência — reservado para a entidade.
-- Referência usada: `Docs/referencia-your-happy-place.md`.
+Existe uma fase, o Level 0, jogável por 1 a 4 pessoas por IP, e uma versão de teste do Level 1
+(seção "Level 1 de teste" abaixo). Não há ainda vitória nem derrota: a saída só registra que o
+jogador chegou. Editor: Unity 6000.6.4f1 com HDRP 17.6 (até 11/11/2026, 6000.3.26f1 / HDRP 17.3).
 
-**Ajustes de equilíbrio (10/11/2026, segunda rodada):**
-- **Desgaste por distância:** `LevelGenerator.WearAt` vai de 0 (até 1,5 célula do início) a 1 (a partir de 7 células). Decalques de sujeira só passam num sorteio com essa chance e ficam mais opacos quanto mais longe; sangue, palavras e poças só aparecem com desgaste acima de 0,35; perto do início não há lâmpada queimada nem piscando. As texturas de base ficaram quase limpas, porque são as mesmas no mapa inteiro.
-- **Pé-direito:** `LevelBuilder.WallHeight` passou de 2,7 m para 4,05 m. As luminárias subiram de 1200 para 2300 candela para manter o chão iluminado.
-- **Falhas brancas da filmadora:** removidas por completo (terceira rodada). O efeito mantém tremido por linha, faixa de tracking, cor sangrando, linhas de varredura, ruído e bordas escuras; o ruído da faixa de tracking ficou neutro, sem clarear a imagem.
-- **Sala inicial (terceira rodada):** os jogadores começam no centro de uma sala fechada de 2 x 2 células (8 x 8 m), com um único vão de porta sorteado no contorno (`CarveSpawnRoom`, constantes `SpawnRoomSize` e `SpawnRoomDoors`). Paredes e piso da sala usam materiais próprios sem encardido (`Wallpaper_Clean`, `Carpet_Clean`); nenhuma marca, seta, esconderijo ou pilar é colocado nela, e as quatro luzes ficam acesas. O desgaste passou a ser medido a partir do centro da sala. A câmera do menu foi para um ponto do caminho até a saída (`ScenicPosition`), já que a sala é fechada.
-- **Mapa 2D:** menu **BackRooms > Gerar mapa 2D do Level 0** salva `Docs/level0-mapa-seed<seed>.png` a partir do mesmo gerador do jogo. Cada seed dá outro mapa; o da seed 1998 é o do menu e dos testes.
-- `PixelFont` (matriz 5x7) passou a ser compartilhada entre a filmadora e o mapa.
+### Fase
 
-**Conteúdo gerado tem versão (10/11/2026):** a cena, as texturas e os materiais do Level 0 são gerados pelo `Level0Setup`. Quando o gerador muda e ninguém recria, o jogo roda código novo sobre conteúdo velho — foi assim que a sala inicial apareceu suja. Agora `Level0Setup.ContentVersion` é gravado na cena (`LevelBuilder.contentVersion`) e o `Level0AutoUpdate` oferece recriar tudo quando o editor abre ou recompila com a cena atrasada. **Ao mudar texturas, materiais, objetos da cena ou valores padrão do `LevelBuilder`, aumente `ContentVersion`.**
+- **Mapa:** 20 x 20 células de 4 m (80 x 80 m), pé-direito de 4,05 m, gerado a partir de uma
+  seed. `LevelGenerator` produz a planta (`LevelData`); `LevelBuilder` monta malhas e colisores.
+  O tamanho é `LevelBuilder.DefaultSize`.
+- **Sala inicial:** fechada, 2 x 2 células, um vão de porta, materiais limpos, perto de um canto
+  sorteado (a 3–6 células das duas bordas mais próximas). A entidade não entra nela.
+- **Saída:** porta corta-fogo com placa EXIT na célula mais distante do início, do outro lado do
+  mapa. O modelo da porta foi gerado por IA (GLB em `Art/Fontes`, lido por `GlbReader` e encaixado
+  por `ImportedModels`); sem o GLB volta a porta antiga.
+- **Desgaste:** sujeira, sangue, palavras e lâmpadas defeituosas aumentam com a distância da
+  sala inicial (`LevelGenerator.WearAt`).
+- **Esconderijos:** 12% das paredes internas viram paredes grossas com um nicho de entrada
+  baixa (só agachado). Quem está dentro não é visto nem pego.
+- **Setas:** no máximo 6, espalhadas, apontando o caminho mais curto até a saída.
+- **Luminárias:** calha de chapa com difusor de acrílico e duas lâmpadas tubulares; luz pontual
+  com sombra em cache atrás do difusor. No máximo 165 acesas, por causa do limite de 1024 sombras
+  configurado no HDRP.
+- **Grelhas de ar:** uma a cada 12 células, no alto das paredes, fora da sala inicial
+  (`LevelGenerator.PlaceVents`, malha em código).
 
-**Cena certa no Play (10/11/2026):** depois de ferramentas rodadas por linha de comando o editor abria numa cena vazia sem nome, e o Play não mostrava o jogo. O `Level0AutoUpdate` agora abre `Level0_Test` sozinho quando encontra essa cena vazia e, se alguém der Play numa cena sem nome, troca para a do jogo e inicia. As ferramentas de linha de comando passaram a deixar a cena do jogo aberta antes de fechar.
+### Buracos
 
-**Primeiro item: caneta (10/11/2026):**
-- `PenTool` (no prefab do jogador): tecla 1 pega e guarda, botão esquerdo risca paredes, chão e teto a até 2,2 m, R troca a cor (preto, vermelho, azul). Com a caneta na mão o painel da filmadora mostra `PEN <cor>` e um ponto de mira no centro.
-- `DrawingBoard` (objeto `Rabiscos` na cena): cada traço é uma fita de malha de 2,4 cm colada à superfície. Materiais `Ink_*` não recebem decalques, para a sujeira não cobrir os riscos.
-- Rede: quem risca vê na hora; os pontos vão ao host a cada 0,1 s (`SubmitRpc`) e o host repassa aos outros (`BroadcastRpc`). Quem entra depois recebe todos os traços por mensagem nomeada (`BackRooms.Stroke`). Os riscos somem ao começar ou encerrar uma sessão.
-- Limites: 300 pontos por traço (continua em outro traço), 1500 traços no total (os mais antigos somem).
-- **Ainda não existe:** pegar a caneta no cenário (todos começam com ela), tinta que acaba, borracha.
-- Teste: o teste de fumaça pega a caneta e risca; em dois editores confere que o cliente recebe os riscos enquanto o host desenha (`BatchHost`/`BatchJoin`) e ao entrar depois (`BatchHostDrawFirst`/`BatchJoinLate`).
-- `PlayerController.MouseCaptured` passou a ser a única fonte de "o mouse está preso ao jogo" (câmera e itens consultam isso).
-- Batente da porta da sala inicial: deixou de piscar. Nenhuma face dele fica no mesmo plano da parede ou do rodapé.
+- Um a cada 100 células (4 no mapa atual), retângulos de 2 x 2 a 3 x 4 células, 7 m de
+  profundidade, abertos em cima do caminho mais curto, onde mais alongam o desvio (até 14
+  células por buraco).
+- **Faixas:** vigas de 0,4 m de largura atravessam cada buraco. O jogador tem 0,6 m.
+- **Sempre há outro caminho:** um buraco nunca isola parte do mapa. `LevelData.PathCells` é o
+  caminho direto (pelas faixas) e `SafePathCells` o seguro. Na seed 1998: 140 m contra 252 m.
+- **Fumaça** cobre o fundo (`PitSmoke`). Quem desce 2,5 m vê NO SIGNAL e reaparece na sala
+  inicial em 0,8 s. Não há morte.
 
-**Caneta riscando no ar (10/11/2026):**
-- Causa: o raio da caneta acertava o colisor do próprio jogador. O colisor do `CharacterController` só acompanha o corpo no passo de física seguinte; pulando, correndo ou recuando, a câmera sai de dentro dele por um instante e o raio batia nele — o traço ficava solto no ar, onde o jogador estava um instante antes. Reproduzido no teste: 5.819 de 34.264 raios acertaram o próprio jogador.
-- Correção: `PenTool.TryAim` ignora os colisores do próprio jogador e só aceita superfície parada (outro jogador na frente interrompe o traço em vez de receber tinta).
-- **Regra para os próximos itens:** todo raio que sai da câmera do jogador (interagir, pegar, mirar) precisa ignorar o próprio jogador, pelo mesmo motivo.
-- Teste: o teste de fumaça agora recua, corre e pula olhando para o chão, pergunta à caneta onde ela encostaria a cada quadro e reprova se for fora do cenário. Depois da correção: 0 em 32.819, com o raio comum ainda acertando o jogador 5.696 vezes no mesmo percurso.
-- Ferramenta nova: menu BackRooms > Conferir colisores do Level 0 (`Level0ColliderCheck`) compara, com milhares de raios em várias seeds, o que é sólido com o que aparece na tela. Resultado atual: 0 diferenças em 48.000 raios.
+### Apagão
 
-**Fase maior, setas raras e buracos (10/11/2026):**
-- **Tamanho:** o mapa passou de 16 x 16 para 20 x 20 células (64 x 64 m para 80 x 80 m, 56% a mais de área). O valor é `LevelBuilder.DefaultSize`. Com mais células viriam mais luminárias do que o limite de sombras do HDRP comporta, então `LevelGenerator.LimitLights` apaga as que passarem de 165 acesas.
-- **Setas:** no máximo 6 (`LevelGenerator.MaxArrows`) e nunca a menos de 3 células uma da outra. Três ficam no caminho direto, a 1/6, 3/6 e 5/6 dele; as outras vão para onde o mapa ainda não tem nenhuma. Cada uma aponta o próximo passo do caminho mais curto até a saída a partir de onde está — que pode passar por cima de um buraco.
-- **Buracos:** um a cada 100 células (4 no mapa atual), retângulos de 2 x 2 a 3 x 4 células, com 7 m de profundidade. São abertos um por vez em cima do caminho seguro mais curto que existir naquele momento, no lugar que mais alonga o desvio (até 14 células por buraco); quando não cabe mais nenhum no caminho, vão para outro canto do mapa. Ficam a pelo menos 2 células da sala inicial e uns dos outros, e nunca encostam na saída.
-- **Faixas:** dentro de cada buraco sobram vigas de 0,4 m de largura com carpete em cima (`LevelData.PitStrips`, um bit por lado de cada célula), mais estreitas que o jogador (0,6 m). A principal liga a entrada à saída por onde o caminho passava; até duas outras entradas ganham ramal.
-- **Garantia:** um buraco nunca isola parte do mapa. Toda célula com piso continua alcançável sem pisar em faixa, e por isso sempre existe um caminho seguro até a saída (`LevelData.SafePathCells`); `PathCells` é o caminho direto, pelas faixas. Na seed 1998: 124 m pelo direto, 236 m pelo seguro.
-- **Queda:** quem desce abaixo de 2,5 m dentro do buraco (`PitFall`) perde o controle, a filmadora fica preta com NO SIGNAL e, 0,8 s depois, o jogador reaparece na sala inicial (`PlayerController.FallIntoPit`). Não há morte: o custo é o caminho de volta. O dono avisa a rede com `NetworkTransform.Teleport`, para os outros não o verem deslizar pelo mapa.
-- **Construção:** o colisor do piso deixou de ser uma caixa única e virou um trecho por sequência de células com piso em cada fileira. O poço usa o material `PitConcrete`; ele precisa ser claro, porque é a parede clareando perto da borda que faz o buraco parecer fundo.
-- **Ainda não existe:** som de queda, faixa que quebra ou balança, e buraco que a entidade use contra os jogadores.
-- Testes: o gerador foi rodado fora do Unity em 1.000 seeds e três tamanhos (nenhuma célula isolada, sempre 6 setas e 4 buracos no 20 x 20, mesmo mapa nas duas gerações de cada seed). O teste de fumaça anda sobre uma faixa e depois se joga no vazio, sozinho, como host e como cliente; a conferência de colisores continua em 0 diferenças em 48.000 raios.
+`LightsOut`: o primeiro com 60 s de partida, 10 s de escuro, depois 30 s de luz entre um e
+outro. As luminárias avisam piscando nos 10 s anteriores, e sem parar nos últimos 2 s. No escuro
+some também a luz ambiente; sobram as lanternas e a placa da saída. Todas as máquinas apagam
+juntas pelo relógio `GameSession.SessionSeconds`.
 
-**Fumaça nos buracos e início fora do centro (10/11/2026):**
-- **Fumaça:** o fundo do buraco não aparece mais. `PitSmoke` põe, entre 1,0 e 3,4 m abaixo do piso, seis camadas de névoa translúcida (cada uma mais escura e densa que a de cima, deslizando devagar) sobre uma tampa preta opaca. Isso funciona em qualquer perfil gráfico; nos perfis com névoa volumétrica (High Fidelity e Balanced) um `LocalVolumetricFog` soma por cima. A fumaça não tem colisor. No material sem luz do HDRP a cor é o que aparece na tela (0 a 1), não nits: com 2,6 a fumaça saiu branca.
-- **Início:** a sala inicial deixou de ficar no meio do mapa. `LevelGenerator.PlaceSpawn` sorteia um dos quatro cantos e põe a sala a 3–6 células das duas bordas mais próximas. Como a saída é a célula mais distante do início, ela vai parar do outro lado: o caminho direto médio subiu de 30 para 37 células.
+### Jogador
 
-**Entidade, primeira versão (10/11/2026):**
-- **O que é:** uma figura preta de 3 m, magra e curvada, com braços que quase arrastam no chão, cabeça pequena sem rosto (dois pontos claros de tamanhos diferentes) e fios pendurados nas costas. Corpo e animação são feitos em código (`EntityBody`), o som também (`EntityAudio`: ronco grave contínuo, baque a cada passo, guincho ao começar a perseguir). Não há modelo nem áudio importados.
-- **Quando aparece:** não existe no começo. `EntityDirector` (objeto `Sessao`, só no host) a cria quando algum jogador chega a 8 células de caminhada da sala inicial, com pelo menos 15 s de partida. Ela nasce **entre esse jogador e a sala**: na célula do caminho mais próxima do meio que esteja a 4 células ou mais de todos e fora da vista de todos. Em seguida vai até onde o jogador estava.
-- **Como percebe:** o ouvido é o principal. O host estima o barulho de cada jogador pelo deslocamento (parado 0; agachado 25%; andando 55%; correndo 100%) e o som viaja pelo labirinto, barrado só por parede, até 8 células para quem corre. Ouvindo, ela vai até o ponto. Vendo alguém (26 m à frente num cone de 130°, ou 3,5 m em qualquer direção, com linha de visada), ela corre.
-- **Velocidades:** vagando 1,9 m/s, vasculhando 2,6, indo atrás de um barulho 3,4, perseguindo 4,6. O jogador anda a 2,8 e corre a 5,0 por 6 s: correndo ele abre distância, mas faz o barulho máximo e o fôlego acaba.
-- **O que salva:** ficar parado ou agachado; entrar num esconderijo (ela não vê nem pega quem está dentro); atravessar um buraco pela faixa (ela não anda em faixa e precisa dar a volta); voltar para a sala inicial (ela não passa na porta e ignora quem está lá).
-- **Captura:** a menos de 1,25 m, com linha de visada. O jogador não morre: tela preta com NO SIGNAL e, 1,6 s depois, reaparece na sala inicial — a mesma regra da queda em buraco. Ela fica parada 2,5 s e ignora aquele jogador por mais 8 s. **Isto é provisório:** a seção 2.2 prevê sala de contenção e resgate por um colega.
-- **Rugido de ataque:** no instante em que pega alguém ela ruge (`EntityAudio.CreateRoar`): 1,9 s de uma voz rouca que sobe num tranco e despenca de tom, passando por dois filtros ressonantes que abrem e fecham como uma boca, com um gemido agudo por cima que falha aos soluços. A primeira versão tinha 55% da energia abaixo de 160 Hz e soava como um ronco contínuo; a atual concentra 62% entre 320 e 1.280 Hz. Toca em todas as máquinas, em 3D, a partir dela.
-- **Ouvir os sons sem jogar:** menu **BackRooms > Exportar sons da entidade** grava os quatro (rugido, guincho, passo, ronco) em WAV na pasta `Logs/Sons`, que fica fora do Git.
-- **Aviso de proximidade:** a menos de 16 m a imagem da filmadora começa a chuviscar, cada vez mais (`Camcorder.entityNoiseRange`), além do ronco em 3D.
-- **Navegação:** sem NavMesh. `LevelNav` calcula o caminho direto na grade do `LevelData` (células de 4 m, paredes nas divisas); a entidade corta em linha reta quando o trecho está livre de parede (esfera lançada pela física) e de buraco. O pacote AI Navigation ficou sem uso.
-- **Rede:** `EntityBrain` pensa só no host; posição pelo `NetworkTransform` e estado por `NetworkVariable`. A captura é um RPC do host para o dono do jogador (`PlayerNetwork.GetCaughtRpc`). O jogador publica se está agachado e se está escondido. O prefab `Entity` entra sozinho em `Assets/DefaultNetworkPrefabs.asset`, que o Netcode mantém; registrar de novo por código dá erro de duplicata.
-- **Ainda não existe:** sala de contenção e resgate, a entidade reagir à lanterna ou à voz, mais de uma entidade, e ela abrir ou vigiar esconderijos.
-- Testes: sozinho, o teste de fumaça põe o jogador longe da sala e confere que ela nasce entre ele e a sala (a 6 células da porta e 5 do jogador, que estava a 11), que ouve, vai atrás e pega (10,9 s), e que ele volta para a sala. Em dois editores, o cliente a vê aparecer e andar e é pego por ela (7,3 s); quem entra depois a recebe já no mapa. A conferência de colisores passou a desconsiderar raio que raspa numa quina (1 caso em 48.000).
+- **Movimento:** anda a 2,8 m/s, corre a 5,0 com 6 s de fôlego, agacha a 1,4, pula 0,8 m.
+- **Lanterna** (F), por enquanto com bateria infinita. Passos sintetizados em código.
+- **Traje** (`PlayerBody`): o que os outros veem é um explorador de traje de proteção amarelo,
+  que anda, agacha, acompanha o olhar e mostra a caneta e a lanterna nas mãos.
+- **Mão em primeira pessoa** (`ItemHand`) segurando o item em uso.
 
-**Apagão, monstro mais ameaçador, traje, mão e gravação (11/11/2026):**
-- **Apagão (`LightsOut`, no objeto `Sessao`):** o primeiro acontece com 60 s de partida e dura 10 s; depois há 30 s de luz entre um e outro (ciclo de 40 s). Nos 10 s antes de cada um as luminárias avisam, falhando uma ou duas vezes por segundo; nos últimos 2 s piscam sem parar. No escuro some também a luz ambiente (um Volume por cima do da cena escurece o céu e a névoa): sobram as lanternas, a placa da saída e os olhos e a boca da entidade. O relógio é `GameSession.SessionSeconds`, o tempo do servidor desde que o host abriu a sessão — o instante inicial viaja junto com a seed —, então cada máquina faz a conta sozinha e todas apagam juntas. Tempos nos campos do componente. A entidade não muda de comportamento no escuro.
-- **Luminárias:** `CeilingLight.SetPower(fase)` substituiu `SetPowered`; todas ficam registradas em `CeilingLight.All`.
-- **Esconderijos:** a chance de uma parede virar parede grossa com nicho subiu de 7% para 12% (`AlcoveChance`).
-- **Entidade, corpo novo (`EntityBody`):** crânio torto com um caroço de um lado, uma órbita funda de um lado e três olhos pequenos do outro, boca vermelho-escura com dentes desiguais e mandíbula torta que abre quando ela caça e escancara no bote; costelas à mostra, espinhos nas costas, garras nas mãos e nos pés, um braço mais comprido e um ombro mais alto que o outro. No bote (estado `Feed`) ela se ergue e levanta os braços abertos. Materiais novos: `Entity_Bone` e `Entity_Maw`.
-- **`FigureKit`:** as peças para montar figuras em código (junta, osso, volume) saíram da entidade para uma classe compartilhada, usada também pelo traje e pela mão.
-- **Traje dos jogadores (`PlayerBody`):** o corpo visto pelos outros virou um explorador em traje de proteção amarelo: capuz, visor escuro, respirador com dois filtros, cilindro de ar nas costas, luvas e botas pretas. Anda, agacha de verdade (dobra as pernas), acompanha o olhar do jogador, ergue o braço direito com a caneta e o esquerdo com a lanterna. O jogador passou a publicar se está com um item na mão.
-- **Mão em primeira pessoa (`ItemHand`):** com a caneta em uso aparece a mão de luva segurando-a, com o punho e a manga do traje entrando pelo canto da tela. Sobe ao pegar, balança de leve e avança quando risca.
-- **Gravação (`ScreenRecorder`, tecla F9):** grava o que o jogador vê — já com o efeito de fita e o painel — num vídeo AVI (Motion JPEG, 854 x 480, 20 quadros por segundo, com som), na pasta Vídeos do usuário, em "The BackRooms". O painel mostra uma bolinha vermelha e `TAPE m:ss` enquanto grava e `SAVED` ao parar. Para sozinha aos 15 minutos ou perto de 2 GB. O passe da filmadora entrega a imagem pronta, lida da placa de vídeo sem travar o jogo; compressão e escrita ficam em outra thread (`AviWriter`). Um quadro repetido (jogo mais lento que o vídeo) não ocupa espaço.
-- **Ainda não existe:** escolher resolução ou pasta da gravação num menu; a entidade aproveitar o apagão; mão para outros itens (só há a caneta); corpo próprio para a mão que segura a lanterna.
-- Testes: o teste de fumaça adianta o primeiro apagão para 20 s e confere aviso, aviso rápido, 0 luminárias acesas no escuro e a volta; grava 3 s de vídeo e confere o arquivo; confere a mão com a caneta e, em dois editores, que o cliente vê o host de traje com a caneta na mão. O vídeo gravado foi aberto por fora: o ffprobe reconhece as duas faixas e o ffmpeg o decodifica inteiro sem erro. Sem janela o Unity não desenha a câmera do jogador, então no teste por linha de comando é o próprio teste que manda desenhar.
+### Caneta
 
-**Entidade redesenhada: cipós e cabeça comprida (11/11/2026):**
-- **Por quê:** o corpo anterior (crânio torto, costelas brancas, olhos) não agradou. O pedido foi uma cabeça comprida e esticada para trás e um corpo feito de galhos e cipós pretos, mantendo a altura. O desenho foi aprovado em imagens de um protótipo antes de entrar no jogo.
-- **Corpo (`EntityBody`):** 3,3 m. Tronco e membros são feixes de hastes finas que sobem em espiral em volta do eixo de cada membro, fechados nas pontas e abertos no meio — dá para ver através dela. Raminhos pontudos, nós de madeira nas juntas, dedos de galho, raízes no lugar dos pés e nove cipós soltos nas costas. As juntas e a função de pose são as mesmas de antes.
-- **Cabeça (`EntityHeadMesh`):** crânio e mandíbula são malhas esculpidas em código, não esferas (que ficavam com cara de balão). O crânio é uma casca torneada de 1,5 m de comprimento, do focinho à ponta de trás, com crista no alto, sulcos, têmporas cavadas e placas sobrepostas. Sem olhos. Dentes em cone curvo, desiguais.
-- **Rosto fechado:** a mandíbula encaixa por baixo do crânio sem fresta e leva um enchimento que sobe para dentro dele; quando ela abre, é o enchimento que aparece no lugar da fresta. A boca só abre no terço da frente e não é vista de lado nem por trás. Parada fica quase fechada (2,5°), entreabre caçando e abre 35° no bote. O pescoço continua para dentro da base do crânio.
-- **Superfície:** `Entity_Bark` (casca fosca com sulcos) nos cipós e `Entity_Shell` (casco lustroso com estrias, veias e poros) na cabeça. Cor e mapa de normais são pintados pelo `EntityPainter` e gravados em PNG pelo `Level0Setup` (`EnsureSurface`). Saíram `Entity_Black` e `Entity_Eye`.
-- **Fusão das peças:** são mais de 400 cápsulas. Depois de montadas, `FigureKit.Bake` funde as de cada junta numa malha só por material, e a figura fica com poucas dezenas de malhas, sem mudar a aparência.
-- **Consequências:** sem olhos, no apagão só os dentes aparecem quando a lanterna bate nela. O colisor subiu para 3,2 m e a altura dos olhos da IA para 2,9 m.
-- Testes: o comportamento não mudou e o teste de fumaça passou sozinho, como host, como cliente e para quem entra depois.
+Único item. Tecla 1 pega e guarda, botão esquerdo risca paredes, chão e teto a até 2,2 m, R
+troca a cor (preto, vermelho, azul). Todos começam com ela. Os riscos (`DrawingBoard`) aparecem
+para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 1500 traços.
 
-**Modelos gerados por IA, calha das luminárias e grelhas de ar (11/11/2026):**
-- **Origem:** dois modelos gerados no Higgsfield (Tripo, texto para 3D, textura PBR padrão, 5 créditos cada — todo o saldo da conta gratuita): a porta da saída e uma grelha de ar. Só a porta entrou: o GLB original fica em `Art/Fontes/ExitDoor.glb` (2,3 MB, texturas de 2048 px dentro). A grelha foi recusada na prévia — com 1.467 triângulos as aletas saíram tortas e serrilhadas, parecendo rabisco — e virou geometria em código.
-- **Importação:** o projeto não tem pacote de glTF. `GlbReader` (editor) lê o GLB — malha, nós, UV, normais e as imagens do material — e converte para o Unity (espelha X, inverte a ordem dos triângulos e o V). `ImportedModels` encaixa cada modelo (giro, altura, achatamento da profundidade, recortes), reduz as texturas (porta: cor em 1024 px, máscara e normal em 512) e monta o material HDRP/Lit: o mapa metal-aspereza do glTF vira máscara do HDRP (R metal, G oclusão, A lisura). Tudo sai em `Art/Level0` pelo `Level0Setup`, como o resto do conteúdo gerado. Sem o GLB, nada é criado e o `LevelBuilder` usa a peça antiga.
-- **Porta da saída (piloto):** folha corta-fogo bege com batente, dobradiças, barra antipânico, chapa de chute e marcas de mão, no lugar do retângulo preto. O modelo veio com uma chapa de soleira de 0,5 m avançando pelo chão (recortada) e grosso demais (barra a 36 cm da parede): a profundidade caiu a 40%, e a folha fica a 4 cm da parede, a barra a 14 cm. 1,25 x 2,15 m, 4.756 triângulos, colisor da mesma malha (a caneta risca nela). A placa EXIT e a luz vermelha não mudaram.
-- **Grelhas de ar:** `LevelGenerator.PlaceVents` põe uma grelha de retorno de ar a cada 12 células, no alto das paredes (centro a 3,45 m), em faces livres fora da sala inicial. É a última etapa do gerador: as etapas anteriores consomem o sorteio igual, então o mapa de cada seed não mudou, só ganhou as grelhas. A grelha é feita em código (`LevelBuilder.CreateVentMesh`, 72 triângulos, a mesma malha em todas): aro de chapa de 0,6 x 0,36 m saindo 2,5 cm da parede e oito aletas inclinadas para baixo; atrás delas há um fundo preto, para não aparecer papel de parede pelas frestas. Colisor da própria malha (fica ao alcance da caneta). Material `Vent`; sem ele, não há grelhas.
-- **Calha das luminárias (em código):** o painel deixou de ser um retângulo colado ao forro. Agora tem calha de chapa com aro de 3 cm saindo 4,5 cm do forro, e o difusor fica 5 mm para dentro. O difusor tem textura de acrílico prismático com duas lâmpadas tubulares, que aparecem acesas (faixas mais claras) e apagadas (sombra cinza). A luz pontual continua 3,4 cm abaixo do forro, como antes. Por isso fica atrás do difusor, que não recebe mais luz direta e deixa de estourar em branco, e a iluminação do andar não muda. A calha tem colisor, e a conferência de colisores passou a incluir as luminárias.
-- **Prévia:** fotos novas `luminaria`, `luminaria_apagada`, `saida_perto` e `grelha`.
+### Entidade
 
-**Unity 6000.6 (11/11/2026):** a máquina de desenvolvimento só tem o editor 6000.6.4f1, então o projeto passou de 6000.3.26f1 para ele. O editor atualizou os pacotes: HDRP 17.3 → 17.6, Multiplayer Play Mode 2.0.2 → 3.0.0, Multiplayer Center 1.0.1 → 2.0.1, Timeline 1.8.13 → 6.6.0 e uGUI 2.0.0 → 2.6.0; o Netcode continua em 2.13.3. A troca está num commit separado, para poder ser desfeita sozinha.
+- **Aparência:** 3,3 m, corpo de cipós pretos torcidos, cabeça comprida esculpida como malha,
+  sem olhos, de rosto fechado e boca só na frente (`EntityBody`, `EntityHeadMesh`).
+- **Quando aparece:** não existe no começo. Surge quando alguém chega a 8 células de caminhada
+  da sala inicial, com pelo menos 15 s de partida, numa célula entre esse jogador e a sala, a 4
+  células ou mais de todos e fora da vista de todos (`EntityDirector`).
+- **Ouvido:** o principal. O host estima o barulho pelo deslocamento de cada jogador: parado 0,
+  agachado 25%, andando 55%, correndo 100%. O som viaja pelo labirinto, barrado por parede,
+  até 8 células para quem corre.
+- **Visão:** 26 m à frente num cone de 130°, ou 3,5 m em qualquer direção, com linha de visada.
+- **Velocidade:** vagando 1,9 m/s, vasculhando 2,6, indo atrás de um barulho 3,4, perseguindo 4,6.
+- **O que salva:** ficar parado ou agachado, entrar num esconderijo, atravessar um buraco pela
+  faixa (ela não anda em faixa) ou voltar para a sala inicial.
+- **Captura:** a menos de 1,25 m ela ruge, o jogador vê NO SIGNAL e reaparece na sala inicial
+  em 1,6 s. **Provisório** — o plano (seção 2.2) é sala de contenção com resgate.
+- **Avisos:** ronco grave em 3D e chuvisco na filmadora a menos de 16 m.
+- **Como anda:** sem NavMesh. `LevelNav` calcula o caminho na grade do `LevelData`.
+- No apagão ela não muda de comportamento e, sem olhos, quase some.
 
-Pacotes adicionados ao `Packages/manifest.json` (versões recomendadas pelo editor 6000.3.26f1): Netcode for GameObjects 2.13.3, Multiplayer Services 2.3.3, Multiplayer Play Mode 2.0.2, AI Navigation 2.0.15. Vivox (16.11.0) entra só na etapa 5.
+### Filmadora
+
+- **Painel e efeito:** REC, contador, bateria, hora e data desenhados por `Camcorder`; o efeito
+  de fita é um Custom Pass (`CamcorderPass` + `CamcorderVHS.shader`).
+- **Gravação de verdade:** F9 grava o que o jogador vê, com som, num AVI de 854 x 480 a 20
+  quadros por segundo, na pasta Vídeos do usuário, em "The BackRooms". Para sozinha aos 15 min.
+
+### Rede
+
+- Host autoritativo por IP direto, porta 7777. Jogar sozinho é hospedar sem ninguém entrar.
+  No menu, H hospeda e J entra; por linha de comando, `-brHost` e `-brJoin <endereço>`.
+- O host envia a seed e o instante de início da sessão; cada máquina gera o mesmo mapa.
+- Para jogar pela internet hoje é preciso abrir a porta 7777 no roteador de quem hospeda ou
+  usar uma VPN de jogo.
+
+---
+
+## O que ainda não existe
+
+- **Objetivo da fase:** disjuntores, código, elevador, vitória e derrota (seção 2.3).
+- **Sala de contenção e resgate** de quem é capturado (seção 2.2).
+- **Entrar por código de sala** (Relay da Unity; falta ativar no painel da Unity Cloud).
+- **Voz por proximidade** e a entidade reagindo à voz (seção 2.1).
+- **Sanidade** e alucinações (seção 2.5).
+- **Itens:** pegar a caneta no cenário, tinta que acaba, borracha, pilhas, walkie-talkie, Almond
+  Water. Mão em primeira pessoa só existe para a caneta.
+- **Entidade:** aproveitar o apagão, reagir à lanterna, mais de uma, vigiar esconderijos.
+- **Buracos:** som de queda, faixa que quebra ou balança.
+- **Opções:** gráficos, resolução e pasta da gravação.
+- **Mais níveis.** O segundo está projetado em `level1-mostruario.md`. Existe uma versão de
+  teste jogável (`Scenes/Level1_Test.unity`: mapa pequeno mobiliado, sem entidade) e o corpo do
+  inimigo (`CaptainBody`); não há ainda passagem do Level 0 para ele.
 
 ---
 
@@ -180,103 +186,72 @@ Com 1 jogador, as regras de simultaneidade são desligadas (o jogo continua jog�
 
 ## 3. Arquitetura de rede
 
-### 3.1 Modelo
-- **Host autoritativo (listen server):** um jogador hospeda, os outros entram. Sem servidor dedicado.
-- **Entrada por código de sala**, usando relay — ninguém precisa abrir porta no roteador.
-- Como é PvE entre amigos, trapaça não é preocupação: prioridade é resposta rápida do controle.
+- **Modelo:** um jogador hospeda e os outros entram (listen server), sem servidor dedicado.
+  Como é PvE entre amigos, trapaça não é preocupação: a prioridade é a resposta do controle.
+- **O mapa não trafega:** só a seed. Cada máquina gera o mesmo labirinto, e por isso a geração
+  usa apenas `System.Random(seed)`. A gerência de cenas do Netcode está desligada.
+- **Eventos com hora marcada** (o apagão) não trafegam: cada máquina faz a conta sobre o relógio
+  do servidor.
 
-### 3.2 Pacotes
-| Função | Pacote | Observação |
+| Coisa | Quem manda | Como chega aos outros |
 |---|---|---|
-| Sincronização | Netcode for GameObjects (`com.unity.netcode.gameobjects`) | Solução oficial da Unity; o Multiplayer Center já instalado recomenda e instala |
-| Sala e relay | Multiplayer Services (`com.unity.services.multiplayer`) | Criar/entrar em sessão por código; exige conta Unity Cloud vinculada ao projeto |
-| Voz | Vivox (`com.unity.services.vivox`) | Canal posicional 3D; conferir limites da faixa gratuita |
-| Teste local | Multiplayer Play Mode (`com.unity.multiplayer.playmode`) | Roda 2–4 jogadores dentro do editor |
-| IA | AI Navigation (`com.unity.ai.navigation`) | NavMesh gerado em runtime |
+| Planta do labirinto | Host sorteia a seed | Um inteiro; cada um gera o mapa |
+| Posição do jogador | O próprio jogador | `NetworkTransform` com autoridade do dono |
+| Olhar, agachar, lanterna, esconderijo, item na mão | O próprio jogador | `NetworkVariable` |
+| Riscos de caneta | Quem risca, validado pelo host | RPC; quem entra depois recebe todos |
+| Entidade (posição, estado) | Host | `NetworkTransform` e `NetworkVariable` |
+| Barulho dos jogadores | Host estima pelo deslocamento | Não trafega |
+| Captura | Host decide | RPC para o dono do jogador |
+| Apagão | Ninguém | Conta local sobre o relógio do servidor |
 
-Alternativa futura para publicar na Steam: trocar o transporte por Steam Networking. A arquitetura abaixo não muda.
-
-### 3.3 Quem é dono de quê
-| Coisa | Autoridade | Como sincroniza |
-|---|---|---|
-| Layout do labirinto | Host sorteia a **seed** | Um inteiro; cada cliente gera o mesmo mapa localmente |
-| Posição do jogador | O próprio jogador (owner) | NetworkTransform com autoridade do dono |
-| Lanterna, agachar, item na mão | Owner | NetworkVariable |
-| Entidade (posição, estado) | Host | NetworkTransform + NetworkVariable de estado |
-| Portas, disjuntores, itens, marcas de spray | Host | Cliente pede por RPC, host valida e replica |
-| Sanidade | Host calcula | NetworkVariable lida pelo dono |
-| Ruído (passos, objeto, voz) | Cliente reporta | RPC para o host, que alimenta a IA |
-| Alucinações | Local | Não trafega na rede |
-| Voz | Vivox | Canal separado do Netcode |
-
-### 3.4 Geração procedural determinística
-- O mapa **não** é sincronizado peça por peça: só a seed. Isso mantém a banda baixa mesmo com labirinto grande.
-- Regras para todos os clientes gerarem o mesmo mapa: usar `System.Random(seed)` próprio (nunca `UnityEngine.Random` global), lista de peças em ordem fixa, nenhuma decisão dependente de tempo ou física.
-- Peças estáticas (parede, piso, teto, luminária) são objetos locais comuns. Só o que muda de estado (porta, disjuntor, item, entidade) é objeto de rede, criado pelo host.
-- Após gerar, o host constrói o NavMesh em runtime. Clientes não precisam de NavMesh.
-
-### 3.5 Entidade
-- Roda só no host: NavMeshAgent + máquina de estados (patrulhar → investigar ruído → perseguir → procurar → capturar).
-- Entrada principal é o **mapa de ruído**: cada evento tem posição, intensidade e alcance.
-- Sempre anunciada por som posicional antes de ser vista; nunca nasce perto de um jogador.
+Pacotes: Netcode for GameObjects 2.13.3, Multiplayer Services 2.3.3 (para o Relay, ainda sem
+uso), Multiplayer Play Mode 2.0.2 e AI Navigation 2.0.15 (sem uso: a entidade anda pela grade).
+Vivox entra só com a voz.
 
 ---
 
 ## 4. Renderização (HDRP)
 
-O projeto já está em HDRP, que entrega o visual realista de The Complex. Custos a administrar:
-
-- **Luz:** mapa procedural não permite lightmap assado. Usar painéis emissivos no teto + luzes em tempo real **sem sombra**, com fade por distância. Sombra só na lanterna dos jogadores.
-- **Peças repetidas:** GPU instancing / GPU Resident Drawer e oclusão por setor.
-- **VHS:** Custom Post Process do HDRP (ruído, aberração cromática, distorção, scanlines, carimbo de data).
-- **Perfis:** manter os três assets de qualidade do template (Performant / Balanced / High Fidelity) como opção gráfica do jogo.
-
-Decisão: o jogo fica em HDRP. Para PCs modestos, a saída é o perfil "Performant" nas opções gráficas, não trocar de pipeline.
-
----
-
-## 5. Estrutura de pastas
-
-```
-Assets/_Game/
-  Scenes/        Boot, MainMenu, Level0
-  Scripts/
-    Network/     sessão, spawn, seed
-    Player/      movimento, câmera, lanterna, interação
-    World/       gerador, peças, portas, disjuntores
-    Entities/    IA, mapa de ruído
-    Systems/     sanidade, captura, objetivo
-    Audio/       ambiência, passos, voz
-    UI/          menu, sala, HUD mínimo
-  Prefabs/       Player, Entity, peças do kit, itens
-  Art/           materiais, texturas, modelos
-  Audio/
-  Settings/      volumes, perfis HDRP
-```
+- **Decidido em 10/11/2026: o jogo fica em HDRP.** Para PCs modestos a saída é o perfil
+  "Performant", não trocar de pipeline. Os três perfis do template foram mantidos.
+- **Luz:** mapa procedural não permite lightmap. As luminárias são luzes pontuais com sombra em
+  cache; piscam pelo dimmer, sem refazer a sombra. A luz ambiente vem de um céu em degradê.
+- **Névoa volumétrica** existe nos perfis High Fidelity e Balanced; o Performant não tem. O que
+  depende dela (a fumaça dos buracos) tem versão que funciona sem.
+- **Figuras** (entidade, traje, mão, Capitão) são montadas em código. Modelos importados: a porta
+  da saída (GLB gerado por IA, `Art/Fontes`) e os móveis do Level 1 (FBX feitos por script no
+  Blender, `Tools/Blender`).
 
 ---
 
-## 6. Etapas
+## 5. Etapas
 
-A rede entra na etapa 2, não no fim: adaptar um jogo solo pronto para multiplayer costuma exigir reescrever tudo.
-
-| # | Etapa | Pronto quando |
+| # | Etapa | Situação |
 |---|---|---|
-| 0 | **Fundação** — commit inicial, remover template, pastas, instalar pacotes | Projeto abre limpo, pacotes compilam |
-| 1 | **Sala de teste** — jogador em primeira pessoa, kit modular do Level 0 montado à mão, luz, zumbido | Dá para andar numa sala amarela que "parece Backrooms" |
-| 2 | **Rede** — hospedar/entrar por código, 2+ jogadores se veem andando, lanterna sincronizada | Dois jogadores do editor (Multiplayer Play Mode) se enxergam |
-| 3 | **Labirinto por seed** — gerador determinístico + NavMesh em runtime | Todos os clientes veem exatamente o mesmo mapa |
-| 4 | **Entidade** — IA no host, mapa de ruído, esconderijos, captura e resgate | Dá para ser pego e ser solto por um colega |
-| 5 | **Voz** — Vivox posicional, voz gera ruído, walkie-talkie | Falar alto atrai a entidade |
-| 6 | **Loop completo** — disjuntores, código, elevador, sanidade, vitória/derrota | Uma partida do Level 0 tem começo, meio e fim |
-| 7 | **Acabamento** — VHS, menu, sala de espera, opções gráficas, build | Dá para mandar o jogo para amigos |
-| 8+ | **Mais níveis** — Level 1 (garagem), Poolrooms etc., cada um com regra própria | — |
+| 0 | Fundação: commit inicial, pastas, pacotes | Feita |
+| 1 | Sala de teste: jogador em primeira pessoa, Level 0, luz, zumbido | Feita |
+| 2 | Rede: 2+ jogadores se veem, lanterna sincronizada | Feita por IP; falta código de sala |
+| 3 | Labirinto por seed, igual em todas as máquinas | Feita (sem NavMesh) |
+| 4 | Entidade: IA no host, ruído, esconderijos, captura e resgate | Feita, menos contenção e resgate |
+| 5 | Voz: Vivox posicional, voz gera ruído, walkie-talkie | Não começada |
+| 6 | Loop completo: disjuntores, código, elevador, sanidade, vitória e derrota | Não começada |
+| 7 | Acabamento: VHS, menu, sala de espera, opções gráficas, build | VHS e gravação feitos |
+| 8+ | Mais níveis, cada um com regra própria | Não começada |
+
+Fora do plano original, já existem: caneta, buracos com faixas, apagão, traje dos jogadores e
+gravação em vídeo.
 
 ---
 
-## 7. Decisões em aberto
+## 6. Decisões em aberto
 
-1. ~~HDRP ou URP~~ — **decidido em 10/11/2026: manter HDRP.**
-2. **Distribuição** — só entre amigos (relay da Unity basta) ou publicar na Steam depois.
-3. **Corpo do jogador** — modelo humanoide animado (mais trabalho) ou algo simples no início (cápsula com lanterna e câmera).
-4. **Arte** — modelar o kit do Level 0 ou partir de assets prontos.
+1. **Captura** — hoje o capturado volta para a sala inicial. Manter, ou fazer a sala de
+   contenção com resgate do plano?
+2. **Velocidade da entidade** — ela é mais lenta que a corrida do jogador (4,6 contra 5,0), então
+   dá para fugir enquanto há fôlego. Mais rápida obrigaria a se esconder sempre.
+3. **Sala inicial como abrigo** — a entidade ignora quem está nela, o que permite ficar parado lá.
+4. **Entidade no apagão** — sem olhos, quase some no escuro. Devolver algum brilho?
+5. **Distribuição** — só entre amigos (o Relay da Unity basta) ou publicar na Steam depois.
+6. **Arte** — decidido em 11/11/2026: modelos novos no **Blender, por script**
+   (`Docs/modelos-blender.md`), exportados em FBX. Os móveis do Level 1 já vêm por esse
+   caminho; figuras (entidade, Capitão, traje) seguem em código até alguém passar para lá.

@@ -83,8 +83,10 @@ Packages/packages-lock.json linguist-generated
 *.collada               lfs
 *.dae                   lfs
 *.dxf                   lfs
-*.FBX                   lfs
-*.fbx                   lfs
+# FBX fica direto no Git, como os PNG: a conta está sem orçamento de LFS. Os modelos
+# saem de scripts em Tools/Blender e são pequenos. Para voltar ao LFS, troque "binary" por "lfs".
+*.FBX                   binary
+*.fbx                   binary
 *.jas                   lfs
 *.lws                   lfs
 *.lxo                   lfs

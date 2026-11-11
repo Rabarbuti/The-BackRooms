@@ -1,0 +1,184 @@
+{
+  "materiais": [
+    {
+      "nome": "Borracha_Preta",
+      "cor": [
+        16,
+        16,
+        18
+      ],
+      "rugosidade": 0.85,
+      "metal": 0.0
+    },
+    {
+      "nome": "Ceramica_Cobalto",
+      "cor": [
+        24,
+        52,
+        150
+      ],
+      "rugosidade": 0.22,
+      "metal": 0.0
+    },
+    {
+      "nome": "Esmalte_Turquesa",
+      "cor": [
+        20,
+        176,
+        184
+      ],
+      "rugosidade": 0.25,
+      "metal": 0.0
+    },
+    {
+      "nome": "Esmalte_Vermelho",
+      "cor": [
+        168,
+        32,
+        28
+      ],
+      "rugosidade": 0.3,
+      "metal": 0.0
+    },
+    {
+      "nome": "Latao",
+      "cor": [
+        196,
+        156,
+        64
+      ],
+      "rugosidade": 0.35,
+      "metal": 0.85
+    },
+    {
+      "nome": "Madeira_Escura",
+      "cor": [
+        88,
+        56,
+        34
+      ],
+      "rugosidade": 0.62,
+      "metal": 0.0
+    },
+    {
+      "nome": "Madeira_Mel_Lisa",
+      "cor": [
+        190,
+        142,
+        78
+      ],
+      "rugosidade": 0.55,
+      "metal": 0.0
+    },
+    {
+      "nome": "Metal_Cromado",
+      "cor": [
+        190,
+        194,
+        198
+      ],
+      "rugosidade": 0.2,
+      "metal": 0.9
+    },
+    {
+      "nome": "Metal_Escuro",
+      "cor": [
+        40,
+        42,
+        44
+      ],
+      "rugosidade": 0.45,
+      "metal": 0.6
+    },
+    {
+      "nome": "Metal_Grafite",
+      "cor": [
+        66,
+        70,
+        76
+      ],
+      "rugosidade": 0.4,
+      "metal": 0.7
+    },
+    {
+      "nome": "Metal_Pintado",
+      "cor": [
+        104,
+        114,
+        120
+      ],
+      "rugosidade": 0.48,
+      "metal": 0.25
+    },
+    {
+      "nome": "Plastico_Azul",
+      "cor": [
+        24,
+        38,
+        92
+      ],
+      "rugosidade": 0.45,
+      "metal": 0.0
+    },
+    {
+      "nome": "Plastico_Bege",
+      "cor": [
+        206,
+        198,
+        176
+      ],
+      "rugosidade": 0.55,
+      "metal": 0.0
+    },
+    {
+      "nome": "Plastico_Preto",
+      "cor": [
+        22,
+        22,
+        24
+      ],
+      "rugosidade": 0.5,
+      "metal": 0.0
+    },
+    {
+      "nome": "Tecido_Cinza_Azulado",
+      "cor": [
+        112,
+        128,
+        142
+      ],
+      "rugosidade": 0.92,
+      "metal": 0.0
+    },
+    {
+      "nome": "Tinta_Branca",
+      "cor": [
+        240,
+        238,
+        230
+      ],
+      "rugosidade": 0.6,
+      "metal": 0.0
+    },
+    {
+      "nome": "Tinta_Laranja",
+      "cor": [
+        222,
+        112,
+        28
+      ],
+      "rugosidade": 0.6,
+      "metal": 0.0
+    },
+    {
+      "nome": "Vidro_Tela",
+      "cor": [
+        18,
+        22,
+        24
+      ],
+      "rugosidade": 0.1,
+      "metal": 0.0
+    }
+  ]
+}

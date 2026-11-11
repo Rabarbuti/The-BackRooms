@@ -52,6 +52,12 @@ namespace BackRooms.World
 
         [Header("Geração")]
         public int seed = 1998;
+        [Tooltip("Buracos com faixas (Level 0). Desligado no Level 1.")]
+        public bool pitsEnabled = true;
+        [Tooltip("Paredes grossas com nicho de esconderijo (Level 0). Desligado no Level 1.")]
+        public bool alcovesEnabled = true;
+        [Tooltip("Setas pintadas na parede apontando a saída (Level 0). No Level 1 a PropLayer prega placas no lugar.")]
+        public bool paintedArrows = true;
         [Min(4)] public int width = DefaultSize;
         [Min(4)] public int height = DefaultSize;
 
@@ -198,7 +204,7 @@ namespace BackRooms.World
 
         void Build()
         {
-            Data = LevelGenerator.Generate(seed, width, height);
+            Data = LevelGenerator.Generate(seed, width, height, pitsEnabled, alcovesEnabled);
 
             float sizeX = Data.Width * Cell;
             float sizeZ = Data.Height * Cell;
@@ -336,6 +342,9 @@ namespace BackRooms.World
             BuildLights();
             BuildDecorations();
             BuildExit();
+
+            // Móveis do Level 1: a camada de objetos lê a mesma planta e mobília por cima.
+            if (TryGetComponent(out PropLayer props)) props.Place(this);
         }
 
         // ---------------------------------------------------------------- Buracos
@@ -847,7 +856,7 @@ namespace BackRooms.World
                         size = new Vector2(1.8f, 0.675f);
                         break;
                     case DecorationKind.Arrow:
-                        material = arrowDecal;
+                        material = paintedArrows ? arrowDecal : null;
                         size = new Vector2(1.2f, 0.6f);
                         break;
                     case DecorationKind.WallScuff:
