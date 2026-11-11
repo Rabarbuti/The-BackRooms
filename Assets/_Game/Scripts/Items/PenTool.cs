@@ -8,7 +8,8 @@ namespace BackRooms.Items
 {
     /// <summary>
     /// Caneta: o jogador risca paredes e chão para marcar por onde passou ou o que evitar.
-    /// Tecla 1 pega e guarda; botão esquerdo do mouse risca; R troca a cor.
+    /// Tecla 1 pega e guarda; botão esquerdo do mouse risca; R ou 3 passa para a cor seguinte
+    /// e 2 volta para a anterior (preto, vermelho, azul).
     ///
     /// Rede: quem risca vê o traço na hora. A cada décimo de segundo os pontos novos vão
     /// para o host, que os repassa aos demais. Quem entra depois recebe tudo pelo
@@ -49,7 +50,7 @@ namespace BackRooms.Items
 
         static readonly RaycastHit[] Hits = new RaycastHit[16];
 
-        InputAction _equip, _draw, _nextColor;
+        InputAction _equip, _draw, _nextColor, _previousColor;
         readonly List<Vector3> _pending = new List<Vector3>();
         readonly Vector3[] _single = new Vector3[1];
         bool _active;
@@ -68,17 +69,21 @@ namespace BackRooms.Items
             _draw.AddBinding("<Gamepad>/rightTrigger");
 
             _nextColor = new InputAction("PenColor", InputActionType.Button, "<Keyboard>/r");
+            _nextColor.AddBinding("<Keyboard>/3");
             _nextColor.AddBinding("<Gamepad>/dpadRight");
+
+            _previousColor = new InputAction("PenColorBack", InputActionType.Button, "<Keyboard>/2");
+            _previousColor.AddBinding("<Gamepad>/dpadLeft");
 
             if (viewModel != null) viewModel.SetActive(false);
         }
 
-        void OnEnable() { _equip.Enable(); _draw.Enable(); _nextColor.Enable(); }
-        void OnDisable() { _equip.Disable(); _draw.Disable(); _nextColor.Disable(); }
+        void OnEnable() { _equip.Enable(); _draw.Enable(); _nextColor.Enable(); _previousColor.Enable(); }
+        void OnDisable() { _equip.Disable(); _draw.Disable(); _nextColor.Disable(); _previousColor.Disable(); }
 
         public override void OnDestroy()
         {
-            _equip.Dispose(); _draw.Dispose(); _nextColor.Dispose();
+            _equip.Dispose(); _draw.Dispose(); _nextColor.Dispose(); _previousColor.Dispose();
             base.OnDestroy();
         }
 
@@ -97,12 +102,8 @@ namespace BackRooms.Items
             DrawingBoard board = DrawingBoard.Instance;
             if (board == null) return;
 
-            if (_nextColor.WasPressedThisFrame())
-            {
-                EndStroke();
-                ColorIndex = (ColorIndex + 1) % board.ColorCount;
-                ApplyViewModelColor(board);
-            }
+            int step = (_nextColor.WasPressedThisFrame() ? 1 : 0) - (_previousColor.WasPressedThisFrame() ? 1 : 0);
+            if (step != 0) ChangeColor(board, step);
 
             // Com o mouse solto (Esc), o clique serve para voltar ao jogo, não para riscar.
             bool drawing = _draw.IsPressed() && PlayerController.MouseCaptured && aim != null;
@@ -113,6 +114,15 @@ namespace BackRooms.Items
                 EndStroke();
 
             if (_pending.Count > 0 && Time.unscaledTime >= _nextFlush) Flush();
+        }
+
+        /// <summary>Passa <paramref name="step"/> cores para a frente (negativo volta), em ciclo.</summary>
+        public void ChangeColor(DrawingBoard board, int step)
+        {
+            EndStroke();
+            int count = Mathf.Max(1, board.ColorCount);
+            ColorIndex = ((ColorIndex + step) % count + count) % count;
+            ApplyViewModelColor(board);
         }
 
         /// <summary>

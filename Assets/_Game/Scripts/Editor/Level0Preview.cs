@@ -324,11 +324,46 @@ namespace BackRooms.EditorTools
             ShootPair(player, camera, torch, target, readback, folder, "saida",
                       builder.transform.TransformPoint(exitCenter + exitNormal * 3f), -exitNormal);
 
+            ShootGloss(builder, player, camera, torch, target, readback, folder);
+
             // De perto e de lado, para ver o relevo da porta.
             Vector3 exitTangent = Vector3.Cross(Vector3.up, exitNormal);
             Vector3 near = builder.transform.TransformPoint(exitCenter + exitNormal * 1.5f + exitTangent * 0.9f);
             ShootPair(player, camera, torch, target, readback, folder, "saida_perto", near,
                       builder.transform.TransformPoint(exitCenter) - near);
+        }
+
+        // Manchas que mudam o brilho (umidade na parede, carpete molhado) vistas de lado, onde
+        // um brilho fora do contorno da mancha apareceria como um retângulo refletindo.
+        static void ShootGloss(LevelBuilder builder, Transform player, Camera camera, Light torch,
+                               RenderTexture target, Texture2D readback, string folder)
+        {
+            LevelData data = builder.Data;
+            Quaternion level = camera.transform.localRotation;
+
+            foreach (Decoration mark in data.Decorations)
+            {
+                if (mark.Kind != DecorationKind.WallStain || mark.Variant > 1) continue;
+
+                LevelBuilder.WallFace(mark.X, mark.Z, mark.Side, out Vector3 center, out Vector3 normal);
+                Vector3 tangent = Mathf.Abs(normal.z) > 0.5f ? Vector3.right : Vector3.forward;
+                Vector3 spot = center + tangent * mark.Along * 0.5f;
+                Vector3 from = builder.transform.TransformPoint(spot + normal * 1.3f + tangent * 2.2f);
+                ShootPair(player, camera, torch, target, readback, folder, "brilho_parede", from, builder.transform.TransformPoint(spot) - from);
+                break;
+            }
+
+            foreach (Decoration mark in data.Decorations)
+            {
+                if (mark.Kind != DecorationKind.FloorWet) continue;
+
+                var spot = new Vector3((mark.X + 0.5f) * LevelBuilder.Cell + mark.Along * 1.2f, 0f, (mark.Z + 0.5f) * LevelBuilder.Cell + mark.Height * 1.2f);
+                Vector3 from = builder.transform.TransformPoint(spot + new Vector3(3f, 0f, 0.8f));
+                camera.transform.localRotation = Quaternion.Euler(28f, 0f, 0f);
+                ShootPair(player, camera, torch, target, readback, folder, "brilho_chao", from, builder.transform.TransformPoint(spot) - from);
+                camera.transform.localRotation = level;
+                break;
+            }
         }
 
         internal static void ShootPair(Transform player, Camera camera, Light torch, RenderTexture target, Texture2D readback,

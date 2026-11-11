@@ -919,6 +919,23 @@ namespace BackRooms.EditorTools
             report += $" caneta_na_mao={(pen != null && pen.Equipped)}";
             if (pen == null) report += " (jogador sem caneta)";
             else if (!pen.Equipped) report += $" (ligada={pen.isActiveAndEnabled} na_rede={pen.IsSpawned} dono={pen.IsOwner})";
+
+            // Cores da caneta (teclas 2 e 3 / R): voltar do preto vai para o azul, e avançar
+            // dá a volta até o preto de novo.
+            if (pen != null && DrawingBoard.Instance != null && _role == Solo)
+            {
+                int before = pen.ColorIndex;
+                pen.ChangeColor(DrawingBoard.Instance, -before);
+                pen.ChangeColor(DrawingBoard.Instance, -1);
+                int back = pen.ColorIndex;
+                pen.ChangeColor(DrawingBoard.Instance, 1);
+                int forward = pen.ColorIndex;
+                bool colors = back == DrawingBoard.Instance.ColorCount - 1 && forward == 0;
+                ok &= colors;
+                report += $" cores_da_caneta={colors}";
+                pen.ChangeColor(DrawingBoard.Instance, before);
+            }
+
             ok &= _rayOffLevel == 0;
             report += $" miras_da_caneta={_rayChecks} fora_do_cenario={_rayOffLevel} raio_comum_no_proprio_jogador={_raySelfHits}";
             if (_rayFirst != null) report += $" primeiro=[{_rayFirst}]";

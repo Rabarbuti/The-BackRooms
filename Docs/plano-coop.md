@@ -74,7 +74,7 @@ juntas pelo relógio `GameSession.SessionSeconds`.
 ### Caneta
 
 Único item. Tecla 1 pega e guarda, botão esquerdo risca paredes, chão e teto a até 2,2 m, R
-troca a cor (preto, vermelho, azul). Todos começam com ela. Os riscos (`DrawingBoard`) aparecem
+ou 3 passa para a cor seguinte e 2 volta para a anterior (preto, vermelho, azul). Todos começam com ela. Os riscos (`DrawingBoard`) aparecem
 para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 1500 traços.
 
 ### Entidade

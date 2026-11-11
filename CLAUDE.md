@@ -65,7 +65,7 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
 ## Teclas
 
 WASD anda, Shift corre, Ctrl ou C agacha, Espaço pula, F lanterna, 1 pega e guarda a caneta,
-botão esquerdo risca, R troca a cor, F9 grava a tela, Esc solta o mouse. No menu: H hospeda,
+botão esquerdo risca, R ou 3 passa para a cor seguinte e 2 volta para a anterior, F9 grava a tela, Esc solta o mouse. No menu: H hospeda,
 J entra; a lista "Fase" troca de nível (no editor todas ficam liberadas).
 
 ## Conteúdo gerado: não editar à mão

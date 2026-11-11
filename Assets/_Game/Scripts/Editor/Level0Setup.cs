@@ -46,7 +46,7 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 15;
+        public const int ContentVersion = 16;
 
         [MenuItem("BackRooms/Montar Level 0 (sala de teste)")]
         public static void Build()
@@ -824,6 +824,10 @@ namespace BackRooms.EditorTools
             material.SetFloat("_AffectAO", 0f);
             material.SetFloat("_AffectSmoothness", affectSmoothness ? 1f : 0f);
             material.SetFloat("_Smoothness", smoothness);
+            // A opacidade do brilho vem do contorno da mancha (alfa da cor). O padrão do HDRP a
+            // tira do mapa de máscara; sem esse mapa ela vale 1 no retângulo inteiro do projetor,
+            // e aparecia um quadrado liso e refletindo em volta de cada mancha.
+            material.SetFloat("_MaskBlendSrc", 0f);
             material.SetInt("_DrawOrder", drawOrder);
 
             HDMaterial.ValidateMaterial(material);
@@ -1080,6 +1084,23 @@ namespace BackRooms.EditorTools
             return new Color32(h, h, h, 255);
         }
 
+        // Leva o alfa a zero perto das bordas (rampa suave de <paramref name="margin"/> pixels).
+        static Color32[] FadeBorders(Color32[] pixels, int width, int height, int margin)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int edge = Mathf.Min(Mathf.Min(x, width - 1 - x), Mathf.Min(y, height - 1 - y));
+                    if (edge >= margin) continue;
+                    float t = Mathf.SmoothStep(0f, 1f, edge / (float)margin);
+                    int i = y * width + x;
+                    pixels[i].a = (byte)Mathf.RoundToInt(pixels[i].a * t);
+                }
+            }
+            return pixels;
+        }
+
         // ---------------------------------------------------------------- Difusor das luminárias
 
         // U atravessa o painel (0,6 m), V corre ao longo dele (1,2 m). Duas lâmpadas tubulares
@@ -1202,7 +1223,9 @@ namespace BackRooms.EditorTools
                 }
             }
 
-            return canvas.ToAlphaPixels(BlackBlood, rng, 0.12f);
+            // Escorridos longos chegam à beirada da textura: apaga as bordas para o decalque não
+            // terminar num corte reto.
+            return FadeBorders(canvas.ToAlphaPixels(BlackBlood, rng, 0.12f), 512, 512, 24);
         }
 
         static Color32[] PaintPool(System.Random rng)
