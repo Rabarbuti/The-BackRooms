@@ -9,7 +9,9 @@ Conversa, comentários de código, documentação e mensagens de commit são em 
 
 ## Ambiente
 
-- Unity **6000.3.26f1**, HDRP 17.3 (não trocar de pipeline), Netcode for GameObjects 2.13.3.
+- Unity **6000.6.4f1**, HDRP 17.6 (não trocar de pipeline), Netcode for GameObjects 2.13.3.
+  Até 11/11/2026 o projeto era 6000.3.26f1 / HDRP 17.3; a troca de versão é um commit só, se
+  precisar voltar.
 - Só o **Input System novo**: nada de `UnityEngine.Input`. As ações são criadas em código
   (`new InputAction(...)`), como em `PenTool` e `PlayerController`.
 - Interface em UI Toolkit; o efeito VHS é um Custom Pass (`CamcorderPass` + `CamcorderVHS.shader`).
@@ -93,7 +95,7 @@ ajustar os sons sintetizados sem precisar jogar).
 Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo projeto):
 
 ```
-"C:\Program Files\Unity\Hub\Editor\6000.3.26f1\Editor\Unity.exe" -batchmode -projectPath "<pasta>" -executeMethod BackRooms.EditorTools.Level0SmokeTest.BatchRun -logFile "<log>"
+"C:\Program Files\Unity\Hub\Editor\6000.6.4f1\Editor\Unity.exe" -batchmode -projectPath "<pasta>" -executeMethod BackRooms.EditorTools.Level0SmokeTest.BatchRun -logFile "<log>"
 ```
 
 - `Level0SmokeTest.BatchRun` — sozinho: entra em Play, anda, corre, pula, risca, atravessa uma

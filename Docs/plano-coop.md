@@ -120,6 +120,8 @@ Estado do projeto em 10/11/2026: Unity 6000.3.26f1, HDRP 17.3, Input System, tem
 - **Calha das luminárias (em código):** o painel deixou de ser um retângulo colado ao forro. Agora tem calha de chapa com aro de 3 cm saindo 4,5 cm do forro, e o difusor fica 5 mm para dentro. O difusor tem textura de acrílico prismático com duas lâmpadas tubulares, que aparecem acesas (faixas mais claras) e apagadas (sombra cinza). A luz pontual continua 3,4 cm abaixo do forro, como antes. Por isso fica atrás do difusor, que não recebe mais luz direta e deixa de estourar em branco, e a iluminação do andar não muda. A calha tem colisor, e a conferência de colisores passou a incluir as luminárias.
 - **Prévia:** fotos novas `luminaria`, `luminaria_apagada`, `saida_perto` e `grelha`.
 
+**Unity 6000.6 (11/11/2026):** a máquina de desenvolvimento só tem o editor 6000.6.4f1, então o projeto passou de 6000.3.26f1 para ele. O editor atualizou os pacotes: HDRP 17.3 → 17.6, Multiplayer Play Mode 2.0.2 → 3.0.0, Multiplayer Center 1.0.1 → 2.0.1, Timeline 1.8.13 → 6.6.0 e uGUI 2.0.0 → 2.6.0; o Netcode continua em 2.13.3. A troca está num commit separado, para poder ser desfeita sozinha.
+
 Pacotes adicionados ao `Packages/manifest.json` (versões recomendadas pelo editor 6000.3.26f1): Netcode for GameObjects 2.13.3, Multiplayer Services 2.3.3, Multiplayer Play Mode 2.0.2, AI Navigation 2.0.15. Vivox (16.11.0) entra só na etapa 5.
 
 ---
