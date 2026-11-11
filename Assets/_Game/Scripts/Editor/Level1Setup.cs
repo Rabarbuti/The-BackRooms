@@ -98,13 +98,25 @@ namespace BackRooms.EditorTools
                 Level1Models.UpdateModels();
                 bool ok = Check(out string report);
                 Debug.Log("[BackRooms] Conferência do Level 1 " + (ok ? "PASSOU" : "FALHOU") + ": " + report);
-                EditorApplication.Exit(ok ? 0 : 3);
+                ExitWithLevel0Open(ok ? 0 : 3);
             }
             catch (Exception e)
             {
                 Debug.LogException(e);
-                EditorApplication.Exit(1);
+                ExitWithLevel0Open(1);
             }
+        }
+
+        /// <summary>
+        /// Fecha o editor deixando o Level 0 aberto. O editor reabre na última cena aberta, e quem
+        /// abre o projeto depois de um teste por linha de comando espera cair no jogo, não no
+        /// Level 1 de teste.
+        /// </summary>
+        public static void ExitWithLevel0Open(int code)
+        {
+            try { Level0AutoUpdate.OpenGameScene(); }
+            catch (Exception e) { Debug.LogException(e); }
+            EditorApplication.Exit(code);
         }
 
         static bool Check(out string report)

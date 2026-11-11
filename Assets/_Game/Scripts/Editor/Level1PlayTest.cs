@@ -22,6 +22,8 @@ namespace BackRooms.EditorTools
     {
         const string ActiveKey = "BackRooms.Level1PlayTest.Active";
         const string BatchKey = "BackRooms.Level1PlayTest.Batch";
+        // Código de saída guardado enquanto o editor sai do Play (-1 = nenhum pendente).
+        const string ExitCodeKey = "BackRooms.Level1PlayTest.ExitCode";
         const double Timeout = 180.0;
         const float WalkSpeed = 3.5f;
         const float Reach = 0.35f;
@@ -67,6 +69,14 @@ namespace BackRooms.EditorTools
         [InitializeOnLoadMethod]
         static void Hook()
         {
+            // Se sair do Play recarregar o domínio, o pedido de fechar o editor continua valendo.
+            if (SessionState.GetInt(ExitCodeKey, -1) >= 0)
+            {
+                EditorApplication.playModeStateChanged -= ExitAfterPlay;
+                EditorApplication.playModeStateChanged += ExitAfterPlay;
+                if (!EditorApplication.isPlayingOrWillChangePlaymode) ExitAfterPlay(PlayModeStateChange.EnteredEditMode);
+            }
+
             if (!SessionState.GetBool(ActiveKey, false)) return;
             Application.logMessageReceived += OnLog;
             EditorApplication.update += Tick;
@@ -369,8 +379,26 @@ namespace BackRooms.EditorTools
 
             Debug.Log("[BackRooms] Teste do Level 1 " + (ok ? "PASSOU" : "FALHOU") + ": " + report);
 
-            if (SessionState.GetBool(BatchKey, false)) EditorApplication.Exit(ok ? 0 : 3);
-            else EditorApplication.ExitPlaymode();
+            if (SessionState.GetBool(BatchKey, false))
+            {
+                // Linha de comando: sai do Play, reabre o Level 0 e só então fecha o editor. Em
+                // Play não dá para trocar de cena, e fechando direto o editor reabriria no Level 1.
+                SessionState.SetInt(ExitCodeKey, ok ? 0 : 3);
+                EditorApplication.playModeStateChanged -= ExitAfterPlay;
+                EditorApplication.playModeStateChanged += ExitAfterPlay;
+            }
+
+            EditorApplication.ExitPlaymode();
+        }
+
+        static void ExitAfterPlay(PlayModeStateChange change)
+        {
+            if (change != PlayModeStateChange.EnteredEditMode) return;
+
+            EditorApplication.playModeStateChanged -= ExitAfterPlay;
+            int code = SessionState.GetInt(ExitCodeKey, 1);
+            SessionState.EraseInt(ExitCodeKey);
+            Level1Setup.ExitWithLevel0Open(code);
         }
     }
 
