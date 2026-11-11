@@ -1,0 +1,95 @@
+{
+  "materiais": [
+    {
+      "nome": "Madeira_Escura",
+      "cor": [
+        88,
+        56,
+        34
+      ],
+      "rugosidade": 0.62,
+      "metal": 0.0
+    },
+    {
+      "nome": "Madeira_Mel",
+      "cor": [
+        255,
+        255,
+        255
+      ],
+      "rugosidade": 0.55,
+      "metal": 0.0,
+      "textura": "Madeira_Mel_Veio"
+    },
+    {
+      "nome": "Metal_Escuro",
+      "cor": [
+        40,
+        42,
+        44
+      ],
+      "rugosidade": 0.45,
+      "metal": 0.6
+    },
+    {
+      "nome": "Papel_Branco",
+      "cor": [
+        236,
+        232,
+        218
+      ],
+      "rugosidade": 0.8,
+      "metal": 0.0
+    },
+    {
+      "nome": "Plastico_Bege",
+      "cor": [
+        206,
+        198,
+        176
+      ],
+      "rugosidade": 0.55,
+      "metal": 0.0
+    },
+    {
+      "nome": "Plastico_Preto",
+      "cor": [
+        22,
+        22,
+        24
+      ],
+      "rugosidade": 0.5,
+      "metal": 0.0
+    },
+    {
+      "nome": "Tinta_Laranja",
+      "cor": [
+        222,
+        112,
+        28
+      ],
+      "rugosidade": 0.6,
+      "metal": 0.0
+    },
+    {
+      "nome": "Tinta_Vermelha",
+      "cor": [
+        176,
+        26,
+        24
+      ],
+      "rugosidade": 0.6,
+      "metal": 0.0
+    },
+    {
+      "nome": "Vidro_Tela",
+      "cor": [
+        18,
+        22,
+        24
+      ],
+      "rugosidade": 0.1,
+      "metal": 0.0
+    }
+  ]
+}

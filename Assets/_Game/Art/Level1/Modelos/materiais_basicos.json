@@ -1,0 +1,164 @@
+{
+  "materiais": [
+    {
+      "nome": "Fita_Adesiva",
+      "cor": [
+        200,
+        174,
+        120
+      ],
+      "rugosidade": 0.35,
+      "metal": 0.0
+    },
+    {
+      "nome": "Latao",
+      "cor": [
+        196,
+        156,
+        64
+      ],
+      "rugosidade": 0.35,
+      "metal": 0.85
+    },
+    {
+      "nome": "Livro_Azul",
+      "cor": [
+        38,
+        56,
+        96
+      ],
+      "rugosidade": 0.7,
+      "metal": 0.0
+    },
+    {
+      "nome": "Livro_Bege",
+      "cor": [
+        196,
+        176,
+        136
+      ],
+      "rugosidade": 0.7,
+      "metal": 0.0
+    },
+    {
+      "nome": "Livro_Verde",
+      "cor": [
+        44,
+        78,
+        56
+      ],
+      "rugosidade": 0.7,
+      "metal": 0.0
+    },
+    {
+      "nome": "Livro_Vinho",
+      "cor": [
+        108,
+        30,
+        36
+      ],
+      "rugosidade": 0.7,
+      "metal": 0.0
+    },
+    {
+      "nome": "Madeira_Clara",
+      "cor": [
+        170,
+        128,
+        82
+      ],
+      "rugosidade": 0.55,
+      "metal": 0.0
+    },
+    {
+      "nome": "Madeira_Escura",
+      "cor": [
+        88,
+        56,
+        34
+      ],
+      "rugosidade": 0.62,
+      "metal": 0.0
+    },
+    {
+      "nome": "Metal_Pintado",
+      "cor": [
+        104,
+        114,
+        120
+      ],
+      "rugosidade": 0.48,
+      "metal": 0.25
+    },
+    {
+      "nome": "Papel_Branco",
+      "cor": [
+        236,
+        232,
+        218
+      ],
+      "rugosidade": 0.8,
+      "metal": 0.0
+    },
+    {
+      "nome": "Papel_Vermelho",
+      "cor": [
+        178,
+        30,
+        28
+      ],
+      "rugosidade": 0.8,
+      "metal": 0.0
+    },
+    {
+      "nome": "Papelao",
+      "cor": [
+        166,
+        124,
+        78
+      ],
+      "rugosidade": 0.9,
+      "metal": 0.0
+    },
+    {
+      "nome": "Tecido_Azul",
+      "cor": [
+        40,
+        52,
+        88
+      ],
+      "rugosidade": 0.92,
+      "metal": 0.0
+    },
+    {
+      "nome": "Tecido_Vermelho",
+      "cor": [
+        132,
+        36,
+        34
+      ],
+      "rugosidade": 0.92,
+      "metal": 0.0
+    },
+    {
+      "nome": "Tinta_Branca",
+      "cor": [
+        240,
+        238,
+        230
+      ],
+      "rugosidade": 0.6,
+      "metal": 0.0
+    },
+    {
+      "nome": "Tinta_Vermelha",
+      "cor": [
+        176,
+        26,
+        24
+      ],
+      "rugosidade": 0.6,
+      "metal": 0.0
+    }
+  ]
+}

@@ -249,7 +249,7 @@ namespace BackRooms.EditorTools
             Shoot(camera, target, readback, Path.Combine(folder, "caneta.png"));
         }
 
-        static GameObject CreateCameraRig(GameObject prefab, out Camera camera)
+        internal static GameObject CreateCameraRig(GameObject prefab, out Camera camera)
         {
             var rig = new GameObject("SuporteDaPrevia");
 
@@ -331,7 +331,7 @@ namespace BackRooms.EditorTools
                       builder.transform.TransformPoint(exitCenter) - near);
         }
 
-        static void ShootPair(Transform player, Camera camera, Light torch, RenderTexture target, Texture2D readback,
+        internal static void ShootPair(Transform player, Camera camera, Light torch, RenderTexture target, Texture2D readback,
                               string folder, string name, Vector3 position, Vector3 lookDirection)
         {
             lookDirection.y = 0f;
@@ -414,7 +414,7 @@ namespace BackRooms.EditorTools
 
         // Três células seguidas em linha reta no caminho seguro, com luz acesa na do meio se
         // houver: a câmera fica na primeira, olhando para a terceira (8 m).
-        static bool FindStretch(LevelBuilder builder, out Vector3 from, out Vector3 to)
+        internal static bool FindStretch(LevelBuilder builder, out Vector3 from, out Vector3 to)
         {
             LevelData data = builder.Data;
             int found = -1;
@@ -718,7 +718,7 @@ namespace BackRooms.EditorTools
             return false;
         }
 
-        static void Shoot(Camera camera, RenderTexture target, Texture2D readback, string path)
+        internal static void Shoot(Camera camera, RenderTexture target, Texture2D readback, string path)
         {
             // Vários quadros para o antisserrilhamento temporal e a névoa estabilizarem.
             for (int i = 0; i < 16; i++) camera.Render();

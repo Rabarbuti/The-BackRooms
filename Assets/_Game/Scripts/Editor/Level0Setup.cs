@@ -71,8 +71,31 @@ namespace BackRooms.EditorTools
             BuildScene(regenerate);
         }
 
+        /// <summary>
+        /// O que muda de uma fase para outra ao montar a cena. O padrão é o Level 0; o Level 1
+        /// de teste (Level1Setup) usa o mesmo montador com outra cena, mapa menor, sem buracos,
+        /// sem nichos, sem a entidade e com os móveis.
+        /// </summary>
+        public sealed class SceneOptions
+        {
+            public string scenePath = ScenePath;
+            public string levelName = "Level0";
+            public int size = LevelBuilder.DefaultSize;
+            public bool pits = true;
+            public bool alcoves = true;
+            public bool entity = true;
+            public bool paintedArrows = true;
+            /// <summary>Chamado com o objeto do nível antes de salvar (o Level 1 põe a camada de móveis).</summary>
+            public Action<GameObject> decorate;
+        }
+
         /// <summary>Monta a cena sem perguntar nada. Usado também pela linha de comando.</summary>
         public static void BuildScene(bool regenerateAssets)
+        {
+            BuildScene(regenerateAssets, new SceneOptions());
+        }
+
+        public static void BuildScene(bool regenerateAssets, SceneOptions options)
         {
             if (regenerateAssets)
             {
@@ -228,8 +251,13 @@ namespace BackRooms.EditorTools
             Material entityMaw = EnsureMaterial("Entity_Maw", Rgb(74, 6, 8), null, null, 0.55f, new Color(1f, 0.04f, 0.04f) * 2.5f);
             GameObject entityPrefab = CreateEntityPrefab(entityBark, entityShell, entityBone, entityMaw);
 
-            var level = new GameObject("Level0");
+            var level = new GameObject(options.levelName);
             var builder = level.AddComponent<LevelBuilder>();
+            builder.width = options.size;
+            builder.height = options.size;
+            builder.pitsEnabled = options.pits;
+            builder.alcovesEnabled = options.alcoves;
+            builder.paintedArrows = options.paintedArrows;
             builder.wallMaterial = wall;
             builder.floorMaterial = floor;
             builder.ceilingMaterial = ceiling;
@@ -284,9 +312,12 @@ namespace BackRooms.EditorTools
             session.menuListener = menuListener;
 
             // Quem decide quando e onde a entidade aparece. Roda só no host.
-            var director = sessionObject.AddComponent<EntityDirector>();
-            director.session = session;
-            director.entityPrefab = entityPrefab;
+            if (options.entity)
+            {
+                var director = sessionObject.AddComponent<EntityDirector>();
+                director.session = session;
+                director.entityPrefab = entityPrefab;
+            }
 
             // Apagão das luzes: a conta do tempo é igual em todas as máquinas.
             sessionObject.AddComponent<LightsOut>().session = session;
@@ -304,12 +335,14 @@ namespace BackRooms.EditorTools
             var drawings = new GameObject("Rabiscos");
             drawings.AddComponent<DrawingBoard>().inkMaterials = inks;
 
-            EditorSceneManager.SaveScene(scene, ScenePath);
-            AddSceneToBuild(ScenePath);
+            options.decorate?.Invoke(level);
+
+            EditorSceneManager.SaveScene(scene, options.scenePath);
+            AddSceneToBuild(options.scenePath);
             AssetDatabase.SaveAssets();
 
             Selection.activeGameObject = level;
-            Debug.Log("[BackRooms] Level 0 montado em " + ScenePath + ". Aperte Play e escolha Hospedar (tecla H) ou Entrar (tecla J). WASD anda, Shift corre, Ctrl agacha, Espaço pula, F liga a lanterna.");
+            Debug.Log($"[BackRooms] {options.levelName} montado em {options.scenePath}. Aperte Play e escolha Hospedar (tecla H) ou Entrar (tecla J). WASD anda, Shift corre, Ctrl agacha, Espaço pula, F liga a lanterna.");
         }
 
         // Filmadora: o painel (REC, relógio, bateria) e o efeito VHS em tela cheia, que o
@@ -1265,13 +1298,26 @@ namespace BackRooms.EditorTools
             AssetDatabase.CreateFolder(parent, Path.GetFileName(path));
         }
 
+        // Põe a cena na lista da build. O Level 0 fica sempre em primeiro (é a cena que a build
+        // abre); as outras fases (o Level 1 de teste) entram depois dele.
         static void AddSceneToBuild(string path)
         {
             var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
-            foreach (var entry in scenes)
-                if (entry.path == path) return;
+            scenes.RemoveAll(entry => entry.path == path);
 
-            scenes.Insert(0, new EditorBuildSettingsScene(path, true));
+            var scene = new EditorBuildSettingsScene(path, true);
+            if (path == ScenePath) scenes.Insert(0, scene);
+            else scenes.Add(scene);
+
+            // Corrige listas antigas em que outra fase tinha ficado na frente do Level 0.
+            int level0 = scenes.FindIndex(entry => entry.path == ScenePath);
+            if (level0 > 0)
+            {
+                EditorBuildSettingsScene first = scenes[level0];
+                scenes.RemoveAt(level0);
+                scenes.Insert(0, first);
+            }
+
             EditorBuildSettings.scenes = scenes.ToArray();
         }
     }
