@@ -1105,14 +1105,11 @@ namespace BackRooms.World
             red.shadows = LightShadows.None;
             glow.affectsVolumetric = false;
 
-            var zone = new GameObject("Gatilho");
+            // Onde o jogador fica para abrir a porta (tecla E): meio metro à frente dela.
+            var zone = new GameObject("Interacao");
             zone.transform.SetParent(root.transform, false);
             zone.transform.localPosition = new Vector3(0f, 1.1f, -0.55f);
-
-            var trigger = zone.AddComponent<BoxCollider>();
-            trigger.isTrigger = true;
-            trigger.size = new Vector3(1.3f, 2.2f, 0.9f);
-            zone.AddComponent<LevelExit>();
+            zone.AddComponent<LevelExit>().door = root.transform;
         }
 
     }

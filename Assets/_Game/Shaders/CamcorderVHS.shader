@@ -11,7 +11,9 @@
 // Como o OSD entra antes da degradação, ele sofre os mesmos defeitos da imagem.
 //
 // Globais definidas pelo script Camcorder:
-//   _BackRoomsOsd     textura do OSD (RGBA, alfa = cobertura)
+//   _BackRoomsOsd     textura do OSD: um índice de cor por ponto (ver OsdColor)
+//   _BackRoomsOsdFast      textura pequena com o contador da fita, que muda a cada quadro
+//   _BackRoomsOsdFastRect  onde ela fica: xy = canto de baixo, esquerda (uv); zw = 1 / tamanho (uv)
 //   _BackRoomsOsdOn   0 ou 1
 //   _BackRoomsGlitch  0 a 1: interferência momentânea
 Shader "BackRooms/CamcorderVHS"
@@ -41,6 +43,8 @@ Shader "BackRooms/CamcorderVHS"
     // Cópia da imagem da câmera, feita pelo CamcorderPass.
     TEXTURE2D_X(_CamcorderSource);
     TEXTURE2D(_BackRoomsOsd);
+    TEXTURE2D(_BackRoomsOsdFast);
+    float4 _BackRoomsOsdFastRect;
     float _BackRoomsOsdOn;
     float _BackRoomsGlitch;
 
@@ -62,12 +66,33 @@ Shader "BackRooms/CamcorderVHS"
         return frac(p.x * p.y);
     }
 
+    // As texturas do OSD guardam um índice por ponto; as cores estão aqui, já em espaço linear
+    // (o branco 236,236,226 e o vermelho 232,38,28 do painel). Mesma ordem do script Camcorder.
+    float4 OsdColor(float stored)
+    {
+        int index = (int)round(stored * 255.0);
+        if (index == 1) return float4(0.8388, 0.8388, 0.7606, 1.0);   // branco
+        if (index == 2) return float4(0.8069, 0.0194, 0.0116, 1.0);   // vermelho
+        if (index == 3) return float4(0.0, 0.0, 0.0, 0.745);          // sombra da letra
+        if (index == 4) return float4(0.0, 0.0, 0.0, 1.0);            // preto (sem sinal)
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+
     // Imagem do jogo com o OSD por cima. Nos buffers do HDRP, uv.y = 0 é o pé do quadro.
     float3 Composite(float2 uv)
     {
         uv = saturate(uv);
         float3 scene = SAMPLE_TEXTURE2D_X_LOD(_CamcorderSource, s_linear_clamp_sampler, uv * _RTHandleScale.xy, 0).rgb;
-        float4 osd = SAMPLE_TEXTURE2D_LOD(_BackRoomsOsd, s_point_clamp_sampler, uv, 0);
+        float4 osd = OsdColor(SAMPLE_TEXTURE2D_LOD(_BackRoomsOsd, s_point_clamp_sampler, uv, 0).r);
+
+        // O contador da fita fica numa textura à parte, pequena, por cima do painel.
+        float2 f = (uv - _BackRoomsOsdFastRect.xy) * _BackRoomsOsdFastRect.zw;
+        if (_BackRoomsOsdFastRect.z > 0.0 && f.x >= 0.0 && f.x < 1.0 && f.y >= 0.0 && f.y < 1.0)
+        {
+            float4 fast = OsdColor(SAMPLE_TEXTURE2D_LOD(_BackRoomsOsdFast, s_point_clamp_sampler, f, 0).r);
+            osd = float4(lerp(osd.rgb, fast.rgb, fast.a), fast.a + osd.a * (1.0 - fast.a));
+        }
+
         return lerp(scene, osd.rgb, osd.a * _BackRoomsOsdOn);
     }
 

@@ -46,6 +46,9 @@ namespace BackRooms.Net
         readonly NetworkVariable<bool> _holding = new NetworkVariable<bool>(
             false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
+        readonly NetworkVariable<bool> _atExit = new NetworkVariable<bool>(
+            false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+
         float _nextSend;
         float _shownPitch;
         float _shownEye;
@@ -65,6 +68,26 @@ namespace BackRooms.Net
 
         /// <summary>Dentro de um esconderijo? Vale em qualquer máquina, como <see cref="Crouching"/>.</summary>
         public bool Hidden => IsOwner ? controller.IsHidden : _hidden.Value;
+
+        /// <summary>Com a mão na porta de saída, esperando os outros? Vale em qualquer máquina.</summary>
+        public bool AtExit => _atExit.Value;
+
+        /// <summary>
+        /// Quantos jogadores da sessão estão esperando na porta de saída e quantos estão no
+        /// mapa. Vale em qualquer máquina.
+        /// </summary>
+        public static void CountAtExit(out int waiting, out int total)
+        {
+            waiting = 0;
+            total = 0;
+
+            foreach (PlayerNetwork player in All)
+            {
+                if (player == null || !player.IsSpawned || !player.InGame) continue;
+                total++;
+                if (player.AtExit) waiting++;
+            }
+        }
 
         /// <summary>
         /// Do host para o dono do jogador: a entidade pegou você. A queda de sinal e a volta
@@ -166,6 +189,9 @@ namespace BackRooms.Net
 
             bool holding = pen != null && pen.Equipped;
             if (_holding.Value != holding) _holding.Value = holding;
+
+            bool atExit = BackRooms.World.LevelExit.Instance != null && BackRooms.World.LevelExit.Instance.LocalWaiting;
+            if (_atExit.Value != atExit) _atExit.Value = atExit;
 
             if (Time.unscaledTime < _nextSend) return;
             _nextSend = Time.unscaledTime + SendInterval;

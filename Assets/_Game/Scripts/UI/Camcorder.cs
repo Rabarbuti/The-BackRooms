@@ -2,6 +2,7 @@ using System;
 using BackRooms.Entities;
 using BackRooms.Net;
 using BackRooms.Player;
+using BackRooms.World;
 using UnityEngine;
 
 namespace BackRooms.UI
@@ -12,6 +13,12 @@ namespace BackRooms.UI
     /// BackRooms/CamcorderVHS sobrepõe à imagem antes de aplicar os defeitos de fita —
     /// por isso o texto treme e borra junto com o resto, como numa gravação de verdade.
     /// No menu mostra STBY (em espera); ao entrar no mapa, começa a gravar.
+    /// A grade é de 1280 x 720: fina o bastante para ter três tamanhos de letra próximos um do
+    /// outro (na grade antiga, de 480 x 270, só dava para dobrar ou reduzir à metade).
+    /// Mandar uma textura desse tamanho para a placa de vídeo é o que custa, então: ela guarda
+    /// um byte por ponto (índice de cor), o painel só é redesenhado quando alguma coisa nele muda
+    /// (umas duas vezes por segundo), e o contador da fita, que muda 30 vezes por segundo, fica
+    /// numa textura pequena à parte.
     /// </summary>
     public sealed class Camcorder : MonoBehaviour
     {
@@ -34,24 +41,44 @@ namespace BackRooms.UI
         [Tooltip("Interferência máxima com a entidade colada no jogador (0 a 1).")]
         [Range(0f, 1f)] public float entityNoiseMax = 0.6f;
 
-        const int Width = 480;
-        const int Height = 270;
-        const int Margin = 20;
+        const int Width = 1280;
+        const int Height = 720;
+        const int Margin = 54;
+
+        // Tamanhos de letra, em pontos da grade por ponto da fonte 5x7. Numa tela de 1080
+        // linhas dão 21, 32, 42 e 63 pixels de altura.
+        const int Small = 2;
+        const int Medium = 3;
+        const int Large = 4;
+        const int Huge = 6;
+
+        // A textura do contador da fita e onde o canto de cima, esquerda dela fica na grade.
+        const int FastWidth = 160;
+        const int FastHeight = 16;
+        const int FastX = Width - Margin - (FastWidth - 2);
+        const int FastY = Margin + 42;
 
         static readonly int OsdId = Shader.PropertyToID("_BackRoomsOsd");
         static readonly int OsdOnId = Shader.PropertyToID("_BackRoomsOsdOn");
+        static readonly int OsdFastId = Shader.PropertyToID("_BackRoomsOsdFast");
+        static readonly int OsdFastRectId = Shader.PropertyToID("_BackRoomsOsdFastRect");
         static readonly int GlitchId = Shader.PropertyToID("_BackRoomsGlitch");
 
-        static readonly Color32 White = new Color32(236, 236, 226, 255);
-        static readonly Color32 Red = new Color32(232, 38, 28, 255);
-        static readonly Color32 Shadow = new Color32(0, 0, 0, 190);
-        static readonly Color32 Clear = new Color32(0, 0, 0, 0);
-        static readonly Color32 Black = new Color32(0, 0, 0, 255);
+        // As texturas do painel guardam um índice de cor por ponto (um byte), não a cor: são
+        // quatro vezes menos dados para mandar à placa de vídeo. As cores em si estão no shader
+        // (OsdColor, em CamcorderVHS.shader), na mesma ordem.
+        const byte White = 1;
+        const byte Red = 2;
+        const byte Shadow = 3;
+        const byte Black = 4;
 
         static readonly string[] Months = { "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC" };
 
         Texture2D _osd;
-        Color32[] _pixels;
+        byte[] _pixels;
+        Texture2D _fast;
+        byte[] _fastPixels;
+        string _drawn;
         float _recordSeconds;
         float _glitch;
         float _glitchFade;
@@ -72,13 +99,17 @@ namespace BackRooms.UI
             if (Instance == this) Instance = null;
             Shader.SetGlobalFloat(OsdOnId, 0f);
             Shader.SetGlobalFloat(GlitchId, 0f);
+            Shader.SetGlobalVector(OsdFastRectId, Vector4.zero);
 
-            if (_osd != null)
+            foreach (Texture2D texture in new[] { _osd, _fast })
             {
-                if (Application.isPlaying) Destroy(_osd);
-                else DestroyImmediate(_osd);
-                _osd = null;
+                if (texture == null) continue;
+                if (Application.isPlaying) Destroy(texture);
+                else DestroyImmediate(texture);
             }
+
+            _osd = null;
+            _fast = null;
         }
 
         /// <summary>Interferência momentânea na imagem (0 a 1), que some em <paramref name="seconds"/>.</summary>
@@ -153,26 +184,94 @@ namespace BackRooms.UI
                 tape = string.IsNullOrEmpty(recorder.LastError) ? "SAVED" : "TAPE ERROR";
             }
 
-            Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f, tape);
+            // Porta de saída: o que a tecla E faz agora, quem já está esperando e, quando ela
+            // abre, a tela preta até a fase seguinte carregar.
+            string prompt = null, footer = null, cover = null;
+            LevelExit exit = LevelExit.Instance;
+
+            if (session != null && session.Passing)
+            {
+                cover = LevelCatalog.Get(session.LevelIndex).Name + " CLEAR";
+            }
+            else if (recording && exit != null && PlayerNetwork.Local != null)
+            {
+                PlayerNetwork.CountAtExit(out int waiting, out int total);
+
+                if (exit.LocalWaiting) prompt = total > 1 ? $"WAITING {waiting}/{total}\nE - LET GO" : "OPENING";
+                else if (exit.LocalInReach) prompt = waiting > 0 ? $"E - OPEN DOOR\n{waiting}/{total} WAITING" : "E - OPEN DOOR";
+                else if (waiting > 0) footer = $"EXIT {waiting}/{total}";
+            }
+
+            Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f, tape, prompt, footer, cover);
         }
 
         /// <summary>
         /// Desenha um quadro do painel e o publica para o shader. Público para a ferramenta
         /// de prévia do editor, que roda fora do Play.
+        /// <paramref name="prompt"/> é o aviso no meio da tela (até duas linhas, separadas por
+        /// quebra de linha), <paramref name="footer"/> o do pé, e <paramref name="cover"/>,
+        /// quando informado, tapa a imagem com a tela preta e esse texto.
         /// </summary>
         public void Draw(bool recording, float recordSeconds, float clockSeconds, float battery, bool lightOn, string tool = null,
-                         bool noSignal = false, string tape = null)
+                         bool noSignal = false, string tape = null, string prompt = null, string footer = null, string cover = null)
         {
             EnsureTexture();
 
-            // Sem sinal: o painel inteiro fica opaco e tapa a imagem do jogo.
-            Color32 background = noSignal ? Black : Clear;
-            for (int i = 0; i < _pixels.Length; i++) _pixels[i] = background;
+            // Canto de cima, direita, abaixo da bateria: o contador da fita, na textura pequena.
+            int total = Mathf.FloorToInt(recordSeconds);
+            int frames = Mathf.FloorToInt((recordSeconds - total) * 30f);
+            string counter = $"{total / 3600}:{total / 60 % 60:00}:{total % 60:00}:{frames:00}";
 
-            if (noSignal)
+            Array.Clear(_fastPixels, 0, _fastPixels.Length);
+            int counterX = FastWidth - Small - PixelFont.Measure(counter, Small);
+            PixelFont.Draw(_fastPixels, FastWidth, FastHeight, counterX + Small, Small, counter, Small, Shadow);
+            PixelFont.Draw(_fastPixels, FastWidth, FastHeight, counterX, 0, counter, Small, White);
+            _fast.SetPixelData(_fastPixels, 0);
+            _fast.Apply(false);
+
+            // Canto de baixo, direita: hora e data, como nas filmadoras dos anos 90.
+            DateTime now = new DateTime(startYear, startMonth, startDay, startHour, startMinute, 0).AddSeconds(clockSeconds);
+            int hour12 = now.Hour % 12 == 0 ? 12 : now.Hour % 12;
+            string time = $"{(now.Hour < 12 ? "AM" : "PM")} {hour12}:{now.Minute:00}:{now.Second:00}";
+            string date = $"{Months[now.Month - 1]} {now.Day} {now.Year}";
+
+            // O resto só é redesenhado quando muda: a bolinha do REC e a bateria fraca piscam
+            // duas vezes por segundo, o relógio anda uma vez por segundo.
+            bool blink = Mathf.FloorToInt(clockSeconds * 2f) % 2 == 0;
+            int bars = battery > 0.66f ? 3 : battery > 0.33f ? 2 : battery > 0.05f ? 1 : 0;
+            string state = $"{recording}|{blink}|{bars}|{battery < 0.15f}|{lightOn}|{tool}|{noSignal}|{tape}|{prompt}|{footer}|{cover}|{time}|{date}";
+
+            if (state != _drawn)
             {
-                const string message = "NO SIGNAL";
-                Text((Width - MeasureText(message, 3)) / 2, Height / 2 - 10, message, 3, White);
+                _drawn = state;
+                DrawPanel(recording, clockSeconds, battery, lightOn, tool, noSignal, tape, prompt, footer, cover, time, date);
+                _osd.SetPixelData(_pixels, 0);
+                _osd.Apply(false);
+            }
+
+            Shader.SetGlobalTexture(OsdId, _osd);
+            Shader.SetGlobalTexture(OsdFastId, _fast);
+            Shader.SetGlobalVector(OsdFastRectId, new Vector4(
+                FastX / (float)Width, (Height - FastY - FastHeight) / (float)Height,
+                Width / (float)FastWidth, Height / (float)FastHeight));
+            Shader.SetGlobalFloat(OsdOnId, 1f);
+        }
+
+        void DrawPanel(bool recording, float clockSeconds, float battery, bool lightOn, string tool, bool noSignal,
+                       string tape, string prompt, string footer, string cover, string time, string date)
+        {
+            // Sem sinal: o painel inteiro fica opaco e tapa a imagem do jogo.
+            bool covered = noSignal || !string.IsNullOrEmpty(cover);
+            if (covered)
+            {
+                Array.Fill(_pixels, Black);
+
+                string message = string.IsNullOrEmpty(cover) ? "NO SIGNAL" : cover;
+                Text((Width - MeasureText(message, Huge)) / 2, Height / 2 - 21, message, Huge, White);
+            }
+            else
+            {
+                Array.Clear(_pixels, 0, _pixels.Length);
             }
 
             DrawCorners();
@@ -181,88 +280,95 @@ namespace BackRooms.UI
             if (recording)
             {
                 bool dotOn = Mathf.FloorToInt(clockSeconds * 2f) % 2 == 0;
-                if (dotOn) Disc(Margin + 8, Margin + 9, 6, Red);
-                Text(Margin + 20, Margin + 2, "REC", 2, Red);
-                Text(Margin + 62, Margin + 9, "SP", 1, White);
+                if (dotOn) Disc(Margin + 12, Margin + 14, 11, Red);
+                Text(Margin + 32, Margin, "REC", Large, Red);
+                Text(Margin + 44 + MeasureText("REC", Large), Margin + 14, "SP", Small, White);
             }
             else
             {
-                Text(Margin, Margin + 2, "STBY", 2, White);
+                Text(Margin, Margin, "STBY", Large, White);
             }
 
             // Logo abaixo: a fita de verdade. Bolinha vermelha fixa enquanto grava em arquivo.
             if (!string.IsNullOrEmpty(tape))
             {
                 bool rolling = tape.StartsWith("TAPE ") && tape != "TAPE ERROR";
-                if (rolling) Disc(Margin + 4, Margin + 27, 3, Red);
-                Text(Margin + (rolling ? 12 : 0), Margin + 24, tape, 1, White);
+                if (rolling) Disc(Margin + 6, Margin + 49, 5, Red);
+                Text(Margin + (rolling ? 20 : 0), Margin + 42, tape, Small, White);
             }
 
-            // Canto de cima, direita: bateria e contador da fita.
-            DrawBattery(Width - Margin - 33, Margin + 2, battery, clockSeconds);
+            // Canto de cima, direita: bateria. O contador da fita, logo abaixo, é da outra textura.
+            DrawBattery(Width - Margin - 66, Margin, battery, clockSeconds);
 
-            int total = Mathf.FloorToInt(recordSeconds);
-            int frames = Mathf.FloorToInt((recordSeconds - total) * 30f);
-            string counter = $"{total / 3600}:{total / 60 % 60:00}:{total % 60:00}:{frames:00}";
-            TextRight(Width - Margin, Margin + 24, counter, 1, White);
-
-            // Canto de baixo, direita: hora e data, como nas filmadoras dos anos 90.
-            DateTime now = new DateTime(startYear, startMonth, startDay, startHour, startMinute, 0).AddSeconds(clockSeconds);
-            int hour12 = now.Hour % 12 == 0 ? 12 : now.Hour % 12;
-            string time = $"{(now.Hour < 12 ? "AM" : "PM")} {hour12}:{now.Minute:00}:{now.Second:00}";
-            string date = $"{Months[now.Month - 1]} {now.Day} {now.Year}";
-            TextRight(Width - Margin, Height - Margin - 32, time, 2, White);
-            TextRight(Width - Margin, Height - Margin - 14, date, 2, White);
+            // Canto de baixo, direita: hora e data.
+            TextRight(Width - Margin, Height - Margin - 51, time, Medium, White);
+            TextRight(Width - Margin, Height - Margin - 21, date, Medium, White);
 
             // Canto de baixo, esquerda: aviso da lanterna e, acima dele, o item na mão.
-            if (lightOn) Text(Margin, Height - Margin - 7, "LIGHT", 1, White);
+            if (lightOn) Text(Margin, Height - Margin - 14, "LIGHT", Small, White);
 
-            if (!string.IsNullOrEmpty(tool) && !noSignal)
+            if (!string.IsNullOrEmpty(tool) && !covered)
             {
-                Text(Margin, Height - Margin - 19, tool, 1, White);
+                Text(Margin, Height - Margin - 38, tool, Small, White);
 
                 // Mira: um ponto pequeno no centro, com contorno escuro.
-                Box(Width / 2 - 2, Height / 2 - 2, 4, 4, Shadow);
-                Box(Width / 2 - 1, Height / 2 - 1, 2, 2, White);
+                Box(Width / 2 - 4, Height / 2 - 4, 8, 8, Shadow);
+                Box(Width / 2 - 2, Height / 2 - 2, 4, 4, White);
             }
 
-            _osd.SetPixels32(_pixels);
-            _osd.Apply(false);
-            Shader.SetGlobalTexture(OsdId, _osd);
-            Shader.SetGlobalFloat(OsdOnId, 1f);
+            // Meio da tela, abaixo da mira: o aviso da porta. Pé da tela: quem já espera nela.
+            if (!string.IsNullOrEmpty(prompt) && !covered)
+            {
+                string[] lines = prompt.Split('\n');
+                Text((Width - MeasureText(lines[0], Medium)) / 2, 440, lines[0], Medium, White);
+                if (lines.Length > 1) Text((Width - MeasureText(lines[1], Small)) / 2, 472, lines[1], Small, White);
+            }
+
+            if (!string.IsNullOrEmpty(footer) && !covered)
+                Text((Width - MeasureText(footer, Small)) / 2, Height - Margin - 14, footer, Small, White);
         }
 
         void EnsureTexture()
         {
             if (_osd != null) return;
 
-            _osd = new Texture2D(Width, Height, TextureFormat.RGBA32, false)
+            _osd = new Texture2D(Width, Height, TextureFormat.R8, false, true)
             {
                 name = "FilmadoraOSD",
                 filterMode = FilterMode.Point,
                 wrapMode = TextureWrapMode.Clamp,
                 hideFlags = HideFlags.HideAndDontSave
             };
-            _pixels = new Color32[Width * Height];
+            _pixels = new byte[Width * Height];
+
+            _fast = new Texture2D(FastWidth, FastHeight, TextureFormat.R8, false, true)
+            {
+                name = "FilmadoraContador",
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            _fastPixels = new byte[FastWidth * FastHeight];
+            _drawn = null;
         }
 
         // ---------------------------------------------------------------- Desenho
 
         // Coordenadas com a origem no canto de cima, esquerda.
-        void Plot(int x, int y, Color32 color)
+        void Plot(int x, int y, byte color)
         {
             if (x < 0 || y < 0 || x >= Width || y >= Height) return;
             _pixels[(Height - 1 - y) * Width + x] = color;
         }
 
-        void Box(int x, int y, int w, int h, Color32 color)
+        void Box(int x, int y, int w, int h, byte color)
         {
             for (int j = 0; j < h; j++)
                 for (int i = 0; i < w; i++)
                     Plot(x + i, y + j, color);
         }
 
-        void Disc(int cx, int cy, int radius, Color32 color)
+        void Disc(int cx, int cy, int radius, byte color)
         {
             for (int j = -radius; j <= radius; j++)
                 for (int i = -radius; i <= radius; i++)
@@ -272,7 +378,7 @@ namespace BackRooms.UI
         // Cantoneiras do visor.
         void DrawCorners()
         {
-            const int inset = 9, length = 18, thick = 2;
+            const int inset = 24, length = 44, thick = 4;
 
             Box(inset, inset, length, thick, White);
             Box(inset, inset, thick, length, White);
@@ -290,20 +396,20 @@ namespace BackRooms.UI
             bool low = level < 0.15f;
             if (low && Mathf.FloorToInt(clockSeconds * 2f) % 2 == 1) return;
 
-            Color32 color = low ? Red : White;
-            const int w = 30, h = 14;
+            byte color = low ? Red : White;
+            const int w = 60, h = 28, wall = 4;
 
-            Box(x, y, w, 2, color);
-            Box(x, y + h - 2, w, 2, color);
-            Box(x, y, 2, h, color);
-            Box(x + w - 2, y, 2, h, color);
-            Box(x + w, y + 4, 3, 6, color);
+            Box(x, y, w, wall, color);
+            Box(x, y + h - wall, w, wall, color);
+            Box(x, y, wall, h, color);
+            Box(x + w - wall, y, wall, h, color);
+            Box(x + w, y + 8, 6, 12, color);
 
             int bars = level > 0.66f ? 3 : level > 0.33f ? 2 : level > 0.05f ? 1 : 0;
-            for (int i = 0; i < bars; i++) Box(x + 4 + i * 8, y + 4, 6, 6, color);
+            for (int i = 0; i < bars; i++) Box(x + 8 + i * 16, y + 8, 12, 12, color);
         }
 
-        void TextRight(int right, int y, string text, int scale, Color32 color)
+        void TextRight(int right, int y, string text, int scale, byte color)
         {
             Text(right - MeasureText(text, scale), y, text, scale, color);
         }
@@ -314,13 +420,13 @@ namespace BackRooms.UI
         }
 
         // Texto com sombra de um pixel, para ler sobre qualquer fundo.
-        void Text(int x, int y, string text, int scale, Color32 color)
+        void Text(int x, int y, string text, int scale, byte color)
         {
             Glyphs(x + scale, y + scale, text, scale, Shadow);
             Glyphs(x, y, text, scale, color);
         }
 
-        void Glyphs(int x, int y, string text, int scale, Color32 color)
+        void Glyphs(int x, int y, string text, int scale, byte color)
         {
             PixelFont.Draw(_pixels, Width, Height, x, y, text, scale, color);
         }

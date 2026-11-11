@@ -36,6 +36,111 @@ namespace BackRooms.EditorTools
             BatchBuild(regenerateAssets: false);
         }
 
+        /// <summary>
+        /// Uso em linha de comando: fotografa só o painel da filmadora, em 1920 x 1080, de
+        /// frente para a porta de saída — normal, com o aviso de abrir a porta, esperando os
+        /// outros e a tela de fase zerada. Não recria nem salva a cena.
+        /// </summary>
+        public static void BatchCaptureHud()
+        {
+            try
+            {
+                string folder = ArgumentAfter("-previewOut") ?? DefaultFolder();
+                EditorApplication.Exit(CaptureHud(folder) ? 0 : 2);
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+                EditorApplication.Exit(1);
+            }
+        }
+
+        [MenuItem("BackRooms/Capturar prévia do painel")]
+        public static void CaptureHudFromMenu()
+        {
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            string folder = DefaultFolder();
+            if (CaptureHud(folder)) EditorUtility.RevealInFinder(folder);
+        }
+
+        static bool CaptureHud(string folder)
+        {
+            EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+
+            var builder = UnityEngine.Object.FindFirstObjectByType<LevelBuilder>();
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
+            var camcorder = UnityEngine.Object.FindFirstObjectByType<BackRooms.UI.Camcorder>();
+            if (builder == null || prefab == null || camcorder == null)
+            {
+                Debug.LogError("[BackRooms] A cena não tem LevelBuilder ou filmadora, ou falta o prefab do jogador.");
+                return false;
+            }
+
+            GameObject playerObject = CreateCameraRig(prefab, out Camera camera);
+            Directory.CreateDirectory(folder);
+
+            bool asyncBefore = ShaderUtil.allowAsyncCompilation;
+            ShaderUtil.allowAsyncCompilation = false;
+
+            var target = new RenderTexture(1920, 1080, 24, RenderTextureFormat.ARGB32);
+            var readback = new Texture2D(target.width, target.height, TextureFormat.RGBA32, false);
+
+            try
+            {
+                builder.Rebuild();
+
+                var exit = UnityEngine.Object.FindFirstObjectByType<LevelExit>();
+                if (exit == null)
+                {
+                    Debug.LogError("[BackRooms] A fase não tem porta de saída.");
+                    return false;
+                }
+
+                // De frente para a porta, a um passo e meio dela.
+                Vector3 foot = exit.DoorPosition;
+                Vector3 inward = exit.transform.position - foot;
+                inward.y = 0f;
+                inward.Normalize();
+
+                Transform player = playerObject.transform;
+                player.position = new Vector3(foot.x, 0.05f, foot.z) + inward * 1.7f;
+                player.rotation = Quaternion.LookRotation(-inward, Vector3.up);
+
+                var torch = player.GetComponentInChildren<Light>(true);
+                if (torch != null) torch.enabled = false;
+                camera.targetTexture = target;
+
+                camcorder.Draw(true, 207.47f, 207.47f, 0.8f, true, "PEN BLACK", false, "TAPE 0:12");
+                Shoot(camera, target, readback, Path.Combine(folder, "painel_normal.png"));
+
+                camcorder.Draw(true, 207.47f, 207.47f, 0.8f, true, null, false, null, "E - OPEN DOOR");
+                Shoot(camera, target, readback, Path.Combine(folder, "painel_porta.png"));
+
+                camcorder.Draw(true, 207.47f, 207.47f, 0.8f, true, null, false, null, "WAITING 1/2\nE - LET GO");
+                Shoot(camera, target, readback, Path.Combine(folder, "painel_esperando.png"));
+
+                camcorder.Draw(true, 207.47f, 207.47f, 0.8f, true, null, false, null, null, "EXIT 1/2");
+                Shoot(camera, target, readback, Path.Combine(folder, "painel_alguem_na_porta.png"));
+
+                camcorder.Draw(true, 207.47f, 207.47f, 0.8f, true, null, false, null, null, null, "LEVEL 0 CLEAR");
+                Shoot(camera, target, readback, Path.Combine(folder, "painel_fase_zerada.png"));
+
+                Debug.Log("[BackRooms] Prévia do painel salva em " + folder);
+                return true;
+            }
+            finally
+            {
+                camera.targetTexture = null;
+                RenderTexture.active = null;
+                UnityEngine.Object.DestroyImmediate(target);
+                UnityEngine.Object.DestroyImmediate(readback);
+                ShaderUtil.allowAsyncCompilation = asyncBefore;
+
+                // Reabre a cena do disco para descartar o mapa gerado só para a foto.
+                EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            }
+        }
+
         static void BatchBuild(bool regenerateAssets)
         {
             try
