@@ -46,7 +46,7 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 14;
+        public const int ContentVersion = 15;
 
         [MenuItem("BackRooms/Montar Level 0 (sala de teste)")]
         public static void Build()
@@ -98,7 +98,10 @@ namespace BackRooms.EditorTools
 
             // Versões limpas, só para a sala inicial.
             Texture2D wallCleanAlbedo = EnsureTexture("Wallpaper_Clean_Albedo", 1024, PaintWallpaperClean, normalFromHeight: false);
-            Texture2D carpetCleanAlbedo = EnsureTexture("Carpet_Clean_Albedo", 1024, PaintCarpetClean, normalFromHeight: false);
+            // O carpete gerado por IA já é só a fibra, sem sujeira: serve também para a sala inicial.
+            Texture2D carpetCleanAlbedo = File.Exists(TextureSourceFolder + "/Carpet_Albedo.png")
+                ? carpetAlbedo
+                : EnsureTexture("Carpet_Clean_Albedo", 1024, PaintCarpetClean, normalFromHeight: false);
             Material wallClean = EnsureMaterial("Wallpaper_Clean", Color.white, wallCleanAlbedo, null, 0.2f, Color.black);
             Material floorClean = EnsureMaterial("Carpet_Clean", Color.white, carpetCleanAlbedo, carpetNormal, 0.05f, Color.black);
             Material floor = EnsureMaterial("Carpet", Color.white, carpetAlbedo, carpetNormal, 0.05f, Color.black);
@@ -799,8 +802,36 @@ namespace BackRooms.EditorTools
 
         delegate Color32 Painter(int x, int y, int size, System.Random rng);
 
+        // Texturas geradas por IA (Higgsfield), já emendáveis, com o mesmo nome da pintada em
+        // código. Ficam fora de Art/Level0 para o "Recriar tudo" não apagá-las. Sem o arquivo,
+        // volta a pintura em código.
+        const string TextureSourceFolder = ImportedModels.SourceFolder + "/Texturas";
+
         static Texture2D EnsureTexture(string name, int size, Painter painter, bool normalFromHeight)
         {
+            string source = TextureSourceFolder + "/" + name + ".png";
+            if (File.Exists(source))
+            {
+                var sourceImporter = (TextureImporter)AssetImporter.GetAtPath(source);
+                bool changed = sourceImporter.wrapMode != TextureWrapMode.Repeat || sourceImporter.anisoLevel != 8 ||
+                               (normalFromHeight && sourceImporter.textureType != TextureImporterType.NormalMap);
+                if (changed)
+                {
+                    sourceImporter.wrapMode = TextureWrapMode.Repeat;
+                    sourceImporter.anisoLevel = 8;
+                    if (normalFromHeight)
+                    {
+                        // O arquivo é um mapa de altura; o importador o converte em normais.
+                        sourceImporter.textureType = TextureImporterType.NormalMap;
+                        sourceImporter.convertToNormalmap = true;
+                        sourceImporter.heightmapScale = 0.03f;
+                    }
+                    sourceImporter.SaveAndReimport();
+                }
+
+                return AssetDatabase.LoadAssetAtPath<Texture2D>(source);
+            }
+
             string path = ArtFolder + "/" + name + ".png";
 
             if (!File.Exists(path))

@@ -46,6 +46,8 @@ Level 0). Mudança nesses arquivos se faz no gerador, não no arquivo.
 Exceção: `Art/Fontes` guarda os modelos **GLB originais** gerados por IA (Higgsfield). Eles não são
 gerados pelo `Level0Setup`, que os lê com `GlbReader` (sem pacote de glTF) e assa em `Art/Level0`
 a malha já encaixada e as texturas do HDRP (`ImportedModels`). Apagar um GLB volta à peça antiga.
+`Art/Fontes/Texturas` guarda texturas geradas por IA já emendáveis, com o nome da textura que
+substituem; o `Level0Setup.EnsureTexture` usa o arquivo de lá no lugar da pintura em código.
 
 Ao mudar algo que só aparece depois de recriar (texturas, materiais, objetos da cena, valores
 padrão do `LevelBuilder`), **aumente `Level0Setup.ContentVersion`**. O `Level0AutoUpdate` compara
