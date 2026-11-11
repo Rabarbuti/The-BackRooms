@@ -668,6 +668,8 @@ MonoBehaviour:
   acceleration: 20
   gravity: 20
   jumpHeight: 0.8
+  pitRespawnDelay: 0.8
+  captureRespawnDelay: 1.6
   staminaSeconds: 6
   staminaRegenDelay: 2
   staminaRegenSeconds: 4

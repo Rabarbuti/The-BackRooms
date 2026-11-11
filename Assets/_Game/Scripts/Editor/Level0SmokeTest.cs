@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Reflection;
+using BackRooms.Entities;
 using BackRooms.Items;
 using BackRooms.Net;
 using BackRooms.Player;
@@ -18,6 +19,11 @@ namespace BackRooms.EditorTools
     ///   nada lançou erro, que o jogador anda apoiado no chão e que os passos tocam.
     /// • Host e Cliente (linha de comando, um editor para cada): o host espera o segundo
     ///   jogador e anda; o cliente confere que recebeu o mesmo mapa e que vê o host andar.
+    /// • Buracos: todos os papéis andam sobre uma faixa e depois se jogam no vazio, para
+    ///   conferir que a faixa segura o jogador e que a queda devolve à sala inicial.
+    /// • Entidade: fica desligada até a hora dela. Então o jogador é posto longe da sala e o
+    ///   teste confere que ela aparece entre ele e a sala, que ouve o barulho dele, que vai
+    ///   atrás e que o pega (e ele volta para a sala). O cliente confere que a vê se mexer.
     /// </summary>
     public static class Level0SmokeTest
     {
@@ -30,7 +36,7 @@ namespace BackRooms.EditorTools
         const string HostRole = "host";
         const string ClientRole = "client";
 
-        const double Timeout = 150.0;
+        const double Timeout = 210.0;
 
         static readonly List<string> Errors = new List<string>();
         static string _role;
@@ -53,6 +59,32 @@ namespace BackRooms.EditorTools
         static float _remoteMoved;
         static bool _sawRemoteFlashlight;
         static int _mostPlayers;
+        static float _movedMost;
+        static int _pitStep;
+        static double _pitStepStart;
+        static Vector3 _stripGoal;
+        static int _fallsBefore;
+        static bool _pitTested;
+        static bool _stripOk;
+        static bool _fallOk;
+        static string _pitNote = "";
+        static int _entityStep;
+        static double _entityStepStart;
+        static Vector3 _entityPost;
+        static bool _entityForward = true;
+        static bool _entityTested;
+        static bool _entitySpawnOk;
+        static bool _entityHeardOk;
+        static bool _entityTrackedOk;
+        static bool _entityCatchOk;
+        static string _entityNote = "";
+        static bool _entitySeen;
+        static bool _sawEntityMove;
+        static Vector3 _entityFirst;
+        static int _baitStep;
+        static double _baitStart;
+        static bool _clientCaughtOk;
+        static string _baitNote = "";
 
         static InputSettings.BackgroundBehavior _backgroundBefore;
         static InputSettings.EditorInputBehaviorInPlayMode _editorInputBefore;
@@ -131,6 +163,8 @@ namespace BackRooms.EditorTools
                 case 0:
                     // Abre a sessão conforme o papel. Seed fixa, para o teste ser repetível.
                     session.fixedSeed = 1998;
+                    // A entidade só entra na etapa dela; antes, atrapalharia as outras.
+                    EntityDirector.Paused = true;
 
                     if (_role == Solo)
                     {
@@ -188,9 +222,19 @@ namespace BackRooms.EditorTools
                         // O cliente fica parado olhando o host: passa quando o vê andar e
                         // quando os riscos de caneta dele chegam pela rede.
                         bool sawEverything = (LateJoin || _remoteMoved > 1.0f) && BoardPoints() >= 10;
-                        if (sawEverything || Now - _phaseStart > 60.0) Evaluate(session);
+
+                        // Quem entrou depois sai logo (o host só o espera por 2 s); os demais
+                        // ainda testam os buracos, como dono de um jogador que não é o host.
+                        if (sawEverything && !LateJoin)
+                        {
+                            _stage = 5;
+                            _phaseStart = Now;
+                        }
+                        else if (sawEverything || Now - _phaseStart > 60.0) Evaluate(session);
                         break;
                     }
+
+                    _movedMost = Mathf.Max(_movedMost, Vector3.Distance(_start, _local.transform.position));
 
                     // Segura W. O host anda mais tempo, para o cliente ter o que observar.
                     double walk = _role == HostRole ? 6.0 : 2.0;
@@ -268,22 +312,62 @@ namespace BackRooms.EditorTools
                         // Solta tudo e dá tempo de os riscos chegarem ao outro editor.
                         InputSystem.QueueStateEvent(_mouse, new MouseState());
                     }
-                    else if (_role == HostRole && LateJoin)
-                    {
-                        Next();
-                    }
                     else
                     {
-                        Evaluate(session);
+                        Next();
                     }
                     break;
 
                 case 5:
-                    // Variante: já riscou; agora espera o cliente entrar e receber tudo.
+                    // Buracos: anda sobre uma faixa e depois se joga no vazio.
                     FindPlayers();
-                    // Vale ter visto o cliente uma vez: ele sai assim que recebe os riscos.
-                    if (_mostPlayers < 2) { _phaseStart = Now; break; }
-                    if (Now - _phaseStart > 2.0) Evaluate(session);
+                    Observe();
+                    if (!PitStage(session)) break;
+                    Next();
+                    break;
+
+                case 6:
+                    FindPlayers();
+                    Observe();
+
+                    if (_role == ClientRole)
+                    {
+                        // O cliente não pensa pela entidade: só precisa vê-la aparecer e andar.
+                        EntityBrain shown = EntityBrain.Instance;
+                        if (shown != null && !_entitySeen)
+                        {
+                            _entitySeen = true;
+                            _entityFirst = shown.transform.position;
+                        }
+
+                        if (shown != null && Vector3.Distance(shown.transform.position, _entityFirst) > 1f) _sawEntityMove = true;
+
+                        // Viu a entidade andar: agora sai da sala e faz barulho, para ser pego.
+                        // É a captura de quem não é o host, avisada pela rede.
+                        if (_sawEntityMove ? ClientBait(session) : Now - _phaseStart > 70.0) Evaluate(session);
+                        break;
+                    }
+
+                    if (!EntityStage(session)) break;
+
+                    if (_role == HostRole) Next();
+                    else Evaluate(session);
+                    break;
+
+                case 7:
+                    FindPlayers();
+
+                    if (LateJoin)
+                    {
+                        // Variante: já riscou; agora espera o cliente entrar e receber tudo.
+                        // Vale ter visto o cliente uma vez: ele sai assim que recebe os riscos.
+                        if (_mostPlayers < 2) { _phaseStart = Now; break; }
+                        if (Now - _phaseStart > 2.0) Evaluate(session);
+                        break;
+                    }
+
+                    // O host fica até o cliente terminar a parte dele (ser pego pela entidade) e sair.
+                    if ((_mostPlayers >= 2 && session.PlayerCount < 2) || Now - _phaseStart > 100.0) Evaluate(session);
                     break;
             }
         }
@@ -367,6 +451,320 @@ namespace BackRooms.EditorTools
                 _rayFirst = $"{hit.collider.name} [{hit.collider.GetType().Name}] a {hit.distance:F2} m; câmera em {pen.aim.position}, ponto {hit.point}, jogador em {_local.transform.position}";
         }
 
+        // Devolve verdadeiro quando terminou. Passos: (0) põe o jogador na beirada, de frente
+        // para uma faixa; (1) segura W até o meio da célula do buraco; (2) solta o jogador
+        // sobre o vazio; (3) espera ele cair e reaparecer na sala inicial.
+        static bool PitStage(GameSession session)
+        {
+            LevelBuilder builder = session.level;
+            LevelData data = builder != null ? builder.Data : null;
+
+            if (data == null || data.Pits.Count == 0)
+            {
+                _pitNote = "mapa sem buracos";
+                return true;
+            }
+
+            BeginWalking();
+            _pitTested = true;
+
+            PlayerController body = _local.controller;
+            var capsule = _local.GetComponent<CharacterController>();
+            Vector3 position = _local.transform.position;
+
+            switch (_pitStep)
+            {
+                case 0:
+                    InputSystem.QueueStateEvent(_keyboard, new KeyboardState());
+
+                    if (!FindStripEntry(data, out int x, out int z, out WallSide side))
+                    {
+                        _pitNote = "nenhuma faixa chega à beirada";
+                        _pitStep = 2;
+                        _pitStepStart = Now;
+                        break;
+                    }
+
+                    data.Neighbor(x, z, side, out int nx, out int nz);
+                    Vector3 outside = builder.CellCenter(nx, nz);
+                    _stripGoal = builder.CellCenter(x, z);
+                    Vector3 look = _stripGoal - outside;
+
+                    body.Teleport(outside + Vector3.up * 0.05f, Mathf.Atan2(look.x, look.z) * Mathf.Rad2Deg);
+                    _fallsBefore = body.Falls;
+                    _pitStep = 1;
+                    _pitStepStart = Now;
+                    break;
+
+                case 1:
+                    if (Now - _pitStepStart < 0.4) break;
+
+                    float left = Vector2.Distance(new Vector2(position.x, position.z), new Vector2(_stripGoal.x, _stripGoal.z));
+                    bool fell = body.Falls != _fallsBefore || position.y < -0.3f;
+
+                    if (left < 0.3f || fell || Now - _pitStepStart > 6.0)
+                    {
+                        _stripOk = left < 0.3f && !fell && capsule.isGrounded && Mathf.Abs(position.y) < 0.15f;
+                        if (!_stripOk) _pitNote = $"na faixa: faltavam {left:F2} m, altura {position.y:F2}, apoiado={capsule.isGrounded}, caiu={fell}";
+
+                        InputSystem.QueueStateEvent(_keyboard, new KeyboardState());
+                        _pitStep = 2;
+                        _pitStepStart = Now;
+                        break;
+                    }
+
+                    InputSystem.QueueStateEvent(_keyboard, new KeyboardState(Key.W));
+                    break;
+
+                case 2:
+                    InputSystem.QueueStateEvent(_keyboard, new KeyboardState());
+                    if (Now - _pitStepStart < 0.5 || body.IsFalling) break;
+
+                    body.Teleport(FindVoid(builder, data) + Vector3.up * 0.2f, 0f);
+                    _fallsBefore = body.Falls;
+                    _pitStep = 3;
+                    _pitStepStart = Now;
+                    break;
+
+                case 3:
+                    Vector3 home = builder.SpawnCenter;
+                    float fromHome = Vector2.Distance(new Vector2(position.x, position.z), new Vector2(home.x, home.z));
+                    bool back = body.Falls == _fallsBefore + 1 && !body.IsFalling && fromHome < 2.5f && capsule.isGrounded;
+
+                    // Dá um segundo parado na sala, para a avaliação pegar o jogador assentado.
+                    if (!back) _phaseStart = Now;
+                    if (back && Now - _phaseStart > 1.0)
+                    {
+                        _fallOk = true;
+                        return true;
+                    }
+
+                    if (Now - _pitStepStart > 8.0)
+                    {
+                        _pitNote += $" na queda: quedas={body.Falls - _fallsBefore}, caindo={body.IsFalling}, a {fromHome:F1} m do início, altura {position.y:F2}";
+                        return true;
+                    }
+                    break;
+            }
+
+            return false;
+        }
+
+        // Devolve verdadeiro quando terminou. Passos: (0) põe o jogador longe da sala inicial e
+        // solta a entidade; (1) espera ela aparecer e confere onde; muda o jogador de lugar,
+        // para a pista que ela recebeu ao nascer ficar velha; (2) o jogador faz barulho indo e
+        // vindo, e o teste espera ela ouvir, vir atrás e pegá-lo.
+        static bool EntityStage(GameSession session)
+        {
+            EntityDirector director = EntityDirector.Instance;
+            LevelBuilder builder = session.level;
+            LevelData data = builder != null ? builder.Data : null;
+
+            if (director == null || director.entityPrefab == null || data == null || data.SafePathCells.Count < 20)
+            {
+                _entityNote = "cena sem entidade";
+                _entityTested = true;
+                return true;
+            }
+
+            BeginWalking();
+            _entityTested = true;
+
+            PlayerController body = _local.controller;
+            var capsule = _local.GetComponent<CharacterController>();
+            Vector3 position = _local.transform.position;
+            EntityBrain entity = director.Entity;
+
+            switch (_entityStep)
+            {
+                case 0:
+                    InputSystem.QueueStateEvent(_keyboard, new KeyboardState());
+                    if (Now - _phaseStart < 1.0 || body.IsReturning) break;
+
+                    _entityPost = PathPoint(builder, data, 14);
+                    body.Teleport(_entityPost + Vector3.up * 0.05f, 0f);
+
+                    director.minSeconds = 0f;
+                    EntityDirector.Paused = false;
+                    _entityStep = 1;
+                    _entityStepStart = Now;
+                    break;
+
+                case 1:
+                    if (entity == null)
+                    {
+                        if (Now - _entityStepStart < 10.0) break;
+
+                        _entityNote = "não apareceu em 10 s: " + director.LastRefusal;
+                        return true;
+                    }
+
+                    // Onde nasceu: mais perto da sala do que o jogador, a pelo menos 4 células dele.
+                    var nav = new LevelNav(builder);
+                    int[,] fromDoor = nav.NewMap();
+                    int[,] fromEntity = nav.NewMap();
+                    nav.DoorCell(out int doorX, out int doorZ);
+                    nav.Distances(doorX, doorZ, fromDoor);
+                    nav.WorldToCell(entity.transform.position, out int ex, out int ez);
+                    nav.WorldToCell(_entityPost, out int px, out int pz);
+                    nav.Distances(ex, ez, fromEntity);
+
+                    _entitySpawnOk = fromDoor[ex, ez] >= 0 && fromDoor[ex, ez] < fromDoor[px, pz] &&
+                                     fromEntity[px, pz] >= director.minCellsFromPlayers;
+                    _entityNote = $"nasceu a {fromDoor[ex, ez]} células da porta e a {fromEntity[px, pz]} do jogador, que estava a {fromDoor[px, pz]}";
+
+                    // O jogador muda de lugar sem fazer barulho: agora só o ouvido (ou a vista) o acha.
+                    _entityPost = PathPoint(builder, data, 17);
+                    body.Teleport(_entityPost + Vector3.up * 0.05f, 0f);
+                    _entityStep = 2;
+                    _entityStepStart = Now;
+                    break;
+
+                case 2:
+                    if (entity == null)
+                    {
+                        _entityNote += "; sumiu";
+                        return true;
+                    }
+
+                    if (entity.NoisesHeard > 0) _entityHeardOk = true;
+
+                    bool hunting = entity.State == EntityState.Investigate || entity.State == EntityState.Chase;
+                    if (hunting && Vector3.Distance(entity.Goal, position) < 3f) _entityTrackedOk = true;
+
+                    if (body.Captures > 0)
+                    {
+                        InputSystem.QueueStateEvent(_keyboard, new KeyboardState());
+
+                        Vector3 home = builder.SpawnCenter;
+                        float fromHome = Vector2.Distance(new Vector2(position.x, position.z), new Vector2(home.x, home.z));
+                        bool back = !body.IsReturning && fromHome < 2.5f && capsule.isGrounded;
+
+                        if (!back) _phaseStart = Now;
+                        if (back && Now - _phaseStart > 1.0)
+                        {
+                            _entityCatchOk = true;
+                            _entityNote += $"; pegou em {Now - _entityStepStart:F1} s";
+                            return true;
+                        }
+                    }
+                    else
+                    {
+                        MakeNoise(position);
+                    }
+
+                    if (Now - _entityStepStart > 60.0)
+                    {
+                        float away = Vector3.Distance(entity.transform.position, position);
+                        _entityNote += $"; em 60 s não pegou: estado {entity.State}, a {away:F1} m, ouviu {entity.NoisesHeard} vezes";
+                        return true;
+                    }
+                    break;
+            }
+
+            return false;
+        }
+
+        // Vai e vem em torno do posto: corre para a frente, anda para trás.
+        static void MakeNoise(Vector3 position)
+        {
+            float offset = position.z - _entityPost.z;
+            if (offset > 0.9f) _entityForward = false;
+            else if (offset < -0.9f) _entityForward = true;
+
+            InputSystem.QueueStateEvent(_keyboard, _entityForward ? new KeyboardState(Key.W, Key.LeftShift) : new KeyboardState(Key.S));
+        }
+
+        // Cliente: sai da sala inicial, faz barulho e espera a entidade (que pensa no host)
+        // vir pegá-lo. Devolve verdadeiro quando terminou.
+        static bool ClientBait(GameSession session)
+        {
+            LevelBuilder builder = session.level;
+            LevelData data = builder != null ? builder.Data : null;
+            if (data == null || _local == null) return true;
+
+            BeginWalking();
+            PlayerController body = _local.controller;
+            var capsule = _local.GetComponent<CharacterController>();
+            Vector3 position = _local.transform.position;
+
+            if (_baitStep == 0)
+            {
+                InputSystem.QueueStateEvent(_keyboard, new KeyboardState());
+                if (body.IsReturning) return false;
+
+                _entityPost = PathPoint(builder, data, 14);
+                body.Teleport(_entityPost + Vector3.up * 0.05f, 0f);
+                _baitStep = 1;
+                _baitStart = Now;
+                return false;
+            }
+
+            if (body.Captures > 0)
+            {
+                InputSystem.QueueStateEvent(_keyboard, new KeyboardState());
+
+                Vector3 home = builder.SpawnCenter;
+                float fromHome = Vector2.Distance(new Vector2(position.x, position.z), new Vector2(home.x, home.z));
+                bool back = !body.IsReturning && fromHome < 2.5f && capsule.isGrounded;
+
+                if (!back) _phaseStart = Now;
+                if (!back || Now - _phaseStart < 1.0) return false;
+
+                _clientCaughtOk = true;
+                _baitNote = $"pego em {Now - _baitStart:F1} s";
+                return true;
+            }
+
+            MakeNoise(position);
+
+            if (Now - _baitStart < 75.0) return false;
+
+            EntityBrain entity = EntityBrain.Instance;
+            _baitNote = entity != null
+                ? $"em 75 s não foi pego: entidade em estado {entity.State}, a {Vector3.Distance(entity.transform.position, position):F1} m"
+                : "em 75 s não foi pego: entidade sumiu";
+            return true;
+        }
+
+        // Centro de uma célula do caminho seguro, contada a partir do início.
+        static Vector3 PathPoint(LevelBuilder builder, LevelData data, int index)
+        {
+            int cell = data.SafePathCells[Mathf.Min(index, data.SafePathCells.Count - 3)];
+            return builder.CellCenter(cell % data.Width, cell / data.Width);
+        }
+
+        // Uma célula de buraco cuja faixa chega até a beirada, e o lado por onde ela sai.
+        static bool FindStripEntry(LevelData data, out int x, out int z, out WallSide side)
+        {
+            for (z = 0; z < data.Height; z++)
+                for (x = 0; x < data.Width; x++)
+                    foreach (WallSide candidate in new[] { WallSide.South, WallSide.North, WallSide.West, WallSide.East })
+                    {
+                        if (!data.Pit[x, z] || !data.HasStrip(x, z, candidate)) continue;
+                        if (!data.Neighbor(x, z, candidate, out int nx, out int nz) || data.Pit[nx, nz]) continue;
+
+                        side = candidate;
+                        return true;
+                    }
+
+            x = z = 0;
+            side = WallSide.South;
+            return false;
+        }
+
+        // Um ponto de buraco sem nada embaixo: de preferência o centro de uma célula sem
+        // faixa; senão um canto de célula, longe da faixa que passa pelo meio.
+        static Vector3 FindVoid(LevelBuilder builder, LevelData data)
+        {
+            for (int z = 0; z < data.Height; z++)
+                for (int x = 0; x < data.Width; x++)
+                    if (data.Pit[x, z] && data.PitStrips[x, z] == 0) return builder.CellCenter(x, z);
+
+            PitArea area = data.Pits[0];
+            return builder.CellCenter(area.X0, area.Z0) + new Vector3(1.2f, 0f, 1.2f);
+        }
+
         static int BoardPoints()
         {
             return DrawingBoard.Instance != null ? DrawingBoard.Instance.PointCount : 0;
@@ -383,7 +781,8 @@ namespace BackRooms.EditorTools
             var builder = Object.FindFirstObjectByType<LevelBuilder>();
             int lights = Object.FindObjectsByType<CeilingLight>(FindObjectsSortMode.None).Length;
             int marks = builder != null && builder.Data != null ? builder.Data.Decorations.Count : 0;
-            float moved = Vector3.Distance(_start, _local.transform.position);
+            // O teste dos buracos termina com o jogador de volta ao início: vale o mais longe que foi.
+            float moved = Mathf.Max(_movedMost, Vector3.Distance(_start, _local.transform.position));
             float y = _local.transform.position.y;
             float stepPeak = MeasureStepPeak(_local);
             int players = _mostPlayers;
@@ -404,6 +803,40 @@ namespace BackRooms.EditorTools
             ok &= _rayOffLevel == 0;
             report += $" miras_da_caneta={_rayChecks} fora_do_cenario={_rayOffLevel} raio_comum_no_proprio_jogador={_raySelfHits}";
             if (_rayFirst != null) report += $" primeiro=[{_rayFirst}]";
+
+            // Mapa: buracos, os dois caminhos e as setas.
+            LevelData level = builder != null ? builder.Data : null;
+            if (level != null)
+            {
+                int arrows = 0, pitCells = 0;
+                foreach (Decoration mark in level.Decorations) if (mark.Kind == DecorationKind.Arrow) arrows++;
+                foreach (bool pit in level.Pit) if (pit) pitCells++;
+
+                ok &= level.Pits.Count > 0 && level.SafePathCells.Count > 0 && level.PathCells.Count > 0;
+                ok &= arrows > 0 && arrows <= LevelGenerator.MaxArrows;
+                report += $" tamanho={level.Width}x{level.Height} buracos={level.Pits.Count} celulas_de_buraco={pitCells} " +
+                          $"caminho_direto={(level.PathCells.Count - 1) * 4}m caminho_seguro={(level.SafePathCells.Count - 1) * 4}m setas={arrows}";
+            }
+
+            if (_entityTested)
+            {
+                ok &= _entitySpawnOk && _entityHeardOk && _entityTrackedOk && _entityCatchOk;
+                report += $" entidade_nasce_atras={_entitySpawnOk} ouviu={_entityHeardOk} foi_atras={_entityTrackedOk} " +
+                          $"pegou_e_devolveu={_entityCatchOk} capturas={_local.controller.Captures} [{_entityNote}]";
+            }
+
+            if (_role == ClientRole && !LateJoin)
+            {
+                ok &= _sawEntityMove && _clientCaughtOk;
+                report += $" viu_a_entidade={_entitySeen} viu_ela_andar={_sawEntityMove} foi_pego_e_voltou={_clientCaughtOk} capturas={_local.controller.Captures} [{_baitNote}]";
+            }
+
+            if (_pitTested)
+            {
+                ok &= _stripOk && _fallOk;
+                report += $" faixa_segura={_stripOk} queda_volta_ao_inicio={_fallOk} quedas={_local.controller.Falls}";
+                if (_pitNote.Length > 0) report += $" [{_pitNote.Trim()}]";
+            }
 
             if (_role == ClientRole)
             {
@@ -471,6 +904,8 @@ namespace BackRooms.EditorTools
             foreach (byte alcove in data.AlcoveSouth) Mix(alcove);
             foreach (byte alcove in data.AlcoveWest) Mix(alcove);
             foreach (bool pillar in data.Pillar) Mix(pillar ? 1 : 0);
+            foreach (bool pit in data.Pit) Mix(pit ? 1 : 0);
+            foreach (byte strips in data.PitStrips) Mix(strips);
             foreach (LightState state in data.Lights) Mix((int)state);
             foreach (Decoration mark in data.Decorations)
             {
@@ -509,6 +944,7 @@ namespace BackRooms.EditorTools
             Application.logMessageReceived -= OnLog;
             SessionState.SetString(RoleKey, "");
             SessionState.SetBool(LateKey, false);
+            EntityDirector.Paused = false;
 
             if (_local != null && _local.controller != null) _local.controller.Stepped -= OnStepped;
 

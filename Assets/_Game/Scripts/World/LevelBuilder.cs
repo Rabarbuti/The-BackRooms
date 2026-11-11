@@ -6,7 +6,7 @@ namespace BackRooms.World
 {
     /// <summary>
     /// Constrói o Level 0 em tempo de execução a partir de uma seed: malhas combinadas,
-    /// colisores primitivos, luminárias, esconderijos, marcas nas paredes e a saída.
+    /// colisores primitivos, luminárias, esconderijos, buracos, marcas nas paredes e a saída.
     /// O mapa só existe durante o Play.
     /// </summary>
     public sealed class LevelBuilder : MonoBehaviour
@@ -15,6 +15,18 @@ namespace BackRooms.World
         // Pé-direito de 4,05 m: 1,5 vez o de um escritório comum (2,7 m).
         public const float WallHeight = 4.05f;
         public const float WallThickness = 0.2f;
+
+        /// <summary>Lado do mapa em células. 20 x 20 = 80 x 80 m (era 16 x 16 até a versão 9).</summary>
+        public const int DefaultSize = 20;
+
+        // Buracos (medidas em metros). A faixa é mais estreita que o jogador (0,6 m).
+        public const float PitDepth = 7f;
+        public const float StripWidth = 0.4f;
+        const float StripThickness = 0.25f;
+        const float StripPostSize = 0.3f;
+        const float FloorThickness = 0.5f;
+        // Quem passa desta altura dentro de um buraco é dado como caído.
+        const float PitFallLine = -2.5f;
 
         const float CeilingTile = 0.6f;
         const float BaseboardHeight = 0.1f;
@@ -36,8 +48,8 @@ namespace BackRooms.World
 
         [Header("Geração")]
         public int seed = 1998;
-        [Min(4)] public int width = 16;
-        [Min(4)] public int height = 16;
+        [Min(4)] public int width = DefaultSize;
+        [Min(4)] public int height = DefaultSize;
 
         [Header("Materiais")]
         public Material wallMaterial;
@@ -49,6 +61,12 @@ namespace BackRooms.World
         [Tooltip("Papel de parede e carpete sem nenhum encardido, usados só na sala inicial.")]
         public Material cleanWallMaterial;
         public Material cleanFloorMaterial;
+        [Tooltip("Concreto das paredes e do fundo dos buracos.")]
+        public Material pitMaterial;
+        [Tooltip("Névoa translúcida que cobre o fundo dos buracos.")]
+        public Material pitSmokeMaterial;
+        [Tooltip("Preto sem luz, por baixo da fumaça.")]
+        public Material pitVoidMaterial;
 
         [Header("Luminárias")]
         [Tooltip("Intensidade em candela.")]
@@ -130,8 +148,16 @@ namespace BackRooms.World
         {
             if (Data == null || Data.PathCells.Count == 0) return SpawnCenter;
 
-            int index = Data.PathCells[Mathf.Min(Data.PathCells.Count - 1, Data.PathCells.Count * 6 / 10)];
-            return CellCenter(index % Data.Width, index / Data.Width);
+            // A primeira célula com piso a partir de 60% do caminho (ele passa por cima de buracos).
+            int start = Mathf.Min(Data.PathCells.Count - 1, Data.PathCells.Count * 6 / 10);
+
+            for (int i = start; i < Data.PathCells.Count; i++)
+            {
+                int index = Data.PathCells[i];
+                if (!Data.Pit[index % Data.Width, index / Data.Width]) return CellCenter(index % Data.Width, index / Data.Width);
+            }
+
+            return SpawnCenter;
         }
 
         /// <summary>Remove tudo que este componente gerou.</summary>
@@ -170,23 +196,44 @@ namespace BackRooms.World
             // Sala inicial: mesmas peças, com materiais limpos.
             var cleanFloor = new MeshBuilder(2f);
             var cleanWalls = new MeshBuilder(2f);
+            // Concreto dos buracos: paredes e fundo do poço, laterais das faixas e seus apoios.
+            var pits = new MeshBuilder(2f);
 
             GameObject colliders = CreateChild("Colisores");
             GameObject hidingSpots = CreateChild("Esconderijos");
 
-            // Piso: um quad por célula, para a sala inicial poder usar outro material.
-            // O colisor é um só, espesso, para ninguém atravessar.
+            // Piso: um quad por célula, para a sala inicial poder usar outro material e os
+            // buracos ficarem sem nenhum. O colisor é espesso, para ninguém atravessar, e vai
+            // em trechos: um por sequência de células com piso em cada fileira.
             for (int z = 0; z < Data.Height; z++)
             {
-                for (int x = 0; x < Data.Width; x++)
+                int runStart = -1;
+
+                for (int x = 0; x <= Data.Width; x++)
                 {
-                    MeshBuilder target = Data.InRoom(x, z) ? cleanFloor : floor;
-                    float fx = x * Cell, fz = z * Cell;
-                    target.AddQuad(new Vector3(fx, 0f, fz), new Vector3(fx, 0f, fz + Cell),
-                                   new Vector3(fx + Cell, 0f, fz + Cell), new Vector3(fx + Cell, 0f, fz), Vector3.up);
+                    bool solid = x < Data.Width && !Data.Pit[x, z];
+
+                    if (solid)
+                    {
+                        MeshBuilder target = Data.InRoom(x, z) ? cleanFloor : floor;
+                        float fx = x * Cell, fz = z * Cell;
+                        target.AddQuad(new Vector3(fx, 0f, fz), new Vector3(fx, 0f, fz + Cell),
+                                       new Vector3(fx + Cell, 0f, fz + Cell), new Vector3(fx + Cell, 0f, fz), Vector3.up);
+
+                        if (runStart < 0) runStart = x;
+                        continue;
+                    }
+
+                    if (runStart < 0) continue;
+
+                    float length = (x - runStart) * Cell;
+                    AddCollider(colliders, new Vector3(runStart * Cell + length * 0.5f, -FloorThickness * 0.5f, (z + 0.5f) * Cell),
+                                new Vector3(length, FloorThickness, Cell));
+                    runStart = -1;
                 }
             }
-            AddCollider(colliders, new Vector3(sizeX * 0.5f, -0.25f, sizeZ * 0.5f), new Vector3(sizeX + 2f, 0.5f, sizeZ + 2f));
+
+            BuildPits(floor, pits, colliders);
 
             ceiling.AddQuad(new Vector3(0f, WallHeight, 0f), new Vector3(0f, WallHeight, sizeZ),
                             new Vector3(sizeX, WallHeight, sizeZ), new Vector3(sizeX, WallHeight, 0f), Vector3.down);
@@ -264,9 +311,111 @@ namespace BackRooms.World
                                cleanWallMaterial != null ? cleanWallMaterial : wallMaterial, ShadowCastingMode.On);
             CreateRenderer("Rodapes", baseboards.ToMesh("Rodapes"), baseboardMaterial, ShadowCastingMode.Off);
 
+            // Sombra dos dois lados: as paredes do poço só têm a face de dentro, e é pelo
+            // lado de fora que a luz dos cômodos vizinhos chegaria ao buraco.
+            if (!pits.IsEmpty)
+                CreateRenderer("PocosDosBuracos", pits.ToMesh("PocosDosBuracos"),
+                               pitMaterial != null ? pitMaterial : baseboardMaterial, ShadowCastingMode.TwoSided);
+
             BuildLights();
             BuildDecorations();
             BuildExit();
+        }
+
+        // ---------------------------------------------------------------- Buracos
+
+        /// <summary>
+        /// Cada buraco é um poço retangular: quatro paredes de concreto que descem do nível do
+        /// piso, o fundo, a fumaça que não deixa ver esse fundo e um gatilho que dá o jogador
+        /// como caído. Dentro dele ficam as faixas — vigas estreitas, com carpete em cima,
+        /// apoiadas em pilaretes. Tirando a fumaça, tudo que aparece tem colisor do mesmo
+        /// tamanho (ver Level0ColliderCheck).
+        /// </summary>
+        void BuildPits(MeshBuilder floor, MeshBuilder pits, GameObject colliders)
+        {
+            if (Data.Pits.Count == 0) return;
+
+            GameObject zones = CreateChild("Quedas");
+            const float shell = 0.2f;
+
+            foreach (PitArea area in Data.Pits)
+            {
+                float x0 = area.X0 * Cell, x1 = (area.X0 + area.Width) * Cell;
+                float z0 = area.Z0 * Cell, z1 = (area.Z0 + area.Height) * Cell;
+                float midX = (x0 + x1) * 0.5f, midZ = (z0 + z1) * 0.5f;
+                float bottom = -PitDepth;
+
+                pits.AddQuad(new Vector3(x0, bottom, z0), new Vector3(x0, bottom, z1),
+                             new Vector3(x1, bottom, z1), new Vector3(x1, bottom, z0), Vector3.up);
+                AddCollider(colliders, new Vector3(midX, bottom - shell * 0.5f, midZ), new Vector3(x1 - x0, shell, z1 - z0));
+
+                // Paredes do poço, viradas para dentro. O colisor fica atrás da face.
+                pits.AddQuad(new Vector3(x0, bottom, z0), new Vector3(x0, 0f, z0), new Vector3(x0, 0f, z1), new Vector3(x0, bottom, z1), Vector3.right);
+                AddCollider(colliders, new Vector3(x0 - shell * 0.5f, bottom * 0.5f, midZ), new Vector3(shell, PitDepth, z1 - z0));
+
+                pits.AddQuad(new Vector3(x1, bottom, z0), new Vector3(x1, 0f, z0), new Vector3(x1, 0f, z1), new Vector3(x1, bottom, z1), Vector3.left);
+                AddCollider(colliders, new Vector3(x1 + shell * 0.5f, bottom * 0.5f, midZ), new Vector3(shell, PitDepth, z1 - z0));
+
+                pits.AddQuad(new Vector3(x0, bottom, z0), new Vector3(x0, 0f, z0), new Vector3(x1, 0f, z0), new Vector3(x1, bottom, z0), Vector3.forward);
+                AddCollider(colliders, new Vector3(midX, bottom * 0.5f, z0 - shell * 0.5f), new Vector3(x1 - x0, PitDepth, shell));
+
+                pits.AddQuad(new Vector3(x0, bottom, z1), new Vector3(x0, 0f, z1), new Vector3(x1, 0f, z1), new Vector3(x1, bottom, z1), Vector3.back);
+                AddCollider(colliders, new Vector3(midX, bottom * 0.5f, z1 + shell * 0.5f), new Vector3(x1 - x0, PitDepth, shell));
+
+                var zone = new GameObject("Queda");
+                zone.transform.SetParent(zones.transform, false);
+                zone.transform.localPosition = new Vector3(midX, (bottom + PitFallLine) * 0.5f, midZ);
+
+                var trigger = zone.AddComponent<BoxCollider>();
+                trigger.isTrigger = true;
+                trigger.size = new Vector3(x1 - x0, PitFallLine - bottom, z1 - z0);
+                zone.AddComponent<PitFall>();
+
+                var smoke = new GameObject("Fumaca");
+                smoke.transform.SetParent(zones.transform, false);
+                smoke.transform.localPosition = new Vector3(midX, 0f, midZ);
+                smoke.AddComponent<PitSmoke>().Build(x1 - x0, z1 - z0, pitSmokeMaterial, pitVoidMaterial, area.X0 + area.Z0 * Data.Width);
+            }
+
+            float half = StripWidth * 0.5f;
+
+            for (int z = 0; z < Data.Height; z++)
+            {
+                for (int x = 0; x < Data.Width; x++)
+                {
+                    if (Data.PitStrips[x, z] == 0) continue;
+
+                    float cx = (x + 0.5f) * Cell, cz = (z + 0.5f) * Cell;
+
+                    // Miolo da célula, onde as faixas se encontram, e o pilarete que o sustenta.
+                    AddStrip(floor, pits, colliders, cx - half, cx + half, cz - half, cz + half);
+
+                    float postHeight = PitDepth - StripThickness;
+                    var postCenter = new Vector3(cx, -StripThickness - postHeight * 0.5f, cz);
+                    var postSize = new Vector3(StripPostSize, postHeight, StripPostSize);
+                    pits.AddBox(postCenter, postSize);
+                    AddCollider(colliders, postCenter, postSize);
+
+                    if (Data.HasStrip(x, z, WallSide.West)) AddStrip(floor, pits, colliders, x * Cell, cx - half, cz - half, cz + half);
+                    if (Data.HasStrip(x, z, WallSide.East)) AddStrip(floor, pits, colliders, cx + half, (x + 1) * Cell, cz - half, cz + half);
+                    if (Data.HasStrip(x, z, WallSide.South)) AddStrip(floor, pits, colliders, cx - half, cx + half, z * Cell, cz - half);
+                    if (Data.HasStrip(x, z, WallSide.North)) AddStrip(floor, pits, colliders, cx - half, cx + half, cz + half, (z + 1) * Cell);
+                }
+            }
+        }
+
+        // Um trecho de faixa: carpete em cima, concreto dos lados e embaixo.
+        void AddStrip(MeshBuilder floor, MeshBuilder pits, GameObject colliders, float xMin, float xMax, float zMin, float zMax)
+        {
+            var center = new Vector3((xMin + xMax) * 0.5f, -StripThickness * 0.5f, (zMin + zMax) * 0.5f);
+            var size = new Vector3(xMax - xMin, StripThickness, zMax - zMin);
+
+            floor.AddQuad(new Vector3(xMin, 0f, zMin), new Vector3(xMin, 0f, zMax),
+                          new Vector3(xMax, 0f, zMax), new Vector3(xMax, 0f, zMin), Vector3.up);
+            pits.AddBox(center, size);
+            pits.AddQuad(new Vector3(xMin, -StripThickness, zMin), new Vector3(xMin, -StripThickness, zMax),
+                         new Vector3(xMax, -StripThickness, zMax), new Vector3(xMax, -StripThickness, zMin), Vector3.down);
+            AddCollider(colliders, center, size);
         }
 
         void AddWall(MeshBuilder walls, MeshBuilder baseboards, GameObject colliders, Vector3 basePosition, Vector3 size)

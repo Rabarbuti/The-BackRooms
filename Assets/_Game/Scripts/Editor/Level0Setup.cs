@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using BackRooms.Audio;
+using BackRooms.Entities;
 using BackRooms.Items;
 using BackRooms.Net;
 using BackRooms.Player;
@@ -35,6 +36,7 @@ namespace BackRooms.EditorTools
         const string ScenePath = SceneFolder + "/Level0_Test.unity";
         const string ProfilePath = SettingsFolder + "/Level0_Volume.asset";
         const string PlayerPrefabPath = PrefabFolder + "/Player.prefab";
+        public const string EntityPrefabPath = PrefabFolder + "/Entity.prefab";
 
         static readonly string[] Phrases = { "HELP!", "RUN", "IT HEARS YOU" };
 
@@ -44,7 +46,7 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 9;
+        public const int ContentVersion = 11;
 
         [MenuItem("BackRooms/Montar Level 0 (sala de teste)")]
         public static void Build()
@@ -104,6 +106,15 @@ namespace BackRooms.EditorTools
             Material baseboard = EnsureMaterial("Baseboard", Rgb(184, 160, 64), null, null, 0.35f, Color.black);
             Material panelOn = EnsureMaterial("LightPanel_On", Color.white, null, null, 0.5f, new Color(1f, 0.98f, 0.92f) * 900f);
             Material panelOff = EnsureMaterial("LightPanel_Off", Rgb(118, 116, 104), null, null, 0.5f, Color.black);
+
+            // Concreto das paredes e do fundo dos buracos.
+            Texture2D concreteAlbedo = EnsureTexture("Concrete_Albedo", 512, PaintConcrete, normalFromHeight: false);
+            Material pit = EnsureMaterial("PitConcrete", Color.white, concreteAlbedo, null, 0.12f, Color.black);
+
+            // Fumaça que tapa o fundo dos buracos, e o preto opaco por baixo dela.
+            Texture2D smokeTexture = EnsureTexture("Smoke_Alpha", 256, PaintSmoke, normalFromHeight: false);
+            Material pitSmoke = EnsureUnlit("PitSmoke", Color.white, smokeTexture, transparent: true);
+            Material pitVoid = EnsureUnlit("PitVoid", Color.black, null, transparent: false);
 
             // Marcas: sangue preto, poças, palavras e seta
             var blood = new Material[LevelGenerator.BloodVariants];
@@ -191,6 +202,12 @@ namespace BackRooms.EditorTools
             Material visor = EnsureMaterial("Visor", Rgb(10, 10, 12), null, null, 0.85f, Color.black);
             GameObject playerPrefab = CreatePlayerPrefab(hazmat, visor, inks[0]);
 
+            // Entidade: preta e quase fosca (lustrosa, parecia boneco de plástico); os dois
+            // pontos claros da cabeça têm luz própria (em nits).
+            Material entityBlack = EnsureMaterial("Entity_Black", Rgb(6, 6, 7), null, null, 0.3f, Color.black);
+            Material entityEye = EnsureMaterial("Entity_Eye", Rgb(235, 232, 215), null, null, 0.2f, new Color(1f, 0.97f, 0.88f) * 70f);
+            GameObject entityPrefab = CreateEntityPrefab(entityBlack, entityEye);
+
             var level = new GameObject("Level0");
             var builder = level.AddComponent<LevelBuilder>();
             builder.wallMaterial = wall;
@@ -202,6 +219,9 @@ namespace BackRooms.EditorTools
             builder.contentVersion = ContentVersion;
             builder.cleanWallMaterial = wallClean;
             builder.cleanFloorMaterial = floorClean;
+            builder.pitMaterial = pit;
+            builder.pitSmokeMaterial = pitSmoke;
+            builder.pitVoidMaterial = pitVoid;
             builder.bloodDecals = blood;
             builder.poolDecals = pools;
             builder.textDecals = texts;
@@ -238,6 +258,11 @@ namespace BackRooms.EditorTools
             session.level = builder;
             session.menuCamera = menuCamera;
             session.menuListener = menuListener;
+
+            // Quem decide quando e onde a entidade aparece. Roda só no host.
+            var director = sessionObject.AddComponent<EntityDirector>();
+            director.session = session;
+            director.entityPrefab = entityPrefab;
 
             // Menu (UI Toolkit) e o EventSystem que entrega o mouse a ele pelo Input System.
             var menuObject = new GameObject("Menu");
@@ -435,6 +460,48 @@ namespace BackRooms.EditorTools
             return prefab;
         }
 
+        // ---------------------------------------------------------------- Entidade
+
+        // O prefab leva só os componentes: o corpo é montado em código quando ela aparece
+        // (EntityBody) e o som é sintetizado (EntityAudio). O colisor impede o jogador de
+        // atravessá-la; o corpo rígido cinemático faz a caneta não riscar nela.
+        static GameObject CreateEntityPrefab(Material body, Material eye)
+        {
+            var entity = new GameObject("Entity");
+
+            var capsule = entity.AddComponent<CapsuleCollider>();
+            capsule.radius = 0.4f;
+            capsule.height = 2.9f;
+            capsule.center = new Vector3(0f, 1.45f, 0f);
+
+            var rigid = entity.AddComponent<Rigidbody>();
+            rigid.isKinematic = true;
+            rigid.useGravity = false;
+
+            var figure = entity.AddComponent<EntityBody>();
+            figure.bodyMaterial = body;
+            figure.eyeMaterial = eye;
+            entity.AddComponent<EntityAudio>();
+
+            // Rede: quem manda na posição é o host (o padrão do NetworkTransform).
+            entity.AddComponent<NetworkObject>();
+
+            var networkTransform = entity.AddComponent<NetworkTransform>();
+            networkTransform.SyncRotAngleX = false;
+            networkTransform.SyncRotAngleZ = false;
+            networkTransform.SyncScaleX = false;
+            networkTransform.SyncScaleY = false;
+            networkTransform.SyncScaleZ = false;
+            networkTransform.Interpolate = true;
+
+            entity.AddComponent<EntityBrain>();
+
+            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(entity, EntityPrefabPath);
+            Object.DestroyImmediate(entity);
+            StampNetworkId(prefab);
+            return prefab;
+        }
+
         // O Netcode identifica cada prefab por um número calculado a partir do asset. Ele só
         // é calculado quando o editor valida o componente; num prefab criado por código isso
         // ainda não aconteceu, então o número ficaria 0 no arquivo. Aqui a validação é
@@ -454,7 +521,7 @@ namespace BackRooms.EditorTools
             AssetDatabase.SaveAssetIfDirty(prefab);
 
             if (hashField != null && (uint)hashField.GetValue(networkObject) == 0)
-                Debug.LogWarning("[BackRooms] O prefab do jogador ficou sem identificador de rede. Abra o prefab no editor e salve para o Netcode gerar.");
+                Debug.LogWarning("[BackRooms] O prefab " + prefab.name + " ficou sem identificador de rede. Abra o prefab no editor e salve para o Netcode gerar.");
         }
 
         static void AddBodyPart(Transform parent, PrimitiveType shape, string name, Vector3 position, Vector3 scale, Material material)
@@ -594,6 +661,37 @@ namespace BackRooms.EditorTools
             return EnsureDecal(name, texture, smoothness, Color.white, 1f, true, 0);
         }
 
+        // Material sem iluminação: a cor é o próprio brilho. Transparente, mistura pelo alfa
+        // da textura; a cor e a opacidade de cada objeto podem vir de um MaterialPropertyBlock.
+        static Material EnsureUnlit(string name, Color color, Texture2D texture, bool transparent)
+        {
+            string path = ArtFolder + "/" + name + ".mat";
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (existing != null) return existing;
+
+            Shader shader = Shader.Find("HDRP/Unlit");
+            if (shader == null)
+            {
+                Debug.LogError("[BackRooms] Shader HDRP/Unlit não encontrado.");
+                return null;
+            }
+
+            var material = new Material(shader) { name = name };
+            material.SetColor("_UnlitColor", color);
+            if (texture != null) material.SetTexture("_UnlitColorMap", texture);
+
+            if (transparent)
+            {
+                material.SetFloat("_SurfaceType", 1f);
+                material.SetFloat("_BlendMode", 0f);
+                material.SetFloat("_ZWrite", 0f);
+            }
+
+            HDMaterial.ValidateMaterial(material);
+            AssetDatabase.CreateAsset(material, path);
+            return material;
+        }
+
         // Tinta da caneta: fosca e sem receber decalques, para as manchas de sujeira
         // não passarem por cima do que os jogadores riscam.
         static Material EnsureInk(string name, Color color)
@@ -700,6 +798,32 @@ namespace BackRooms.EditorTools
         static float Range(System.Random rng, float min, float max)
         {
             return min + (float)rng.NextDouble() * (max - min);
+        }
+
+        // Fumaça: branca, com o alfa em nuvens largas e fiapos. Fecha nas bordas, para deslizar sem emenda.
+        static Color32 PaintSmoke(int x, int y, int size, System.Random rng)
+        {
+            float u = x / (float)size;
+            float v = y / (float)size;
+            float clouds = StainPainter.TileableFbm(u, v, 2, 2, 91);
+            float wisps = StainPainter.TileableFbm(u, v, 6, 6, 57, 3);
+            float density = Mathf.SmoothStep(0.28f, 0.72f, clouds * 0.75f + wisps * 0.25f);
+
+            return new Color32(255, 255, 255, (byte)Mathf.Clamp(40f + density * 215f, 0f, 255f));
+        }
+
+        // Concreto dos buracos: cinza com manchas largas de umidade e granulado fino. Não pode
+        // ser escuro demais: é a parede do poço clareando perto da borda e sumindo no fundo
+        // que faz o buraco parecer fundo, e não um tapete preto.
+        static Color32 PaintConcrete(int x, int y, int size, System.Random rng)
+        {
+            var baseColor = new Color32(160, 155, 146, 255);
+            float u = x / (float)size;
+            float v = y / (float)size;
+            float damp = StainPainter.TileableFbm(u, v, 3, 3, 29);
+            float grain = StainPainter.TileableFbm(u, v, 24, 24, 41, 2);
+
+            return Shade(baseColor, Noise(rng) * 0.06f + (damp - 0.5f) * 0.45f + (grain - 0.5f) * 0.15f);
         }
 
         static Color32 Shade(Color32 c, float amount)

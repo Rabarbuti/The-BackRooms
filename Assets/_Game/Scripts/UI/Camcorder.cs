@@ -1,4 +1,5 @@
 using System;
+using BackRooms.Entities;
 using BackRooms.Net;
 using BackRooms.Player;
 using UnityEngine;
@@ -26,6 +27,12 @@ namespace BackRooms.UI
         [Header("Interferência")]
         [Tooltip("Duração do chuvisco quando a gravação começa, em segundos.")]
         public float startGlitchSeconds = 0.9f;
+        [Tooltip("Quanto a tela continua preta depois de o jogador reaparecer de uma queda, em segundos.")]
+        public float noSignalHold = 0.35f;
+        [Tooltip("A entidade interfere na imagem a partir desta distância, em metros.")]
+        public float entityNoiseRange = 16f;
+        [Tooltip("Interferência máxima com a entidade colada no jogador (0 a 1).")]
+        [Range(0f, 1f)] public float entityNoiseMax = 0.6f;
 
         const int Width = 480;
         const int Height = 270;
@@ -39,6 +46,7 @@ namespace BackRooms.UI
         static readonly Color32 Red = new Color32(232, 38, 28, 255);
         static readonly Color32 Shadow = new Color32(0, 0, 0, 190);
         static readonly Color32 Clear = new Color32(0, 0, 0, 0);
+        static readonly Color32 Black = new Color32(0, 0, 0, 255);
 
         static readonly string[] Months = { "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC" };
 
@@ -49,6 +57,8 @@ namespace BackRooms.UI
         float _glitchFade;
         bool _wasRecording;
         int _lastFrame = -1;
+        int _seenFalls;
+        float _noSignal;
 
         void OnEnable()
         {
@@ -92,6 +102,28 @@ namespace BackRooms.UI
 
             if (recording) _recordSeconds += Time.deltaTime;
 
+            // Queda em buraco ou captura pela entidade: a imagem some (tela preta, NO SIGNAL)
+            // até o jogador reaparecer na sala inicial, e volta com chuvisco.
+            PlayerController body = PlayerNetwork.Local != null ? PlayerNetwork.Local.controller : null;
+            int falls = body != null ? body.Falls + body.Captures : 0;
+
+            if (falls > _seenFalls)
+            {
+                _noSignal = (body.IsCaught ? body.captureRespawnDelay : body.pitRespawnDelay) + noSignalHold;
+                Glitch(1f, _noSignal + 1.2f);
+            }
+            _seenFalls = falls;
+            _noSignal = Mathf.Max(0f, _noSignal - Time.deltaTime);
+
+            // A entidade estraga a imagem de quem está perto dela: é um aviso, junto com o som.
+            EntityBrain entity = EntityBrain.Instance;
+            if (entity != null && body != null && entityNoiseRange > 0f)
+            {
+                float distance = Vector3.Distance(entity.transform.position, body.transform.position);
+                float near = Mathf.InverseLerp(entityNoiseRange, 2.5f, distance);
+                if (near > 0f) Glitch(near * near * entityNoiseMax, 0.5f);
+            }
+
             _glitch = Mathf.MoveTowards(_glitch, 0f, _glitchFade * Time.unscaledDeltaTime);
             Shader.SetGlobalFloat(GlitchId, _glitch);
 
@@ -108,17 +140,27 @@ namespace BackRooms.UI
             var pen = PlayerNetwork.Local != null ? PlayerNetwork.Local.pen : null;
             string tool = pen != null && pen.Equipped ? "PEN " + pen.ColorName : null;
 
-            Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool);
+            Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f);
         }
 
         /// <summary>
         /// Desenha um quadro do painel e o publica para o shader. Público para a ferramenta
         /// de prévia do editor, que roda fora do Play.
         /// </summary>
-        public void Draw(bool recording, float recordSeconds, float clockSeconds, float battery, bool lightOn, string tool = null)
+        public void Draw(bool recording, float recordSeconds, float clockSeconds, float battery, bool lightOn, string tool = null,
+                         bool noSignal = false)
         {
             EnsureTexture();
-            for (int i = 0; i < _pixels.Length; i++) _pixels[i] = Clear;
+
+            // Sem sinal: o painel inteiro fica opaco e tapa a imagem do jogo.
+            Color32 background = noSignal ? Black : Clear;
+            for (int i = 0; i < _pixels.Length; i++) _pixels[i] = background;
+
+            if (noSignal)
+            {
+                const string message = "NO SIGNAL";
+                Text((Width - MeasureText(message, 3)) / 2, Height / 2 - 10, message, 3, White);
+            }
 
             DrawCorners();
 
@@ -154,7 +196,7 @@ namespace BackRooms.UI
             // Canto de baixo, esquerda: aviso da lanterna e, acima dele, o item na mão.
             if (lightOn) Text(Margin, Height - Margin - 7, "LIGHT", 1, White);
 
-            if (!string.IsNullOrEmpty(tool))
+            if (!string.IsNullOrEmpty(tool) && !noSignal)
             {
                 Text(Margin, Height - Margin - 19, tool, 1, White);
 

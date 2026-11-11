@@ -1,7 +1,8 @@
 # The BackRooms
 
 Jogo de terror 3D em co-op no estilo Backrooms, feito em Unity. Hoje existe o Level 0
-jogável por IP, com interface de filmadora VHS e o primeiro item (caneta de riscar).
+jogável por IP, com interface de filmadora VHS, o primeiro item (caneta de riscar), buracos
+com faixas de travessia e a primeira entidade, que caça os jogadores pelo barulho.
 
 Conversa, comentários de código, documentação e mensagens de commit são em **português**.
 
@@ -17,18 +18,21 @@ Conversa, comentários de código, documentação e mensagens de commit são em 
 ## Onde fica cada coisa
 
 Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World`, `.Player`,
-`.Net`, `.Items`, `.UI`, `.Audio` e `BackRooms.EditorTools` para `Scripts/Editor`.
+`.Net`, `.Items`, `.Entities`, `.UI`, `.Audio` e `BackRooms.EditorTools` para `Scripts/Editor`.
 
 - `Scripts/World` — `LevelGenerator` (planta a partir da seed) e `LevelBuilder` (malhas e colisores).
 - `Scripts/Network` — `GameSession` (host, cliente, envio da seed) e `PlayerNetwork`.
 - `Scripts/Items` — `PenTool` (entrada e mira) e `DrawingBoard` (malhas dos riscos e sincronização).
+- `Scripts/Entities` — a entidade: `EntityDirector` (quando e onde aparece), `EntityBrain` (sentidos
+  e decisão, só no host), `LevelNav` (caminho na grade do mapa), `EntityBody` e `EntityAudio`
+  (corpo, animação e som feitos em código).
 - `Scripts/Editor` — gerador do Level 0 e ferramentas de teste (menu **BackRooms**).
 - `Docs/plano-coop.md` — plano do jogo, arquitetura de rede e registro das correções. Ler antes
   de mexer em rede ou em geração de fase. Os outros arquivos de `Docs/` são referência de design.
 
 ## Conteúdo gerado: não editar à mão
 
-A cena `Scenes/Level0_Test.unity`, o `Prefabs/Player.prefab`, o perfil de Volume e tudo em
+A cena `Scenes/Level0_Test.unity`, os prefabs `Player` e `Entity`, o perfil de Volume e tudo em
 `Art/Level0` (texturas e materiais) são **gerados** por `Level0Setup` (menu BackRooms > Montar
 Level 0). Mudança nesses arquivos se faz no gerador, não no arquivo.
 
@@ -48,6 +52,14 @@ velho. Mudança só de código não precisa.
   labirinto, então `LevelGenerator` e `LevelBuilder` usam apenas `System.Random(seed)`, nunca
   `UnityEngine.Random`, tempo ou ordem de dicionário. O teste de fumaça compara o hash do mapa
   entre host e cliente.
+- **Buraco nunca isola parte do mapa.** Toda célula com piso continua alcançável sem pisar em
+  faixa, então sempre há um caminho seguro até a saída (`LevelData.SafePathCells`). Quem mexer
+  em `LevelGenerator.DigPits` mantém a conferência de `SafeDetour`.
+- **A entidade só pisa onde o `LevelNav` deixa:** células com piso, fora da sala inicial e dos
+  buracos. Sala inicial como abrigo e faixa como rota de fuga dependem disso. Ela não usa NavMesh.
+- **Prefab de rede não se registra por código.** O Netcode mantém `Assets/DefaultNetworkPrefabs.asset`
+  com todo prefab que tem `NetworkObject`; registrar de novo dá erro de duplicata.
+- **Material sem luz (HDRP/Unlit): a cor é o que aparece na tela, de 0 a 1**, não nits.
 - **Colisor e malha visível nascem juntos** no `LevelBuilder` (`AddWall`, `AlcoveBox`,
   `AddCollider`). Não criar um sem o outro.
 - **Rede:** host autoritativo por IP direto (porta 7777), movimento com autoridade do dono.
@@ -65,8 +77,8 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
 "C:\Program Files\Unity\Hub\Editor\6000.3.26f1\Editor\Unity.exe" -batchmode -projectPath "<pasta>" -executeMethod BackRooms.EditorTools.Level0SmokeTest.BatchRun -logFile "<log>"
 ```
 
-- `Level0SmokeTest.BatchRun` — sozinho: entra em Play, anda, corre, pula, risca. Sai com 0 se
-  passou, 3 se falhou. O resultado é a linha `[BackRooms] Teste de fumaça PASSOU/FALHOU: ...` do log.
+- `Level0SmokeTest.BatchRun` — sozinho: entra em Play, anda, corre, pula, risca, atravessa uma
+  faixa, cai num buraco e é pego pela entidade. Sai com 0 se passou, 3 se falhou. O resultado é a linha `[BackRooms] Teste de fumaça PASSOU/FALHOU: ...` do log.
 - `Level0SmokeTest.BatchHost` + `BatchJoin` — host e cliente ao mesmo tempo. O segundo editor
   precisa de uma **cópia** do projeto em outra pasta. `BatchHostDrawFirst` + `BatchJoinLate`
   testam quem entra depois.

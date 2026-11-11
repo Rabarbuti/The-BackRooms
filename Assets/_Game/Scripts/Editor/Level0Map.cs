@@ -32,6 +32,9 @@ namespace BackRooms.EditorTools
         static readonly Color32 Spawn = new Color32(60, 200, 90, 255);
         static readonly Color32 Exit = new Color32(230, 40, 30, 255);
         static readonly Color32 PathColor = new Color32(40, 130, 235, 255);
+        static readonly Color32 SafePathColor = new Color32(40, 190, 110, 255);
+        static readonly Color32 PitColor = new Color32(8, 7, 6, 255);
+        static readonly Color32 PitEdge = new Color32(190, 60, 30, 255);
         static readonly Color32 Blood = new Color32(120, 0, 10, 255);
         static readonly Color32 Word = new Color32(20, 60, 170, 255);
         static readonly Color32 Arrow = new Color32(10, 10, 10, 255);
@@ -43,14 +46,15 @@ namespace BackRooms.EditorTools
         static int _originX;
         static int _originY;
         static float _levelDepth;
+        static int _cellsX;
 
         [MenuItem("BackRooms/Gerar mapa 2D do Level 0")]
         public static void ExportFromMenu()
         {
             var builder = UnityEngine.Object.FindFirstObjectByType<LevelBuilder>();
             int seed = builder != null ? builder.seed : 1998;
-            int width = builder != null ? builder.width : 16;
-            int height = builder != null ? builder.height : 16;
+            int width = builder != null ? builder.width : LevelBuilder.DefaultSize;
+            int height = builder != null ? builder.height : LevelBuilder.DefaultSize;
 
             string path = Export(seed, width, height);
             EditorUtility.RevealInFinder(path);
@@ -66,7 +70,7 @@ namespace BackRooms.EditorTools
                 for (int i = 0; i < args.Length - 1; i++)
                     if (args[i] == "-mapSeed") int.TryParse(args[i + 1], out seed);
 
-                Export(seed, 16, 16);
+                Export(seed, LevelBuilder.DefaultSize, LevelBuilder.DefaultSize);
                 Level0AutoUpdate.OpenGameScene();
                 EditorApplication.Exit(0);
             }
@@ -89,6 +93,7 @@ namespace BackRooms.EditorTools
             _originX = Margin;
             _originY = TitleHeight;
             _levelDepth = data.Height * LevelBuilder.Cell;
+            _cellsX = data.Width;
             _pixels = new Color32[_width * _height];
             for (int i = 0; i < _pixels.Length; i++) _pixels[i] = Background;
 
@@ -96,7 +101,9 @@ namespace BackRooms.EditorTools
             PixelFont.Draw(_pixels, _width, _height, Margin, 18, title.Replace(',', '.'), 2, Ink);
 
             DrawFloor(data);
-            DrawPath(data);
+            DrawPits(data);
+            DrawPath(data.SafePathCells, SafePathColor, -0.22f);
+            DrawPath(data.PathCells, PathColor, 0.22f);
             DrawLights(data);
             DrawWalls(data);
             DrawMarks(data);
@@ -139,18 +146,48 @@ namespace BackRooms.EditorTools
                 Line(0f, z * LevelBuilder.Cell, d.Width * LevelBuilder.Cell, z * LevelBuilder.Cell, 1, GridLine, 0.12f);
         }
 
-        static void DrawPath(LevelData d)
+        // Buracos: o vazio em preto, com contorno, e por cima as faixas de travessia na cor do piso.
+        static void DrawPits(LevelData d)
         {
-            for (int i = 0; i + 1 < d.PathCells.Count; i++)
-            {
-                Vector2 a = CellCenter(d, d.PathCells[i]);
-                Vector2 b = CellCenter(d, d.PathCells[i + 1]);
+            float cell = LevelBuilder.Cell;
+            float half = LevelBuilder.StripWidth * 0.5f;
 
-                // Pontilhado.
+            foreach (PitArea area in d.Pits)
+            {
+                Rect(area.X0 * cell, area.Z0 * cell, area.Width * cell, area.Height * cell, PitEdge);
+                Rect(area.X0 * cell + 0.2f, area.Z0 * cell + 0.2f, area.Width * cell - 0.4f, area.Height * cell - 0.4f, PitColor);
+            }
+
+            for (int z = 0; z < d.Height; z++)
+            {
+                for (int x = 0; x < d.Width; x++)
+                {
+                    if (d.PitStrips[x, z] == 0) continue;
+
+                    Color32 color = Color32.Lerp(CleanFloor, WornFloor, LevelGenerator.WearAt(d, x, z));
+                    float cx = (x + 0.5f) * cell, cz = (z + 0.5f) * cell;
+
+                    Rect(cx - half, cz - half, half * 2f, half * 2f, color);
+                    if (d.HasStrip(x, z, WallSide.West)) Rect(x * cell, cz - half, cell * 0.5f, half * 2f, color);
+                    if (d.HasStrip(x, z, WallSide.East)) Rect(cx, cz - half, cell * 0.5f, half * 2f, color);
+                    if (d.HasStrip(x, z, WallSide.South)) Rect(cx - half, z * cell, half * 2f, cell * 0.5f, color);
+                    if (d.HasStrip(x, z, WallSide.North)) Rect(cx - half, cz, half * 2f, cell * 0.5f, color);
+                }
+            }
+        }
+
+        // Pontilhado de célula em célula. O deslocamento separa os dois caminhos onde coincidem.
+        static void DrawPath(System.Collections.Generic.List<int> cells, Color32 color, float offset)
+        {
+            for (int i = 0; i + 1 < cells.Count; i++)
+            {
+                Vector2 a = CellCenter(_cellsX, cells[i]) + new Vector2(offset, offset);
+                Vector2 b = CellCenter(_cellsX, cells[i + 1]) + new Vector2(offset, offset);
+
                 for (float t = 0f; t < 1f; t += 0.2f)
                 {
                     Vector2 p = Vector2.Lerp(a, b, t);
-                    Dot(p.x, p.y, 2, PathColor);
+                    Dot(p.x, p.y, 2, color);
                 }
             }
         }
@@ -306,7 +343,18 @@ namespace BackRooms.EditorTools
 
             Item((cx, cy) => Disc(cx, cy, 7, Spawn), "INICIO (SALA FECHADA)");
             Item((cx, cy) => PixelFont.Fill(_pixels, _width, _height, cx - 8, cy - 5, 16, 10, Exit), "SAIDA (PORTA EXIT)");
-            Item((cx, cy) => { for (int i = -8; i <= 8; i += 5) Disc(cx + i, cy, 2, PathColor); }, "CAMINHO MAIS CURTO");
+            Item((cx, cy) => { for (int i = -8; i <= 8; i += 5) Disc(cx + i, cy, 2, PathColor); }, "CAMINHO DIRETO");
+            PixelFont.Draw(_pixels, _width, _height, x + 36, row - 8, "(PELAS FAIXAS)", 2, Ink);
+            row += 16;
+            Item((cx, cy) => { for (int i = -8; i <= 8; i += 5) Disc(cx + i, cy, 2, SafePathColor); }, "CAMINHO SEGURO");
+            PixelFont.Draw(_pixels, _width, _height, x + 36, row - 8, "(SEM BURACO)", 2, Ink);
+            row += 16;
+            Item((cx, cy) =>
+            {
+                PixelFont.Fill(_pixels, _width, _height, cx - 10, cy - 7, 20, 14, PitEdge);
+                PixelFont.Fill(_pixels, _width, _height, cx - 8, cy - 5, 16, 10, PitColor);
+                PixelFont.Fill(_pixels, _width, _height, cx - 8, cy - 1, 16, 3, WornFloor);
+            }, "BURACO COM FAIXA");
             Item((cx, cy) => PixelFont.Fill(_pixels, _width, _height, cx - 10, cy - 2, 20, 4, Ink), "PAREDE (0.2 M)");
             Item((cx, cy) => PixelFont.Fill(_pixels, _width, _height, cx - 5, cy - 5, 10, 10, Ink), "PILAR (0.8 M)");
             Item((cx, cy) =>
@@ -359,7 +407,11 @@ namespace BackRooms.EditorTools
             row += 22;
             PixelFont.Draw(_pixels, _width, _height, x, row, $"ESCONDERIJOS: {hideouts}", 2, Ink);
             row += 22;
-            PixelFont.Draw(_pixels, _width, _height, x, row, $"CAMINHO: {(d.PathCells.Count - 1) * (int)LevelBuilder.Cell} M", 2, Ink);
+            PixelFont.Draw(_pixels, _width, _height, x, row, $"BURACOS: {d.Pits.Count}", 2, Ink);
+            row += 22;
+            PixelFont.Draw(_pixels, _width, _height, x, row, $"DIRETO: {(d.PathCells.Count - 1) * (int)LevelBuilder.Cell} M", 2, Ink);
+            row += 22;
+            PixelFont.Draw(_pixels, _width, _height, x, row, $"SEGURO: {(d.SafePathCells.Count - 1) * (int)LevelBuilder.Cell} M", 2, Ink);
             row += 34;
             PixelFont.Draw(_pixels, _width, _height, x, row, "NORTE (Z) PARA CIMA", 1, Ink);
             row += 12;
@@ -368,9 +420,9 @@ namespace BackRooms.EditorTools
 
         // ---------------------------------------------------------------- Desenho
 
-        static Vector2 CellCenter(LevelData d, int index)
+        static Vector2 CellCenter(int cellsX, int index)
         {
-            return new Vector2((index % d.Width + 0.5f) * LevelBuilder.Cell, (index / d.Width + 0.5f) * LevelBuilder.Cell);
+            return new Vector2((index % cellsX + 0.5f) * LevelBuilder.Cell, (index / cellsX + 0.5f) * LevelBuilder.Cell);
         }
 
         // Converte metros do mundo (x para a direita, z para cima) em pixels da imagem.

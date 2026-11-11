@@ -139,6 +139,18 @@ namespace BackRooms.EditorTools
 
                 if (player != null) ShootPenSample(builder, player, camera, target, readback, folder);
 
+                if (player != null) ShootPits(builder, player, camera, torch, target, readback, folder);
+
+                if (player != null) ShootEntity(builder, player, camera, torch, target, readback, folder);
+
+                // A tela de quem acabou de cair num buraco.
+                if (camcorder != null)
+                {
+                    camcorder.Draw(true, 207.47f, 207.47f, 0.8f, false, null, true);
+                    Shoot(camera, target, readback, Path.Combine(folder, "sem_sinal.png"));
+                    camcorder.Draw(true, 207.47f, 207.47f, 0.8f, false);
+                }
+
                 // Quatro vistas de uma área distante do início, onde o desgaste é total.
                 if (player != null)
                 {
@@ -305,6 +317,121 @@ namespace BackRooms.EditorTools
             torch.enabled = true;
             Shoot(camera, target, readback, Path.Combine(folder, name + "_lanterna.png"));
             torch.enabled = false;
+        }
+
+        // A entidade num trecho reto do caminho: parada a 8 m, correndo a 8 m e de perto. Fora
+        // do Play ela não se move sozinha; o corpo é montado e posto em pose só para a foto.
+        static void ShootEntity(LevelBuilder builder, Transform player, Camera camera, Light torch,
+                                RenderTexture target, Texture2D readback, string folder)
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(Level0Setup.EntityPrefabPath);
+            LevelData data = builder.Data;
+            if (prefab == null || !prefab.TryGetComponent(out BackRooms.Entities.EntityBody source)) return;
+
+            // Três células seguidas em linha reta, com luz acesa na do meio se houver.
+            int found = -1;
+            for (int i = 4; i + 2 < data.SafePathCells.Count; i++)
+            {
+                int a = data.SafePathCells[i], b = data.SafePathCells[i + 1], c = data.SafePathCells[i + 2];
+                if (b - a != c - b) continue;
+
+                if (found < 0) found = i;
+                if (data.Lights[b % data.Width, b / data.Width] != LightState.On) continue;
+
+                found = i;
+                break;
+            }
+
+            if (found < 0) return;
+
+            Vector3 from = builder.CellCenter(data.SafePathCells[found] % data.Width, data.SafePathCells[found] / data.Width);
+            Vector3 to = builder.CellCenter(data.SafePathCells[found + 2] % data.Width, data.SafePathCells[found + 2] / data.Width);
+            Vector3 look = (to - from).normalized;
+
+            var figure = new GameObject("EntidadeDaFoto");
+            var body = figure.AddComponent<BackRooms.Entities.EntityBody>();
+            body.bodyMaterial = source.bodyMaterial;
+            body.eyeMaterial = source.eyeMaterial;
+            body.Build();
+
+            Quaternion level = camera.transform.localRotation;
+
+            try
+            {
+                figure.transform.SetPositionAndRotation(to, Quaternion.LookRotation(-look, Vector3.up));
+
+                body.Pose(0.1f, 0f, 0f, 2f);
+                ShootPair(player, camera, torch, target, readback, folder, "entidade_parada", from, look);
+
+                body.Pose(0.2f, 4.6f, 1f, 2f);
+                ShootPair(player, camera, torch, target, readback, folder, "entidade_correndo", from, look);
+
+                // De perto, olhando um pouco para cima: ela tem 3 m.
+                camera.transform.localRotation = Quaternion.Euler(-14f, 0f, 0f);
+                ShootPair(player, camera, torch, target, readback, folder, "entidade_perto", to - look * 3.2f, look);
+
+                // De lado, para conferir a postura.
+                camera.transform.localRotation = Quaternion.Euler(-6f, 0f, 0f);
+                figure.transform.rotation = Quaternion.LookRotation(Vector3.Cross(Vector3.up, look), Vector3.up);
+                ShootPair(player, camera, torch, target, readback, folder, "entidade_de_lado", to - look * 4.5f, look);
+            }
+            finally
+            {
+                camera.transform.localRotation = level;
+                UnityEngine.Object.DestroyImmediate(figure);
+            }
+        }
+
+        // Dois buracos, cada um visto de três jeitos: da beirada, de cima da faixa olhando
+        // para baixo e da beirada com a lanterna acesa.
+        static void ShootPits(LevelBuilder builder, Transform player, Camera camera, Light torch,
+                              RenderTexture target, Texture2D readback, string folder)
+        {
+            LevelData data = builder.Data;
+            Quaternion level = camera.transform.localRotation;
+            int shot = 0;
+
+            foreach (PitArea area in data.Pits)
+            {
+                if (shot >= 2 || !FindPitEntry(data, area, out int x, out int z, out WallSide side)) continue;
+
+                data.Neighbor(x, z, side, out int nx, out int nz);
+                Vector3 inside = builder.CellCenter(x, z);
+                Vector3 outside = builder.CellCenter(nx, nz);
+                Vector3 look = (inside - outside).normalized;
+                string name = "buraco_" + shot++;
+
+                // Da beirada, um passo antes de a faixa começar.
+                camera.transform.localRotation = Quaternion.Euler(22f, 0f, 0f);
+                ShootPair(player, camera, torch, target, readback, folder, name, outside + look * 0.6f, look);
+
+                // Em cima da faixa, olhando para o fundo.
+                camera.transform.localRotation = Quaternion.Euler(55f, 0f, 0f);
+                player.position = new Vector3(inside.x, 0.05f, inside.z) - look * 1.2f;
+                player.rotation = Quaternion.LookRotation(look, Vector3.up);
+                Shoot(camera, target, readback, Path.Combine(folder, name + "_faixa.png"));
+            }
+
+            camera.transform.localRotation = level;
+        }
+
+        // Uma célula do buraco em que a faixa chega até a beirada, e o lado por onde ela sai.
+        static bool FindPitEntry(LevelData data, PitArea area, out int x, out int z, out WallSide side)
+        {
+            for (z = area.Z0; z < area.Z0 + area.Height; z++)
+                for (x = area.X0; x < area.X0 + area.Width; x++)
+                    foreach (WallSide candidate in new[] { WallSide.South, WallSide.North, WallSide.West, WallSide.East })
+                    {
+                        if (!data.HasStrip(x, z, candidate)) continue;
+                        if (!data.Neighbor(x, z, candidate, out int nx, out int nz) || data.Pit[nx, nz]) continue;
+
+                        side = candidate;
+                        return true;
+                    }
+
+            x = z = 0;
+            side = WallSide.South;
+            return false;
         }
 
         static bool FindAlcove(LevelData data, out Vector3 origin, out Vector3 opening)

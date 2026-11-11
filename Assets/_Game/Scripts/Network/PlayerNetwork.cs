@@ -1,6 +1,8 @@
 using System.Collections;
+using System.Collections.Generic;
 using BackRooms.Player;
 using Unity.Netcode;
+using Unity.Netcode.Components;
 using UnityEngine;
 
 namespace BackRooms.Net
@@ -36,6 +38,9 @@ namespace BackRooms.Net
         readonly NetworkVariable<bool> _crouching = new NetworkVariable<bool>(
             false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
+        readonly NetworkVariable<bool> _hidden = new NetworkVariable<bool>(
+            false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+
         float _nextSend;
         float _shownPitch;
         float _shownEye;
@@ -44,8 +49,31 @@ namespace BackRooms.Net
         /// <summary>O jogador desta máquina, quando já está no mapa. Nulo no menu.</summary>
         public static PlayerNetwork Local { get; private set; }
 
+        /// <summary>Todos os jogadores da sessão que existem nesta máquina. A entidade lê daqui.</summary>
+        public static readonly List<PlayerNetwork> All = new List<PlayerNetwork>();
+
+        /// <summary>Verdadeiro quando este jogador já está posicionado no mapa.</summary>
+        public bool InGame => _ready;
+
+        /// <summary>Agachado? Vale em qualquer máquina: a do dono lê o controle, as outras a rede.</summary>
+        public bool Crouching => IsOwner ? controller.IsCrouching : _crouching.Value;
+
+        /// <summary>Dentro de um esconderijo? Vale em qualquer máquina, como <see cref="Crouching"/>.</summary>
+        public bool Hidden => IsOwner ? controller.IsHidden : _hidden.Value;
+
+        /// <summary>
+        /// Do host para o dono do jogador: a entidade pegou você. A queda de sinal e a volta
+        /// à sala inicial acontecem na máquina do dono, que é quem manda na própria posição.
+        /// </summary>
+        [Rpc(SendTo.Owner)]
+        public void GetCaughtRpc()
+        {
+            controller.GetCaught();
+        }
+
         public override void OnNetworkSpawn()
         {
+            All.Add(this);
             _shownEye = controller.standingEyeHeight;
 
             if (IsOwner) StartCoroutine(BeginLocal());
@@ -55,7 +83,11 @@ namespace BackRooms.Net
         public override void OnNetworkDespawn()
         {
             _ready = false;
+            All.Remove(this);
             if (Local == this) Local = null;
+
+            controller.Respawned -= OnRespawned;
+            controller.RespawnPoint = null;
         }
 
         IEnumerator BeginLocal()
@@ -69,6 +101,10 @@ namespace BackRooms.Net
             Vector3 spawn = session != null ? session.SpawnPoint(OwnerClientId) : transform.position;
             controller.Teleport(spawn, 0f);
 
+            // Quem cai num buraco volta para o mesmo ponto em que começou.
+            controller.RespawnPoint = RespawnPoint;
+            controller.Respawned += OnRespawned;
+
             playerCamera.enabled = true;
             listener.enabled = true;
             flashlight.inputEnabled = true;
@@ -77,6 +113,20 @@ namespace BackRooms.Net
             Local = this;
 
             if (session != null) session.NotifyLocalPlayerReady();
+        }
+
+        Vector3 RespawnPoint()
+        {
+            GameSession session = GameSession.Instance;
+            return session != null ? session.SpawnPoint(OwnerClientId) : transform.position;
+        }
+
+        // Avisa a rede de que a mudança de lugar foi um salto. Sem isso os outros jogadores
+        // veriam este deslizar do fundo do buraco até a sala inicial, atravessando paredes.
+        void OnRespawned()
+        {
+            if (IsSpawned && TryGetComponent(out NetworkTransform networkTransform))
+                networkTransform.Teleport(transform.position, transform.rotation, transform.localScale);
         }
 
         void BeginRemote()
@@ -107,6 +157,7 @@ namespace BackRooms.Net
         {
             if (_flashlightOn.Value != flashlight.IsOn) _flashlightOn.Value = flashlight.IsOn;
             if (_crouching.Value != controller.IsCrouching) _crouching.Value = controller.IsCrouching;
+            if (_hidden.Value != controller.IsHidden) _hidden.Value = controller.IsHidden;
 
             if (Time.unscaledTime < _nextSend) return;
             _nextSend = Time.unscaledTime + SendInterval;

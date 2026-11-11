@@ -74,6 +74,20 @@ namespace BackRooms.World
         public float Strength;
     }
 
+    /// <summary>Buraco no piso: um retângulo de células sem chão.</summary>
+    public struct PitArea
+    {
+        public int X0;
+        public int Z0;
+        public int Width;
+        public int Height;
+
+        public bool Contains(int x, int z)
+        {
+            return x >= X0 && x < X0 + Width && z >= Z0 && z < Z0 + Height;
+        }
+    }
+
     /// <summary>
     /// Descrição pura de um nível em grade. Não referencia nada do Unity, então pode ser
     /// gerada de forma idêntica em qualquer cliente a partir da mesma seed.
@@ -156,8 +170,68 @@ namespace BackRooms.World
 
         public List<Decoration> Decorations = new List<Decoration>();
 
-        /// <summary>Células do caminho mais curto do início até a saída, em ordem. Cada item é x + z * Width.</summary>
+        /// <summary>
+        /// Células do caminho mais curto do início até a saída, em ordem. Cada item é
+        /// x + z * Width. É o caminho direto: atravessa os buracos pelas faixas.
+        /// </summary>
         public List<int> PathCells = new List<int>();
+
+        /// <summary>O caminho mais curto que não pisa em nenhum buraco. Sempre existe.</summary>
+        public List<int> SafePathCells = new List<int>();
+
+        /// <summary>Célula sem piso. Tamanho [Width, Height].</summary>
+        public bool[,] Pit;
+
+        /// <summary>
+        /// Faixas estreitas de chão que sobraram dentro de um buraco. Em cada célula, um bit
+        /// por lado (1 &lt;&lt; (int)WallSide): a faixa vai do centro da célula até o meio daquele
+        /// lado. Faixas de células vizinhas se encontram na divisa.
+        /// </summary>
+        public byte[,] PitStrips;
+
+        public List<PitArea> Pits = new List<PitArea>();
+
+        public bool HasStrip(int x, int z, WallSide side)
+        {
+            return (PitStrips[x, z] & (1 << (int)side)) != 0;
+        }
+
+        public static WallSide Opposite(WallSide side)
+        {
+            switch (side)
+            {
+                case WallSide.South: return WallSide.North;
+                case WallSide.North: return WallSide.South;
+                case WallSide.West: return WallSide.East;
+                default: return WallSide.West;
+            }
+        }
+
+        /// <summary>Célula vizinha daquele lado. Falso se cai fora do mapa.</summary>
+        public bool Neighbor(int x, int z, WallSide side, out int nx, out int nz)
+        {
+            nx = x + (side == WallSide.East ? 1 : side == WallSide.West ? -1 : 0);
+            nz = z + (side == WallSide.North ? 1 : side == WallSide.South ? -1 : 0);
+            return nx >= 0 && nz >= 0 && nx < Width && nz < Height;
+        }
+
+        /// <summary>
+        /// Dá para andar da célula (x, z) para a vizinha daquele lado? Parede barra sempre.
+        /// Buraco barra, a não ser que <paramref name="overStrips"/> permita atravessar pelas
+        /// faixas — e aí é preciso haver faixa dos dois lados da divisa.
+        /// </summary>
+        public bool CanWalk(int x, int z, WallSide side, bool overStrips)
+        {
+            if (!Neighbor(x, z, side, out int nx, out int nz) || HasWall(x, z, side)) return false;
+
+            bool fromPit = Pit[x, z];
+            bool toPit = Pit[nx, nz];
+            if (!fromPit && !toPit) return true;
+            if (!overStrips) return false;
+
+            if (fromPit && !HasStrip(x, z, side)) return false;
+            return !toPit || HasStrip(nx, nz, Opposite(side));
+        }
 
         public bool HasWall(int x, int z, WallSide side)
         {
@@ -187,7 +261,8 @@ namespace BackRooms.World
     /// <summary>
     /// Gerador determinístico do Level 0: paredes soltas que não fecham salas, salões com
     /// floresta de pilares, luminárias irregulares, paredes grossas com esconderijo, uma
-    /// saída distante e marcas nas paredes (sangue, palavras e setas que levam à saída).
+    /// saída distante, buracos no piso com faixas estreitas para atravessar e marcas nas
+    /// paredes (sangue, palavras e umas poucas setas que apontam para a saída).
     /// Usa apenas System.Random com a seed recebida — nunca UnityEngine.Random.
     /// </summary>
     public static class LevelGenerator
@@ -198,7 +273,30 @@ namespace BackRooms.World
         const double LoosePillarChance = 0.06;
         const double LightChance = 0.42;
         const double AlcoveChance = 0.07;
-        const double ArrowChance = 0.55;
+
+        // Setas: poucas e longe umas das outras. Metade no caminho direto, o resto onde o
+        // mapa ainda não tem nenhuma. Distâncias em células.
+        public const int MaxArrows = 6;
+        const int ArrowsOnPath = 3;
+        const float ArrowMinSpacing = 3f;
+        const float ArrowMinFromSpawn = 2.5f;
+
+        // Cada luminária acesa custa 6 sombras e o HDRP está configurado para 1024: este
+        // teto deixa folga para as lanternas dos jogadores.
+        const int MaxLitLights = 165;
+
+        // Buracos: um a cada tantas células do mapa, afastados da sala inicial, da saída e
+        // uns dos outros (em células). O desvio é contado em células a mais de caminhada.
+        const int CellsPerPit = 100;
+        const int PitRoomMargin = 2;
+        const int PitExitMargin = 1;
+        const int PitGap = 2;
+        const int PitUsefulDetour = 10;
+        const int PitMaxDetour = 14;
+        const double PitBranchChance = 0.35;
+        const int PitMaxBranches = 2;
+
+        static readonly (int w, int h)[] PitSizes = { (2, 2), (3, 2), (2, 3), (3, 3), (4, 2), (2, 4), (4, 3), (3, 4) };
 
         // O entorno do ponto de início é novo; o desgaste aparece conforme se afasta dele.
         // Distâncias em células (4 m cada), em linha reta a partir da célula inicial.
@@ -207,6 +305,12 @@ namespace BackRooms.World
         // Sala inicial: lado em células e número de vãos de porta.
         const int SpawnRoomSize = 2;
         const int SpawnRoomDoors = 1;
+
+        // A sala fica perto de um canto sorteado, a esta distância (em células) das duas
+        // bordas mais próximas, mais um sorteio de até SpawnEdgeSpread. Como a saída é a
+        // célula mais distante do início, ela vai parar do outro lado do mapa.
+        const int SpawnEdgeMin = 3;
+        const int SpawnEdgeSpread = 3;
         const float WornRadius = 7f;
 
         // Sangue, palavras e poças só aparecem onde o desgaste já passou deste valor.
@@ -252,12 +356,15 @@ namespace BackRooms.World
                 DoorWest = new bool[width + 1, height],
                 Pillar = new bool[width + 1, height + 1],
                 Lights = new LightState[width, height],
+                Pit = new bool[width, height],
+                PitStrips = new byte[width, height],
                 SpawnX = width / 2,
                 SpawnZ = height / 2
             };
 
             // A ordem das etapas define a ordem de consumo do gerador: não reordenar,
             // senão a mesma seed passa a produzir outro mapa.
+            PlaceSpawn(data, rng);
             ScatterWalls(data, rng);
             CarveHalls(data, rng);
             CarveSpawnRoom(data, rng);
@@ -266,17 +373,38 @@ namespace BackRooms.World
             ScatterPillars(data, rng);
             ScatterLights(data, rng);
             FinishSpawnRoom(data);
+            LimitLights(data, rng);
             ScatterAlcoves(data, rng);
 
-            int[,] parent = FindExit(data);
+            FindExit(data);
+            DigPits(data, rng);
+            data.PathCells = ShortestPath(data, overStrips: true);
+            data.SafePathCells = ShortestPath(data, overStrips: false);
+
             var usedFaces = new HashSet<int> { FaceKey(data, data.ExitX, data.ExitZ, data.ExitSide) };
 
-            PlaceArrows(data, rng, parent, usedFaces);
+            PlaceArrows(data, rng, usedFaces);
             PlaceWallMarks(data, rng, usedFaces);
             PlaceFloorPools(data, rng);
             PlaceGrime(data, rng);
 
             return data;
+        }
+
+        // Ponto de início: fora do centro, perto de um dos quatro cantos. Em mapa pequeno
+        // demais para isso, fica no meio.
+        static void PlaceSpawn(LevelData d, Random rng)
+        {
+            bool east = rng.Next(2) == 0;
+            bool north = rng.Next(2) == 0;
+            int offsetX = SpawnEdgeMin + rng.Next(SpawnEdgeSpread + 1);
+            int offsetZ = SpawnEdgeMin + rng.Next(SpawnEdgeSpread + 1);
+
+            offsetX = Math.Min(offsetX, d.Width / 2);
+            offsetZ = Math.Min(offsetZ, d.Height / 2);
+
+            d.SpawnX = east ? d.Width - offsetX : offsetX;
+            d.SpawnZ = north ? d.Height - offsetZ : offsetZ;
         }
 
         // Paredes internas com tendência a continuar em linha, para formar trechos longos.
@@ -505,6 +633,26 @@ namespace BackRooms.World
                         d.Lights[x, z] = LightState.On;
         }
 
+        // Apaga luminárias sorteadas até caber no limite de sombras. Nunca as da sala inicial.
+        static void LimitLights(LevelData d, Random rng)
+        {
+            int lit = 0;
+            foreach (LightState state in d.Lights)
+                if (state == LightState.On || state == LightState.Flicker) lit++;
+
+            for (int attempt = 0; lit > MaxLitLights && attempt < 20000; attempt++)
+            {
+                int x = rng.Next(d.Width);
+                int z = rng.Next(d.Height);
+                LightState state = d.Lights[x, z];
+
+                if ((state != LightState.On && state != LightState.Flicker) || d.InRoom(x, z)) continue;
+
+                d.Lights[x, z] = LightState.None;
+                lit--;
+            }
+        }
+
         // Algumas paredes internas viram paredes grossas com um nicho para se esconder.
         static void ScatterAlcoves(LevelData d, Random rng)
         {
@@ -529,34 +677,11 @@ namespace BackRooms.World
             }
         }
 
-        // Busca em largura a partir do spawn. A saída fica na célula mais distante que
-        // tenha uma parede comum onde encaixar a porta. Devolve, para cada célula, o
-        // índice da célula anterior no caminho mais curto (-1 no spawn).
-        static int[,] FindExit(LevelData d)
+        // A saída fica na célula mais distante do início, andando, que tenha uma parede
+        // comum onde encaixar a porta. É escolhida antes de existirem buracos.
+        static void FindExit(LevelData d)
         {
-            var distance = new int[d.Width, d.Height];
-            var parent = new int[d.Width, d.Height];
-            for (int z = 0; z < d.Height; z++)
-                for (int x = 0; x < d.Width; x++)
-                {
-                    distance[x, z] = -1;
-                    parent[x, z] = -1;
-                }
-
-            var queue = new Queue<(int x, int z)>();
-            distance[d.SpawnX, d.SpawnZ] = 0;
-            queue.Enqueue((d.SpawnX, d.SpawnZ));
-
-            while (queue.Count > 0)
-            {
-                var (x, z) = queue.Dequeue();
-                int here = x + z * d.Width;
-
-                if (x > 0 && !d.WallWest[x, z]) Step(d, distance, parent, queue, x - 1, z, here, distance[x, z]);
-                if (x < d.Width - 1 && !d.WallWest[x + 1, z]) Step(d, distance, parent, queue, x + 1, z, here, distance[x, z]);
-                if (z > 0 && !d.WallSouth[x, z]) Step(d, distance, parent, queue, x, z - 1, here, distance[x, z]);
-                if (z < d.Height - 1 && !d.WallSouth[x, z + 1]) Step(d, distance, parent, queue, x, z + 1, here, distance[x, z]);
-            }
+            int[,] distance = Distances(d, d.SpawnX, d.SpawnZ, false, null, null);
 
             int best = -1;
             d.ExitX = d.SpawnX;
@@ -581,17 +706,372 @@ namespace BackRooms.World
                     }
                 }
             }
-
-            return parent;
         }
 
-        static void Step(LevelData d, int[,] distance, int[,] parent, Queue<(int x, int z)> queue,
-                         int x, int z, int from, int fromDistance)
+        /// <summary>
+        /// Busca em largura: passos de (startX, startZ) até cada célula, -1 se não alcança.
+        /// Se <paramref name="parent"/> for dado, recebe a célula anterior no caminho mais
+        /// curto (-1 na origem). <paramref name="distance"/> permite reaproveitar a matriz.
+        /// </summary>
+        static int[,] Distances(LevelData d, int startX, int startZ, bool overStrips, int[,] parent, int[,] distance)
         {
-            if (distance[x, z] >= 0) return;
-            distance[x, z] = fromDistance + 1;
-            parent[x, z] = from;
-            queue.Enqueue((x, z));
+            if (distance == null) distance = new int[d.Width, d.Height];
+
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                {
+                    distance[x, z] = -1;
+                    if (parent != null) parent[x, z] = -1;
+                }
+
+            var queue = new Queue<(int x, int z)>();
+            distance[startX, startZ] = 0;
+            queue.Enqueue((startX, startZ));
+
+            while (queue.Count > 0)
+            {
+                var (x, z) = queue.Dequeue();
+
+                foreach (WallSide side in Sides)
+                {
+                    if (!d.CanWalk(x, z, side, overStrips)) continue;
+
+                    d.Neighbor(x, z, side, out int nx, out int nz);
+                    if (distance[nx, nz] >= 0) continue;
+
+                    distance[nx, nz] = distance[x, z] + 1;
+                    if (parent != null) parent[nx, nz] = x + z * d.Width;
+                    queue.Enqueue((nx, nz));
+                }
+            }
+
+            return distance;
+        }
+
+        /// <summary>Caminho mais curto do início até a saída, em ordem. Vazio se não há.</summary>
+        static List<int> ShortestPath(LevelData d, bool overStrips)
+        {
+            var parent = new int[d.Width, d.Height];
+            int[,] distance = Distances(d, d.SpawnX, d.SpawnZ, overStrips, parent, null);
+
+            var path = new List<int>();
+            if (distance[d.ExitX, d.ExitZ] < 0) return path;
+
+            int cell = d.ExitX + d.ExitZ * d.Width;
+            while (cell >= 0)
+            {
+                path.Add(cell);
+                cell = parent[cell % d.Width, cell / d.Width];
+            }
+
+            path.Reverse();
+            return path;
+        }
+
+        // ---------------------------------------------------------------- Buracos
+
+        // Abre buracos grandes no piso, um de cada vez, de preferência em cima do caminho
+        // seguro mais curto que existir naquele momento. Quem segue em frente dá de cara
+        // com o buraco e escolhe: atravessar pelas faixas estreitas ou procurar outro
+        // caminho. Entre os lugares possíveis, fica o que mais alonga o desvio. Quando não
+        // cabe mais nenhum no caminho, o buraco vai para outro canto do mapa. Um buraco
+        // nunca isola parte do mapa: toda célula com piso continua alcançável sem faixa.
+        static void DigPits(LevelData d, Random rng)
+        {
+            int target = Math.Max(1, d.Width * d.Height / CellsPerPit);
+            var distance = new int[d.Width, d.Height];
+            var onPath = new bool[d.Width, d.Height];
+
+            for (int n = 0; n < target; n++)
+            {
+                List<int> path = ShortestPath(d, overStrips: false);
+                if (path.Count < 6) break;
+
+                Array.Clear(onPath, 0, onPath.Length);
+                foreach (int cell in path) onPath[cell % d.Width, cell / d.Width] = true;
+
+                bool found = false;
+                double bestScore = 0.0;
+                PitArea best = default;
+
+                // Primeira passada: só lugares que cortam o caminho. Segunda, se preciso: qualquer um.
+                for (int pass = 0; pass < 2 && !found; pass++)
+                {
+                    foreach (var (w, h) in PitSizes)
+                    {
+                        for (int z0 = 0; z0 + h <= d.Height; z0++)
+                        {
+                            for (int x0 = 0; x0 + w <= d.Width; x0++)
+                            {
+                                // Sorteia sempre, para a sequência não depender de quem passa nos testes.
+                                double jitter = rng.NextDouble();
+                                var area = new PitArea { X0 = x0, Z0 = z0, Width = w, Height = h };
+
+                                if (!PitAllowed(d, area)) continue;
+                                if (pass == 0 && !Touches(area, onPath)) continue;
+
+                                MarkPit(d, area, true);
+                                int detour = SafeDetour(d, distance, path.Count);
+                                // Fora do caminho, precisa de duas entradas para haver o que atravessar.
+                                bool crossable = pass == 0 || Entries(d, area).Count >= 2;
+                                MarkPit(d, area, false);
+
+                                // Negativo: o buraco isolaria alguma célula. Desvio longo demais
+                                // também não serve: tiraria a graça de procurar outro caminho.
+                                if (detour < 0 || detour > PitMaxDetour || !crossable) continue;
+
+                                double score = Math.Min(detour, PitUsefulDetour) + w * h * 0.25 + jitter * 2.0;
+                                if (found && score <= bestScore) continue;
+
+                                found = true;
+                                bestScore = score;
+                                best = area;
+                            }
+                        }
+                    }
+                }
+
+                if (!found) break;
+                OpenPit(d, rng, best, path);
+            }
+        }
+
+        static bool PitAllowed(LevelData d, PitArea area)
+        {
+            if (Near(area, PitRoomMargin, d.RoomX0, d.RoomZ0, d.RoomWidth, d.RoomHeight)) return false;
+            if (Near(area, PitExitMargin, d.ExitX, d.ExitZ, 1, 1)) return false;
+
+            foreach (PitArea other in d.Pits)
+                if (Near(area, PitGap, other.X0, other.Z0, other.Width, other.Height)) return false;
+
+            return true;
+        }
+
+        // Verdadeiro se o retângulo dado encosta na área aumentada de 'margin' células para cada lado.
+        static bool Near(PitArea area, int margin, int x0, int z0, int width, int height)
+        {
+            return x0 < area.X0 + area.Width + margin && x0 + width > area.X0 - margin &&
+                   z0 < area.Z0 + area.Height + margin && z0 + height > area.Z0 - margin;
+        }
+
+        static bool Touches(PitArea area, bool[,] cells)
+        {
+            for (int z = area.Z0; z < area.Z0 + area.Height; z++)
+                for (int x = area.X0; x < area.X0 + area.Width; x++)
+                    if (cells[x, z]) return true;
+
+            return false;
+        }
+
+        static void MarkPit(LevelData d, PitArea area, bool pit)
+        {
+            for (int z = area.Z0; z < area.Z0 + area.Height; z++)
+                for (int x = area.X0; x < area.X0 + area.Width; x++)
+                    d.Pit[x, z] = pit;
+        }
+
+        // Quantas células o caminho seguro até a saída ficou mais longo. -1 se alguma
+        // célula com piso deixou de ser alcançável sem atravessar buraco.
+        static int SafeDetour(LevelData d, int[,] distance, int lengthBefore)
+        {
+            Distances(d, d.SpawnX, d.SpawnZ, false, null, distance);
+
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                    if (!d.Pit[x, z] && distance[x, z] < 0) return -1;
+
+            return distance[d.ExitX, d.ExitZ] + 1 - lengthBefore;
+        }
+
+        // Abre o buraco de vez: tira o que havia dentro dele e deixa as faixas de travessia.
+        static void OpenPit(LevelData d, Random rng, PitArea area, List<int> path)
+        {
+            int x0 = area.X0, z0 = area.Z0;
+            int x1 = x0 + area.Width, z1 = z0 + area.Height;
+
+            MarkPit(d, area, true);
+            d.Pits.Add(area);
+
+            // Por dentro não sobra parede nem esconderijo.
+            for (int z = z0 + 1; z < z1; z++)
+                for (int x = x0; x < x1; x++)
+                {
+                    d.WallSouth[x, z] = false;
+                    d.AlcoveSouth[x, z] = 0;
+                }
+
+            for (int x = x0 + 1; x < x1; x++)
+                for (int z = z0; z < z1; z++)
+                {
+                    d.WallWest[x, z] = false;
+                    d.AlcoveWest[x, z] = 0;
+                }
+
+            // Na beirada, parede grossa vira parede comum: o nicho ficaria em cima do vazio.
+            for (int x = x0; x < x1; x++)
+            {
+                d.AlcoveSouth[x, z0] = 0;
+                d.AlcoveSouth[x, z1] = 0;
+            }
+
+            for (int z = z0; z < z1; z++)
+            {
+                d.AlcoveWest[x0, z] = 0;
+                d.AlcoveWest[x1, z] = 0;
+            }
+
+            for (int z = z0; z <= z1; z++)
+                for (int x = x0; x <= x1; x++)
+                    d.Pillar[x, z] = false;
+
+            // Faixa principal: entra por onde o caminho entrava e sai por onde ele saía.
+            int first = -1, last = -1;
+            for (int i = 0; i < path.Count; i++)
+            {
+                if (!area.Contains(path[i] % d.Width, path[i] / d.Width)) continue;
+                if (first < 0) first = i;
+                last = i;
+            }
+
+            bool trunkXFirst = rng.Next(2) == 0;
+
+            if (first >= 0)
+            {
+                // O início e a saída ficam sempre fora dos buracos, então há célula antes e depois.
+                int ax = path[first] % d.Width, az = path[first] / d.Width;
+                int bx = path[last] % d.Width, bz = path[last] / d.Width;
+
+                AddStrip(d, ax, az, SideToward(d, path[first], path[first - 1]));
+                AddStrip(d, bx, bz, SideToward(d, path[last], path[last + 1]));
+                LayStrip(d, trunkXFirst, ax, az, bx, bz);
+            }
+            else
+            {
+                // Buraco fora do caminho: liga as duas entradas mais distantes uma da outra.
+                List<(int x, int z, WallSide side)> entries = Entries(d, area);
+                int from = 0, to = 0, widest = -1;
+
+                for (int i = 0; i < entries.Count; i++)
+                    for (int j = i + 1; j < entries.Count; j++)
+                    {
+                        int span = Math.Abs(entries[i].x - entries[j].x) + Math.Abs(entries[i].z - entries[j].z);
+                        if (span <= widest) continue;
+
+                        widest = span;
+                        from = i;
+                        to = j;
+                    }
+
+                if (entries.Count > 0)
+                {
+                    AddStrip(d, entries[from].x, entries[from].z, entries[from].side);
+                    AddStrip(d, entries[to].x, entries[to].z, entries[to].side);
+                    LayStrip(d, trunkXFirst, entries[from].x, entries[from].z, entries[to].x, entries[to].z);
+                }
+            }
+
+            // Ramais: algumas das outras entradas do buraco também ganham faixa, ligada à
+            // faixa mais próxima. Sorteia para toda divisa, na mesma ordem, aproveite ou não.
+            int branches = 0;
+
+            for (int z = z0; z < z1; z++)
+            {
+                for (int x = x0; x < x1; x++)
+                {
+                    foreach (WallSide side in Sides)
+                    {
+                        if (!d.Neighbor(x, z, side, out int nx, out int nz) || d.Pit[nx, nz]) continue;
+
+                        bool roll = rng.NextDouble() < PitBranchChance;
+                        bool xFirst = rng.Next(2) == 0;
+
+                        if (!roll || branches >= PitMaxBranches) continue;
+                        if (d.HasWall(x, z, side) || d.HasStrip(x, z, side)) continue;
+                        if (!NearestStrip(d, area, x, z, out int tx, out int tz)) continue;
+
+                        AddStrip(d, x, z, side);
+                        LayStrip(d, xFirst, x, z, tx, tz);
+                        branches++;
+                    }
+                }
+            }
+        }
+
+        // Por onde se chega ao buraco: divisas sem parede entre uma célula dele e uma de piso.
+        static List<(int x, int z, WallSide side)> Entries(LevelData d, PitArea area)
+        {
+            var entries = new List<(int x, int z, WallSide side)>();
+
+            for (int z = area.Z0; z < area.Z0 + area.Height; z++)
+                for (int x = area.X0; x < area.X0 + area.Width; x++)
+                    foreach (WallSide side in Sides)
+                        if (d.Neighbor(x, z, side, out int nx, out int nz) && !d.Pit[nx, nz] && !d.HasWall(x, z, side))
+                            entries.Add((x, z, side));
+
+            return entries;
+        }
+
+        static WallSide SideToward(LevelData d, int from, int to)
+        {
+            int dx = to % d.Width - from % d.Width;
+            int dz = to / d.Width - from / d.Width;
+
+            if (dx > 0) return WallSide.East;
+            if (dx < 0) return WallSide.West;
+            return dz > 0 ? WallSide.North : WallSide.South;
+        }
+
+        static void AddStrip(LevelData d, int x, int z, WallSide side)
+        {
+            d.PitStrips[x, z] |= (byte)(1 << (int)side);
+        }
+
+        // Faixa em L de uma célula a outra, dentro do mesmo buraco.
+        static void LayStrip(LevelData d, bool xFirst, int ax, int az, int bx, int bz)
+        {
+            int x = ax, z = az;
+
+            for (int leg = 0; leg < 2; leg++)
+            {
+                bool alongX = (leg == 0) == xFirst;
+
+                while (alongX ? x != bx : z != bz)
+                {
+                    WallSide side = alongX ? (bx > x ? WallSide.East : WallSide.West)
+                                           : (bz > z ? WallSide.North : WallSide.South);
+                    d.Neighbor(x, z, side, out int nx, out int nz);
+
+                    AddStrip(d, x, z, side);
+                    AddStrip(d, nx, nz, LevelData.Opposite(side));
+                    x = nx;
+                    z = nz;
+                }
+            }
+        }
+
+        // A célula com faixa mais próxima de (x, z) dentro do buraco, sem contar ela mesma.
+        static bool NearestStrip(LevelData d, PitArea area, int x, int z, out int tx, out int tz)
+        {
+            tx = x;
+            tz = z;
+            int best = int.MaxValue;
+
+            for (int cz = area.Z0; cz < area.Z0 + area.Height; cz++)
+            {
+                for (int cx = area.X0; cx < area.X0 + area.Width; cx++)
+                {
+                    if (d.PitStrips[cx, cz] == 0 || (cx == x && cz == z)) continue;
+
+                    int distance = Math.Abs(cx - x) + Math.Abs(cz - z);
+                    if (distance >= best) continue;
+
+                    best = distance;
+                    tx = cx;
+                    tz = cz;
+                }
+            }
+
+            return best != int.MaxValue;
         }
 
         static int FaceKey(LevelData d, int x, int z, WallSide side)
@@ -599,60 +1079,149 @@ namespace BackRooms.World
             return (x + z * d.Width) * 4 + (int)side;
         }
 
-        // Setas rabiscadas ao longo do caminho mais curto do spawn até a saída. Cada seta
-        // fica numa parede paralela ao sentido de marcha e aponta para o próximo passo.
-        static void PlaceArrows(LevelData d, Random rng, int[,] parent, HashSet<int> usedFaces)
+        // Setas rabiscadas na parede: no máximo MaxArrows, longe umas das outras. As
+        // primeiras ficam no caminho direto, a intervalos iguais; as demais vão para onde o
+        // mapa ainda não tem nenhuma. Toda seta aponta o próximo passo do caminho mais
+        // curto até a saída a partir de onde está — que pode passar por cima de um buraco.
+        static void PlaceArrows(LevelData d, Random rng, HashSet<int> usedFaces)
         {
-            int cx = d.ExitX, cz = d.ExitZ;
-            d.PathCells.Add(cx + cz * d.Width);
+            int[,] toExit = Distances(d, d.ExitX, d.ExitZ, true, null, null);
+            var placed = new List<(int x, int z)>();
 
-            while (parent[cx, cz] >= 0)
+            int count = d.PathCells.Count;
+            int window = Math.Max(1, count / (ArrowsOnPath * 2));
+
+            for (int i = 0; i < ArrowsOnPath && count > 2; i++)
             {
-                int px = parent[cx, cz] % d.Width;
-                int pz = parent[cx, cz] / d.Width;
-                d.PathCells.Add(px + pz * d.Width);
-                int dirX = cx - px;
-                int dirZ = cz - pz;
+                int target = count * (2 * i + 1) / (ArrowsOnPath * 2);
+                bool done = false;
 
-                // Sorteia sempre, mesmo sem parede disponível, para manter a sequência estável.
-                bool roll = rng.NextDouble() < ArrowChance;
-                bool preferFirst = rng.Next(2) == 0;
-                float along = (float)(rng.NextDouble() * 1.2 - 0.6);
-                float height = 1.25f + (float)rng.NextDouble() * 0.35f;
-
-                WallSide a = dirX != 0 ? WallSide.South : WallSide.West;
-                WallSide b = dirX != 0 ? WallSide.North : WallSide.East;
-                if (!preferFirst) { WallSide t = a; a = b; b = t; }
-
-                if (roll)
+                // A célula do alvo ou, se ela não servir, a mais próxima dela no caminho.
+                for (int offset = 0; offset <= window && !done; offset++)
                 {
-                    WallSide? chosen = null;
-                    if (IsFreeFace(d, px, pz, a, usedFaces)) chosen = a;
-                    else if (IsFreeFace(d, px, pz, b, usedFaces)) chosen = b;
-
-                    if (chosen.HasValue)
+                    for (int sign = 1; sign >= -1 && !done; sign -= 2)
                     {
-                        usedFaces.Add(FaceKey(d, px, pz, chosen.Value));
-                        d.Decorations.Add(new Decoration
-                        {
-                            Kind = DecorationKind.Arrow,
-                            X = px,
-                            Z = pz,
-                            Side = chosen.Value,
-                            Along = along,
-                            Height = height,
-                            DirX = dirX,
-                            DirZ = dirZ
-                        });
+                        int index = target + sign * offset;
+                        if (index < 1 || index > count - 2 || (offset == 0 && sign < 0)) continue;
+
+                        int x = d.PathCells[index] % d.Width, z = d.PathCells[index] / d.Width;
+                        int nx = d.PathCells[index + 1] % d.Width, nz = d.PathCells[index + 1] / d.Width;
+
+                        if (TooClose(placed, x, z, ArrowMinSpacing)) continue;
+                        done = TryPlaceArrow(d, rng, usedFaces, placed, x, z, nx - x, nz - z);
+                    }
+                }
+            }
+
+            while (placed.Count < MaxArrows)
+            {
+                // A célula mais afastada de todas as setas já postas, do início e da saída.
+                float bestGap = ArrowMinSpacing;
+                int bestX = -1, bestZ = -1, bestDirX = 0, bestDirZ = 0;
+
+                for (int z = 0; z < d.Height; z++)
+                {
+                    for (int x = 0; x < d.Width; x++)
+                    {
+                        if (toExit[x, z] < 2 || !StepToExit(d, toExit, x, z, out int dirX, out int dirZ)) continue;
+                        if (!ArrowFits(d, usedFaces, x, z, dirX, dirZ)) continue;
+
+                        float gap = Math.Min(Gap(x, z, d.ExitX, d.ExitZ), Gap(x, z, d.SpawnX, d.SpawnZ));
+                        foreach (var (px, pz) in placed) gap = Math.Min(gap, Gap(x, z, px, pz));
+
+                        if (gap <= bestGap) continue;
+
+                        bestGap = gap;
+                        bestX = x;
+                        bestZ = z;
+                        bestDirX = dirX;
+                        bestDirZ = dirZ;
                     }
                 }
 
-                cx = px;
-                cz = pz;
+                if (bestX < 0 || !TryPlaceArrow(d, rng, usedFaces, placed, bestX, bestZ, bestDirX, bestDirZ)) break;
+            }
+        }
+
+        static float Gap(int x, int z, int otherX, int otherZ)
+        {
+            float dx = x - otherX, dz = z - otherZ;
+            return (float)Math.Sqrt(dx * dx + dz * dz);
+        }
+
+        static bool TooClose(List<(int x, int z)> placed, int x, int z, float spacing)
+        {
+            foreach (var (px, pz) in placed)
+                if (Gap(x, z, px, pz) < spacing) return true;
+
+            return false;
+        }
+
+        // Para que lado se dá o próximo passo rumo à saída, a partir da célula (x, z).
+        static bool StepToExit(LevelData d, int[,] toExit, int x, int z, out int dirX, out int dirZ)
+        {
+            dirX = 0;
+            dirZ = 0;
+            if (toExit[x, z] <= 0) return false;
+
+            foreach (WallSide side in Sides)
+            {
+                if (!d.CanWalk(x, z, side, true)) continue;
+
+                d.Neighbor(x, z, side, out int nx, out int nz);
+                if (toExit[nx, nz] != toExit[x, z] - 1) continue;
+
+                dirX = nx - x;
+                dirZ = nz - z;
+                return true;
             }
 
-            // Foi montado da saída para o início; guarda do início para a saída.
-            d.PathCells.Reverse();
+            return false;
+        }
+
+        // A seta fica numa parede paralela ao sentido de marcha. Não vai em célula de
+        // buraco, na sala inicial nem colada nela.
+        static bool ArrowFits(LevelData d, HashSet<int> usedFaces, int x, int z, int dirX, int dirZ)
+        {
+            if (d.Pit[x, z] || d.InRoom(x, z)) return false;
+
+            float fromSpawnX = x + 0.5f - d.SpawnCenterX, fromSpawnZ = z + 0.5f - d.SpawnCenterZ;
+            if (fromSpawnX * fromSpawnX + fromSpawnZ * fromSpawnZ < ArrowMinFromSpawn * ArrowMinFromSpawn) return false;
+
+            WallSide a = dirX != 0 ? WallSide.South : WallSide.West;
+            WallSide b = dirX != 0 ? WallSide.North : WallSide.East;
+            return IsFreeFace(d, x, z, a, usedFaces) || IsFreeFace(d, x, z, b, usedFaces);
+        }
+
+        static bool TryPlaceArrow(LevelData d, Random rng, HashSet<int> usedFaces, List<(int x, int z)> placed,
+                                  int x, int z, int dirX, int dirZ)
+        {
+            if (!ArrowFits(d, usedFaces, x, z, dirX, dirZ)) return false;
+
+            bool preferFirst = rng.Next(2) == 0;
+            float along = (float)(rng.NextDouble() * 1.2 - 0.6);
+            float height = 1.25f + (float)rng.NextDouble() * 0.35f;
+
+            WallSide a = dirX != 0 ? WallSide.South : WallSide.West;
+            WallSide b = dirX != 0 ? WallSide.North : WallSide.East;
+            if (!preferFirst) { WallSide t = a; a = b; b = t; }
+
+            WallSide side = IsFreeFace(d, x, z, a, usedFaces) ? a : b;
+
+            usedFaces.Add(FaceKey(d, x, z, side));
+            placed.Add((x, z));
+            d.Decorations.Add(new Decoration
+            {
+                Kind = DecorationKind.Arrow,
+                X = x,
+                Z = z,
+                Side = side,
+                Along = along,
+                Height = height,
+                DirX = dirX,
+                DirZ = dirZ
+            });
+            return true;
         }
 
         static bool IsFreeFace(LevelData d, int x, int z, WallSide side, HashSet<int> usedFaces)
@@ -773,7 +1342,8 @@ namespace BackRooms.World
                     Strength = 0.55f + 0.4f * wear
                 };
 
-                if (roll < wear) d.Decorations.Add(mark);
+                // Em célula de buraco não há chão onde a mancha aparecer.
+                if (roll < wear && !d.Pit[x, z]) d.Decorations.Add(mark);
             }
         }
 
@@ -795,7 +1365,7 @@ namespace BackRooms.World
                     Yaw = (float)rng.NextDouble() * 360f
                 };
 
-                if (WearAt(d, pool.X, pool.Z) >= MarkMinWear) d.Decorations.Add(pool);
+                if (WearAt(d, pool.X, pool.Z) >= MarkMinWear && !d.Pit[pool.X, pool.Z]) d.Decorations.Add(pool);
             }
         }
     }

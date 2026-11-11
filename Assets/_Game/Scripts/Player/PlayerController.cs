@@ -24,6 +24,14 @@ namespace BackRooms.Player
         public float gravity = 20f;
         public float jumpHeight = 0.8f;
 
+        [Header("Queda em buraco")]
+        [Tooltip("Tempo entre passar do ponto sem volta e reaparecer na sala inicial, em segundos.")]
+        public float pitRespawnDelay = 0.8f;
+
+        [Header("Captura pela entidade")]
+        [Tooltip("Tempo entre ser pego e reaparecer na sala inicial, em segundos.")]
+        public float captureRespawnDelay = 1.6f;
+
         [Header("Fôlego (segundos)")]
         public float staminaSeconds = 6f;
         public float staminaRegenDelay = 2f;
@@ -66,6 +74,57 @@ namespace BackRooms.Player
         /// </summary>
         public static bool MouseCaptured => AssumeMouseCaptured || Cursor.lockState == CursorLockMode.Locked;
 
+        /// <summary>Quantas vezes este jogador caiu num buraco nesta sessão.</summary>
+        public int Falls { get; private set; }
+
+        /// <summary>Verdadeiro entre cair num buraco e reaparecer.</summary>
+        public bool IsFalling { get; private set; }
+
+        /// <summary>Quantas vezes a entidade pegou este jogador nesta sessão.</summary>
+        public int Captures { get; private set; }
+
+        /// <summary>Verdadeiro entre ser pego pela entidade e reaparecer.</summary>
+        public bool IsCaught { get; private set; }
+
+        /// <summary>Caindo ou pego: sem controle, a caminho da sala inicial.</summary>
+        public bool IsReturning => IsFalling || IsCaught;
+
+        /// <summary>
+        /// Onde reaparece quem cai num buraco. Quem preenche é o PlayerNetwork, que conhece
+        /// o mapa; sem isso o jogador volta ao último ponto firme.
+        /// </summary>
+        public Func<Vector3> RespawnPoint;
+
+        /// <summary>Disparado logo depois de o jogador ser recolocado por causa de uma queda.</summary>
+        public event Action Respawned;
+
+        /// <summary>
+        /// Chamado pelo gatilho do fundo do buraco. O jogador perde o controle, continua
+        /// caindo e, passado <see cref="pitRespawnDelay"/>, volta para a sala inicial.
+        /// </summary>
+        public void FallIntoPit()
+        {
+            if (IsReturning || !enabled) return;
+
+            IsFalling = true;
+            _fallTimer = pitRespawnDelay;
+            Falls++;
+        }
+
+        /// <summary>
+        /// Chamado quando a entidade pega este jogador. Ele trava onde está e, passado
+        /// <see cref="captureRespawnDelay"/>, reaparece na sala inicial. Não há morte.
+        /// </summary>
+        public void GetCaught()
+        {
+            if (IsReturning || !enabled) return;
+
+            IsCaught = true;
+            _fallTimer = captureRespawnDelay;
+            _horizontalVelocity = Vector3.zero;
+            Captures++;
+        }
+
         /// <summary>Verdadeiro enquanto o jogador está dentro de um esconderijo.</summary>
         public bool IsHidden => _hidingSpots > 0;
 
@@ -89,6 +148,7 @@ namespace BackRooms.Player
         float _bobPhase;
         Vector3 _lastSafePosition;
         float _safeTimer;
+        float _fallTimer;
         bool _lockedCursor;
 
         void Awake()
@@ -154,6 +214,7 @@ namespace BackRooms.Player
             UpdateLook(dt);
             UpdateCrouch(dt);
             UpdateMovement(dt);
+            UpdateFall(dt);
             UpdateCamera(dt);
             UpdateSafety(dt);
         }
@@ -237,7 +298,8 @@ namespace BackRooms.Player
 
         void UpdateMovement(float dt)
         {
-            Vector2 input = Vector2.ClampMagnitude(_move.ReadValue<Vector2>(), 1f);
+            // Caindo num buraco ou nas mãos da entidade não há o que comandar.
+            Vector2 input = IsReturning ? Vector2.zero : Vector2.ClampMagnitude(_move.ReadValue<Vector2>(), 1f);
             bool grounded = _controller.isGrounded;
             bool movingForward = input.y > 0.1f;
 
@@ -252,7 +314,7 @@ namespace BackRooms.Player
             {
                 // Um empurrão constante para baixo mantém o controlador colado ao chão.
                 _verticalVelocity = -2f;
-                if (_jump.WasPressedThisFrame() && !IsCrouching)
+                if (_jump.WasPressedThisFrame() && !IsCrouching && !IsReturning)
                     _verticalVelocity = Mathf.Sqrt(2f * gravity * jumpHeight);
             }
             else
@@ -266,6 +328,20 @@ namespace BackRooms.Player
             if ((flags & CollisionFlags.Above) != 0 && _verticalVelocity > 0f) _verticalVelocity = 0f;
 
             UpdateSteps(dt, grounded);
+        }
+
+        void UpdateFall(float dt)
+        {
+            if (!IsReturning) return;
+
+            _fallTimer -= dt;
+            if (_fallTimer > 0f) return;
+
+            IsFalling = false;
+            IsCaught = false;
+            _pitch = 0f;
+            Teleport(RespawnPoint != null ? RespawnPoint() : _lastSafePosition, transform.eulerAngles.y);
+            Respawned?.Invoke();
         }
 
         void UpdateStamina(float dt)
@@ -325,7 +401,8 @@ namespace BackRooms.Player
         // Rede de segurança: quem cair para fora do mapa volta ao último ponto firme.
         void UpdateSafety(float dt)
         {
-            if (_controller.isGrounded)
+            // O fundo de um buraco é chão, mas não é lugar para onde voltar.
+            if (_controller.isGrounded && !IsReturning)
             {
                 _safeTimer += dt;
                 if (_safeTimer >= 0.5f)

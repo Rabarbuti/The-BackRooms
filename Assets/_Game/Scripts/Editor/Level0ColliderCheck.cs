@@ -67,6 +67,8 @@ namespace BackRooms.EditorTools
                     if (filter.sharedMesh == null || filter.GetComponentInParent<CeilingLight>() != null) continue;
                     // So a estrutura conta: rodape, porta e placa sao enfeites sem colisor, por projeto.
                     if (filter.name == "Rodapes" || filter.name == "Porta" || filter.name == "Placa") continue;
+                    // A fumaca dos buracos aparece mas nao e solida, tambem por projeto.
+                    if (filter.GetComponentInParent<PitSmoke>() != null) continue;
 
                     var go = new GameObject("Visual_" + filter.name) { layer = VisualLayer };
                     go.transform.SetPositionAndRotation(filter.transform.position, filter.transform.rotation);
@@ -80,6 +82,7 @@ namespace BackRooms.EditorTools
                 int visualMask = 1 << VisualLayer;
                 var rng = new System.Random(seed);
                 int bad = 0;
+                int grazing = 0;
                 var samples = new List<string>();
 
                 for (int i = 0; i < raysPerSeed; i++)
@@ -101,6 +104,15 @@ namespace BackRooms.EditorTools
                     bool same = hitSolid == hitVisual && (!hitSolid || Mathf.Abs(solid.distance - seen.distance) <= Tolerance);
                     if (same) continue;
 
+                    // Raio que passa raspando numa quina pode acertar a malha e errar a caixa (ou
+                    // o contrário) por uma fração de milímetro. Um defeito de verdade tem área:
+                    // continua errado com o raio meio grau para qualquer lado. Só esse conta.
+                    if (Agrees(origin, direction, solidMask, visualMask))
+                    {
+                        grazing++;
+                        continue;
+                    }
+
                     bad++;
                     if (samples.Count < 6)
                     {
@@ -114,13 +126,33 @@ namespace BackRooms.EditorTools
 
                 foreach (GameObject go in visual) UnityEngine.Object.DestroyImmediate(go);
 
-                Debug.Log($"[BackRooms] Colisores seed {seed}: {bad} diferenças em {raysPerSeed} raios." + (samples.Count > 0 ? "\n" + string.Join("\n", samples) : ""));
+                Debug.Log($"[BackRooms] Colisores seed {seed}: {bad} diferenças em {raysPerSeed} raios ({grazing} de raspão em quina, desconsideradas)." + (samples.Count > 0 ? "\n" + string.Join("\n", samples) : ""));
                 total += bad;
             }
 
             builder.Clear();
             EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
             return total;
+        }
+
+        // Verdadeiro se algum raio vizinho (meio grau para cima, baixo, esquerda ou direita)
+        // bate no mesmo lugar nos colisores e na malha.
+        static bool Agrees(Vector3 origin, Vector3 direction, int solidMask, int visualMask)
+        {
+            Vector3 right = Vector3.Cross(Vector3.up, direction);
+            right = right.sqrMagnitude < 0.0001f ? Vector3.right : right.normalized;
+            Vector3 up = Vector3.Cross(direction, right).normalized;
+
+            foreach (Vector3 axis in new[] { right, -right, up, -up })
+            {
+                Vector3 nudged = Quaternion.AngleAxis(0.5f, axis) * direction;
+                bool hitSolid = Physics.Raycast(origin, nudged, out RaycastHit solid, Reach, solidMask, QueryTriggerInteraction.Ignore);
+                bool hitVisual = Physics.Raycast(origin, nudged, out RaycastHit seen, Reach, visualMask, QueryTriggerInteraction.Ignore);
+
+                if (hitSolid == hitVisual && (!hitSolid || Mathf.Abs(solid.distance - seen.distance) <= Tolerance)) return true;
+            }
+
+            return false;
         }
 
         static string DescribeBox(Collider collider)
