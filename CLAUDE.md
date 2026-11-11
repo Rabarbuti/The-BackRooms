@@ -69,7 +69,8 @@ velho. Mudança só de código não precisa.
 ## Como testar
 
 No editor, pelo menu **BackRooms**: Testar Level 0 (fumaça), Conferir colisores do Level 0,
-Gerar mapa 2D, Capturar prévia.
+Gerar mapa 2D, Capturar prévia, Exportar sons da entidade (WAV em `Logs/Sons`, para ouvir e
+ajustar os sons sintetizados sem precisar jogar).
 
 Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo projeto):
 
