@@ -89,6 +89,8 @@ namespace BackRooms.World
         public bool ceilingShadows = true;
         [Tooltip("Resolução máxima de cada face da sombra. É reduzida sozinha se não couber no atlas do HDRP.")]
         public int maxShadowResolution = 256;
+        [Tooltip("As luminárias do teto acendem a névoa volumétrica. Caro: um quarto do tempo de cada quadro, para quase nenhuma diferença na imagem.")]
+        public bool lampsLightFog = false;
 
         [Header("Marcas (decalques)")]
         public Material[] bloodDecals;
@@ -714,6 +716,11 @@ namespace BackRooms.World
 
             hd.fadeDistance = 70f;
             hd.shadowFadeDistance = 50f;
+
+            // As luminárias não acendem a névoa: medido, era um quarto do tempo de cada quadro
+            // (37 ms -> 28 ms) e na imagem quase não se nota. A névoa continua existindo e a
+            // lanterna continua desenhando o facho nela. Ver Docs/desempenho-level0.md.
+            hd.affectsVolumetric = lampsLightFog;
 
             if (ceilingShadows)
             {
