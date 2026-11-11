@@ -55,6 +55,20 @@ namespace BackRooms.Net
         /// <summary>Verdadeiro quando o nível desta sessão já foi construído nesta máquina.</summary>
         public bool LevelReady { get; private set; }
 
+        /// <summary>
+        /// Segundos desde que o host abriu a sessão, pelo relógio do servidor: o mesmo valor em
+        /// todas as máquinas. Serve para eventos que precisam acontecer juntos para todos sem
+        /// trafegar na rede (o apagão das luzes). -1 fora de partida.
+        /// </summary>
+        public double SessionSeconds
+        {
+            get
+            {
+                if (_net == null || !_net.IsListening || Phase != SessionPhase.Playing) return -1.0;
+                return System.Math.Max(0.0, _net.ServerTime.Time - _epoch);
+            }
+        }
+
         public bool IsHosting => _net != null && _net.IsListening && _net.IsServer;
 
         /// <summary>Número de jogadores conectados. Só o host sabe; nos clientes devolve -1.</summary>
@@ -65,6 +79,7 @@ namespace BackRooms.Net
         NetworkManager _net;
         UnityTransport _transport;
         Coroutine _building;
+        double _epoch;
 
         void Awake()
         {
@@ -120,6 +135,7 @@ namespace BackRooms.Net
             }
 
             Address = "esta máquina";
+            _epoch = _net.ServerTime.Time;
             int seed = fixedSeed != 0 ? fixedSeed : new System.Random().Next(1, int.MaxValue);
             BuildLevel(seed);
             return true;
@@ -191,9 +207,11 @@ namespace BackRooms.Net
         {
             if (!_net.IsServer || clientId == _net.LocalClientId) return;
 
-            using (var writer = new FastBufferWriter(sizeof(int), Allocator.Temp))
+            // A seed do mapa e o instante em que a sessão começou, no relógio do servidor.
+            using (var writer = new FastBufferWriter(sizeof(int) + sizeof(double), Allocator.Temp))
             {
                 writer.WriteValueSafe(Seed);
+                writer.WriteValueSafe(_epoch);
                 _net.CustomMessagingManager.SendNamedMessage(SeedMessage, clientId, writer);
             }
 
@@ -214,6 +232,7 @@ namespace BackRooms.Net
         void OnSeedMessage(ulong senderClientId, FastBufferReader reader)
         {
             reader.ReadValueSafe(out int seed);
+            reader.ReadValueSafe(out _epoch);
             BuildLevel(seed);
         }
 

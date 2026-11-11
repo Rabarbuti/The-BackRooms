@@ -143,6 +143,14 @@ namespace BackRooms.EditorTools
 
                 if (player != null) ShootEntity(builder, player, camera, torch, target, readback, folder);
 
+                if (player != null) ShootEntityFace(builder, player, camera, torch, target, readback, folder);
+
+                if (player != null) ShootPlayerFigure(builder, prefab, player, camera, torch, target, readback, folder);
+
+                if (player != null) ShootHand(builder, prefab, player, camera, target, readback, folder);
+
+                if (player != null) ShootBlackout(builder, player, camera, torch, target, readback, folder);
+
                 // A tela de quem acabou de cair num buraco.
                 if (camcorder != null)
                 {
@@ -351,7 +359,9 @@ namespace BackRooms.EditorTools
             var figure = new GameObject("EntidadeDaFoto");
             var body = figure.AddComponent<BackRooms.Entities.EntityBody>();
             body.bodyMaterial = source.bodyMaterial;
-            body.eyeMaterial = source.eyeMaterial;
+            body.shellMaterial = source.shellMaterial;
+            body.boneMaterial = source.boneMaterial;
+            body.mawMaterial = source.mawMaterial;
             body.Build();
 
             Quaternion level = camera.transform.localRotation;
@@ -379,6 +389,192 @@ namespace BackRooms.EditorTools
             {
                 camera.transform.localRotation = level;
                 UnityEngine.Object.DestroyImmediate(figure);
+            }
+        }
+
+        // Três células seguidas em linha reta no caminho seguro, com luz acesa na do meio se
+        // houver: a câmera fica na primeira, olhando para a terceira (8 m).
+        static bool FindStretch(LevelBuilder builder, out Vector3 from, out Vector3 to)
+        {
+            LevelData data = builder.Data;
+            int found = -1;
+
+            for (int i = 4; i + 2 < data.SafePathCells.Count; i++)
+            {
+                int a = data.SafePathCells[i], b = data.SafePathCells[i + 1], c = data.SafePathCells[i + 2];
+                if (b - a != c - b) continue;
+
+                if (found < 0) found = i;
+                if (data.Lights[b % data.Width, b / data.Width] != LightState.On) continue;
+
+                found = i;
+                break;
+            }
+
+            from = to = Vector3.zero;
+            if (found < 0) return false;
+
+            from = builder.CellCenter(data.SafePathCells[found] % data.Width, data.SafePathCells[found] / data.Width);
+            to = builder.CellCenter(data.SafePathCells[found + 2] % data.Width, data.SafePathCells[found + 2] / data.Width);
+            return true;
+        }
+
+        static BackRooms.Entities.EntityBody CreateEntityFigure()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(Level0Setup.EntityPrefabPath);
+            if (prefab == null || !prefab.TryGetComponent(out BackRooms.Entities.EntityBody source)) return null;
+
+            var figure = new GameObject("EntidadeDaFoto");
+            var body = figure.AddComponent<BackRooms.Entities.EntityBody>();
+            body.bodyMaterial = source.bodyMaterial;
+            body.shellMaterial = source.shellMaterial;
+            body.boneMaterial = source.boneMaterial;
+            body.mawMaterial = source.mawMaterial;
+            body.Build();
+            return body;
+        }
+
+        // O rosto da entidade de perto, de baixo para cima (ela tem 3 m), parada e no bote.
+        static void ShootEntityFace(LevelBuilder builder, Transform player, Camera camera, Light torch,
+                                    RenderTexture target, Texture2D readback, string folder)
+        {
+            if (!FindStretch(builder, out Vector3 from, out Vector3 to)) return;
+
+            BackRooms.Entities.EntityBody body = CreateEntityFigure();
+            if (body == null) return;
+
+            Vector3 look = (to - from).normalized;
+            Quaternion level = camera.transform.localRotation;
+
+            try
+            {
+                body.transform.SetPositionAndRotation(to, Quaternion.LookRotation(-look, Vector3.up));
+
+                // De três quartos, que é como a cabeça comprida aparece melhor.
+                body.transform.rotation = Quaternion.LookRotation(Quaternion.Euler(0f, 48f, 0f) * -look, Vector3.up);
+                body.Pose(0.1f, 0f, 0.4f, 2f);
+                camera.transform.localRotation = Quaternion.Euler(-30f, 0f, 0f);
+                ShootPair(player, camera, torch, target, readback, folder, "entidade_rosto", to - look * 2.2f, look);
+
+                // Por trás e de lado: daqui não pode aparecer boca nenhuma.
+                body.transform.rotation = Quaternion.LookRotation(Quaternion.Euler(0f, 142f, 0f) * -look, Vector3.up);
+                body.Pose(0.1f, 0f, 1f, 2f);
+                camera.transform.localRotation = Quaternion.Euler(-34f, 0f, 0f);
+                ShootPair(player, camera, torch, target, readback, folder, "entidade_por_tras", to - look * 2.0f, look);
+
+                body.transform.rotation = Quaternion.LookRotation(-look, Vector3.up);
+                body.Pose(0.1f, 0f, 1f, 2.03f, 1f);
+                camera.transform.localRotation = Quaternion.Euler(-20f, 0f, 0f);
+                ShootPair(player, camera, torch, target, readback, folder, "entidade_ataque", to - look * 3.2f, look);
+            }
+            finally
+            {
+                camera.transform.localRotation = level;
+                UnityEngine.Object.DestroyImmediate(body.gameObject);
+            }
+        }
+
+        // O traje dos jogadores, como os outros o veem: parado de frente, andando com a
+        // caneta e a lanterna, e agachado.
+        static void ShootPlayerFigure(LevelBuilder builder, GameObject prefab, Transform player, Camera camera, Light torch,
+                                      RenderTexture target, Texture2D readback, string folder)
+        {
+            var source = prefab.GetComponentInChildren<BackRooms.Player.PlayerBody>(true);
+            if (source == null || !FindStretch(builder, out Vector3 from, out Vector3 to)) return;
+
+            var figure = new GameObject("JogadorDaFoto");
+            var body = figure.AddComponent<BackRooms.Player.PlayerBody>();
+            body.suitMaterial = source.suitMaterial;
+            body.rubberMaterial = source.rubberMaterial;
+            body.visorMaterial = source.visorMaterial;
+            body.gearMaterial = source.gearMaterial;
+            body.Build();
+
+            Vector3 look = (to - from).normalized;
+            Vector3 spot = from + look * 2.6f;
+
+            try
+            {
+                figure.transform.SetPositionAndRotation(spot, Quaternion.LookRotation(-look, Vector3.up));
+                body.Pose(0.1f, 0f, 0f, 0f, 0f, 0f, 1f);
+                ShootPair(player, camera, torch, target, readback, folder, "jogador_de_frente", from, look);
+
+                figure.transform.rotation = Quaternion.LookRotation(Quaternion.Euler(0f, 55f, 0f) * -look, Vector3.up);
+                body.Pose(0.2f, 2.8f, 0f, 8f, 1f, 1f, 1f);
+                ShootPair(player, camera, torch, target, readback, folder, "jogador_andando", from, look);
+
+                figure.transform.rotation = Quaternion.LookRotation(Quaternion.Euler(0f, -70f, 0f) * -look, Vector3.up);
+                body.Pose(0.15f, 1.2f, 1f, 15f, 0f, 1f, 1f);
+                ShootPair(player, camera, torch, target, readback, folder, "jogador_agachado", from, look);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(figure);
+            }
+        }
+
+        // A mão em primeira pessoa com a caneta, como o dono a vê, de frente para uma parede.
+        static void ShootHand(LevelBuilder builder, GameObject prefab, Transform player, Camera camera,
+                              RenderTexture target, Texture2D readback, string folder)
+        {
+            var source = prefab.GetComponentInChildren<BackRooms.Player.ItemHand>(true);
+            if (source == null) return;
+
+            var holder = new GameObject("MaoDaFoto");
+            holder.transform.SetParent(camera.transform, false);
+            holder.transform.localPosition = source.transform.localPosition;
+            holder.transform.localRotation = source.transform.localRotation;
+
+            var hand = holder.AddComponent<BackRooms.Player.ItemHand>();
+            hand.suitMaterial = source.suitMaterial;
+            hand.gloveMaterial = source.gloveMaterial;
+            hand.penMaterial = source.penMaterial;
+            hand.Build();
+
+            try
+            {
+                // Na sala inicial, a 1,4 m da parede norte.
+                player.position = builder.SpawnCenter + new Vector3(0f, 0.05f, LevelBuilder.Cell - 1.5f);
+                player.rotation = Quaternion.identity;
+                Shoot(camera, target, readback, Path.Combine(folder, "mao_com_caneta.png"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(holder);
+            }
+        }
+
+        // O apagão: todas as luminárias escuras e sem luz ambiente, com e sem a lanterna.
+        static void ShootBlackout(LevelBuilder builder, Transform player, Camera camera, Light torch,
+                                  RenderTexture target, Texture2D readback, string folder)
+        {
+            var lightsOut = UnityEngine.Object.FindFirstObjectByType<LightsOut>();
+            if (lightsOut == null || !FindStretch(builder, out Vector3 from, out Vector3 to)) return;
+
+            CeilingLight[] lights = builder.GetComponentsInChildren<CeilingLight>();
+            BackRooms.Entities.EntityBody body = CreateEntityFigure();
+            Vector3 look = (to - from).normalized;
+
+            try
+            {
+                foreach (CeilingLight light in lights) light.SetPower(PowerPhase.Dark);
+                lightsOut.SetDarkness(1f);
+
+                ShootPair(player, camera, torch, target, readback, folder, "apagao", from, look);
+
+                // E com a entidade no fim do corredor: só os olhos e a boca aparecem.
+                if (body != null)
+                {
+                    body.transform.SetPositionAndRotation(to, Quaternion.LookRotation(-look, Vector3.up));
+                    body.Pose(0.1f, 0f, 1f, 2f);
+                    ShootPair(player, camera, torch, target, readback, folder, "apagao_com_entidade", from, look);
+                }
+            }
+            finally
+            {
+                foreach (CeilingLight light in lights) light.SetPower(PowerPhase.Steady);
+                lightsOut.SetDarkness(0f);
+                if (body != null) UnityEngine.Object.DestroyImmediate(body.gameObject);
             }
         }
 

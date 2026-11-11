@@ -36,6 +36,9 @@ namespace BackRooms.UI
             ctx.propertyBlock.SetTexture(SourceId, _copy);
             CoreUtils.SetRenderTarget(ctx.cmd, ctx.cameraColorBuffer, ClearFlag.None);
             CoreUtils.DrawFullScreen(ctx.cmd, material, ctx.propertyBlock, shaderPassId: 0);
+
+            // A imagem está pronta, com o efeito e o painel: se o jogador está gravando, vai uma cópia para o vídeo.
+            ScreenRecorder.Capture(ctx.hdCamera.camera, ctx.cmd, ctx.cameraColorBuffer);
         }
 
         protected override void Cleanup()

@@ -2,7 +2,8 @@
 
 Jogo de terror 3D em co-op no estilo Backrooms, feito em Unity. Hoje existe o Level 0
 jogável por IP, com interface de filmadora VHS, o primeiro item (caneta de riscar), buracos
-com faixas de travessia e a primeira entidade, que caça os jogadores pelo barulho.
+com faixas de travessia, apagões periódicos, a primeira entidade, que caça os jogadores pelo
+barulho, e gravação da tela em vídeo (F9).
 
 Conversa, comentários de código, documentação e mensagens de commit são em **português**.
 
@@ -24,8 +25,12 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
 - `Scripts/Network` — `GameSession` (host, cliente, envio da seed) e `PlayerNetwork`.
 - `Scripts/Items` — `PenTool` (entrada e mira) e `DrawingBoard` (malhas dos riscos e sincronização).
 - `Scripts/Entities` — a entidade: `EntityDirector` (quando e onde aparece), `EntityBrain` (sentidos
-  e decisão, só no host), `LevelNav` (caminho na grade do mapa), `EntityBody` e `EntityAudio`
-  (corpo, animação e som feitos em código).
+  e decisão, só no host), `LevelNav` (caminho na grade do mapa), `EntityBody` (corpo de cipós e
+  animação), `EntityHeadMesh` (cabeça esculpida como malha) e `EntityAudio`, tudo feito em código.
+- `Scripts/Systems/FigureKit.cs` — peças para montar figuras em código (junta, osso, volume). A
+  entidade, o traje dos jogadores (`PlayerBody`) e a mão em primeira pessoa (`ItemHand`) usam.
+- `Scripts/UI` — filmadora (`Camcorder`, `CamcorderPass`) e gravação em vídeo (`ScreenRecorder`,
+  `AviWriter`, `RecorderAudioTap`).
 - `Scripts/Editor` — gerador do Level 0 e ferramentas de teste (menu **BackRooms**).
 - `Docs/plano-coop.md` — plano do jogo, arquitetura de rede e registro das correções. Ler antes
   de mexer em rede ou em geração de fase. Os outros arquivos de `Docs/` são referência de design.
@@ -55,11 +60,20 @@ velho. Mudança só de código não precisa.
 - **Buraco nunca isola parte do mapa.** Toda célula com piso continua alcançável sem pisar em
   faixa, então sempre há um caminho seguro até a saída (`LevelData.SafePathCells`). Quem mexer
   em `LevelGenerator.DigPits` mantém a conferência de `SafeDetour`.
+- **O que precisa acontecer junto em todas as máquinas usa `GameSession.SessionSeconds`**, o
+  relógio do servidor, em vez de mandar o evento pela rede. É assim que o apagão (`LightsOut`)
+  funciona: cada máquina faz a mesma conta.
+- **Sem janela o Unity não desenha a câmera do jogador.** Teste por linha de comando que dependa
+  da imagem (a gravação) precisa mandar desenhar: `camera.Render()` numa textura.
 - **A entidade só pisa onde o `LevelNav` deixa:** células com piso, fora da sala inicial e dos
   buracos. Sala inicial como abrigo e faixa como rota de fuga dependem disso. Ela não usa NavMesh.
 - **Prefab de rede não se registra por código.** O Netcode mantém `Assets/DefaultNetworkPrefabs.asset`
   com todo prefab que tem `NetworkObject`; registrar de novo dá erro de duplicata.
 - **Material sem luz (HDRP/Unlit): a cor é o que aparece na tela, de 0 a 1**, não nits.
+- **Figura em código: forma orgânica se esculpe como malha, não com esferas esticadas** (ficam
+  com cara de balão). Muitas peças pequenas se fundem com `FigureKit.Bake` depois de montadas.
+- **Mudança de aparência de personagem passa por imagem antes de entrar no jogo.** As fotos saem
+  da ferramenta de prévia (`Level0Preview`), renderizadas dentro da fase.
 - **Colisor e malha visível nascem juntos** no `LevelBuilder` (`AddWall`, `AlcoveBox`,
   `AddCollider`). Não criar um sem o outro.
 - **Rede:** host autoritativo por IP direto (porta 7777), movimento com autoridade do dono.

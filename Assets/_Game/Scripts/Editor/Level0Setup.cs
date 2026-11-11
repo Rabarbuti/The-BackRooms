@@ -46,7 +46,7 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 11;
+        public const int ContentVersion = 13;
 
         [MenuItem("BackRooms/Montar Level 0 (sala de teste)")]
         public static void Build()
@@ -200,13 +200,20 @@ namespace BackRooms.EditorTools
 
             Material hazmat = EnsureMaterial("Hazmat", Rgb(214, 186, 36), null, null, 0.35f, Color.black);
             Material visor = EnsureMaterial("Visor", Rgb(10, 10, 12), null, null, 0.85f, Color.black);
-            GameObject playerPrefab = CreatePlayerPrefab(hazmat, visor, inks[0]);
+            // Borracha das luvas e botas; cinza do respirador, do cilindro de ar e do cinto.
+            Material rubber = EnsureMaterial("Rubber", Rgb(18, 18, 20), null, null, 0.45f, Color.black);
+            Material gear = EnsureMaterial("Gear", Rgb(96, 100, 102), null, null, 0.4f, Color.black);
+            GameObject playerPrefab = CreatePlayerPrefab(hazmat, visor, rubber, gear, inks[0]);
 
-            // Entidade: preta e quase fosca (lustrosa, parecia boneco de plástico); os dois
-            // pontos claros da cabeça têm luz própria (em nits).
-            Material entityBlack = EnsureMaterial("Entity_Black", Rgb(6, 6, 7), null, null, 0.3f, Color.black);
-            Material entityEye = EnsureMaterial("Entity_Eye", Rgb(235, 232, 215), null, null, 0.2f, new Color(1f, 0.97f, 0.88f) * 70f);
-            GameObject entityPrefab = CreateEntityPrefab(entityBlack, entityEye);
+            // Entidade: casca fosca e sulcada para os cipós do corpo, casco lustroso com estrias
+            // e veias para a cabeça, dentes cor de osso e vermelho-escuro por dentro da boca.
+            Material entityBark = EnsureSurface("Entity_Bark", Rgb(30, 26, 22), 0.28f, 2f, EntityPainter.BarkSize,
+                                                EntityPainter.BarkColor, EntityPainter.BarkNormal);
+            Material entityShell = EnsureSurface("Entity_Shell", Rgb(26, 26, 30), 0.74f, 1.5f, EntityPainter.ShellSize,
+                                                 EntityPainter.ShellColor, EntityPainter.ShellNormal);
+            Material entityBone = EnsureMaterial("Entity_Bone", Rgb(198, 188, 160), null, null, 0.35f, Color.black);
+            Material entityMaw = EnsureMaterial("Entity_Maw", Rgb(74, 6, 8), null, null, 0.55f, new Color(1f, 0.04f, 0.04f) * 2.5f);
+            GameObject entityPrefab = CreateEntityPrefab(entityBark, entityShell, entityBone, entityMaw);
 
             var level = new GameObject("Level0");
             var builder = level.AddComponent<LevelBuilder>();
@@ -264,6 +271,9 @@ namespace BackRooms.EditorTools
             director.session = session;
             director.entityPrefab = entityPrefab;
 
+            // Apagão das luzes: a conta do tempo é igual em todas as máquinas.
+            sessionObject.AddComponent<LightsOut>().session = session;
+
             // Menu (UI Toolkit) e o EventSystem que entrega o mouse a ele pelo Input System.
             var menuObject = new GameObject("Menu");
             menuObject.AddComponent<UIDocument>().panelSettings = EnsurePanelSettings();
@@ -307,6 +317,8 @@ namespace BackRooms.EditorTools
 
             var camcorderObject = new GameObject("Filmadora");
             camcorderObject.AddComponent<Camcorder>();
+            // Gravação de verdade em arquivo de vídeo (F9).
+            camcorderObject.AddComponent<ScreenRecorder>();
 
             var volume = camcorderObject.AddComponent<CustomPassVolume>();
             volume.isGlobal = true;
@@ -344,7 +356,7 @@ namespace BackRooms.EditorTools
 
         // O prefab nasce com controle, câmera e ouvinte desligados: quem liga é o
         // PlayerNetwork, só na máquina do dono. Nas outras ele é a figura daquele jogador.
-        static GameObject CreatePlayerPrefab(Material hazmat, Material visor, Material ink)
+        static GameObject CreatePlayerPrefab(Material hazmat, Material visor, Material rubber, Material gear, Material ink)
         {
             var player = new GameObject("Player");
 
@@ -376,6 +388,8 @@ namespace BackRooms.EditorTools
             camera.farClipPlane = 150f;
             camera.enabled = false;
             var listener = pivot.AddComponent<AudioListener>();
+            // Apanha o som que sai para as caixas, para a gravação em vídeo.
+            pivot.AddComponent<RecorderAudioTap>();
             listener.enabled = false;
 
             var cameraData = GetOrAdd<HDAdditionalCameraData>(pivot);
@@ -405,13 +419,15 @@ namespace BackRooms.EditorTools
             flashlight.follow = pivot.transform;
             flashlight.inputEnabled = false;
 
-            // Corpo visto pelos outros: traje amarelo simples (cápsula, cabeça e visor).
-            // O pivô fica nos pés, para o corpo encolher para baixo ao agachar.
+            // Corpo visto pelos outros: explorador em traje de proteção. As peças são montadas
+            // em código quando o jogador aparece (PlayerBody); o prefab leva só os materiais.
             var body = new GameObject("Corpo");
             body.transform.SetParent(player.transform, false);
-            AddBodyPart(body.transform, PrimitiveType.Capsule, "Tronco", new Vector3(0f, 0.74f, 0f), new Vector3(0.56f, 0.72f, 0.56f), hazmat);
-            AddBodyPart(body.transform, PrimitiveType.Sphere, "Cabeca", new Vector3(0f, 1.6f, 0f), new Vector3(0.32f, 0.32f, 0.32f), hazmat);
-            AddBodyPart(body.transform, PrimitiveType.Sphere, "Visor", new Vector3(0f, 1.61f, 0.11f), new Vector3(0.22f, 0.15f, 0.13f), visor);
+            var figure = body.AddComponent<PlayerBody>();
+            figure.suitMaterial = hazmat;
+            figure.rubberMaterial = rubber;
+            figure.visorMaterial = visor;
+            figure.gearMaterial = gear;
 
             // Rede: o dono manda a própria posição (resposta imediata no controle).
             player.AddComponent<NetworkObject>();
@@ -433,25 +449,26 @@ namespace BackRooms.EditorTools
             network.listener = listener;
             network.cameraPivot = pivot.transform;
             network.body = body;
+            network.figure = figure;
 
-            // Caneta. Na mão ela é um cilindro fino no canto de baixo da visão; só o dono vê.
-            GameObject penModel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            penModel.name = "CanetaNaMao";
-            Object.DestroyImmediate(penModel.GetComponent<Collider>());
-            penModel.transform.SetParent(pivot.transform, false);
-            penModel.transform.localPosition = new Vector3(0.17f, -0.14f, 0.34f);
-            penModel.transform.localRotation = Quaternion.Euler(62f, -18f, 0f);
-            penModel.transform.localScale = new Vector3(0.011f, 0.07f, 0.011f);
+            // Mão em primeira pessoa, com a caneta: fica desligada até o jogador pegar o item.
+            // Também é montada em código (ItemHand). Só o dono vê.
+            var handObject = new GameObject("MaoComItem");
+            handObject.transform.SetParent(pivot.transform, false);
+            handObject.transform.localPosition = new Vector3(0.15f, -0.165f, 0.4f);
+            handObject.transform.localRotation = Quaternion.Euler(-4f, -8f, 4f);
 
-            var penRenderer = penModel.GetComponent<MeshRenderer>();
-            penRenderer.sharedMaterial = ink;
-            penRenderer.shadowCastingMode = ShadowCastingMode.Off;
-            penModel.SetActive(false);
+            var itemHand = handObject.AddComponent<ItemHand>();
+            itemHand.suitMaterial = hazmat;
+            itemHand.gloveMaterial = rubber;
+            itemHand.penMaterial = ink;
+            handObject.SetActive(false);
 
             var pen = player.AddComponent<PenTool>();
             pen.aim = pivot.transform;
-            pen.viewModel = penModel;
-            pen.viewModelRenderer = penRenderer;
+            pen.viewModel = handObject;
+            pen.hand = itemHand;
+            itemHand.pen = pen;
             network.pen = pen;
 
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(player, PlayerPrefabPath);
@@ -465,14 +482,14 @@ namespace BackRooms.EditorTools
         // O prefab leva só os componentes: o corpo é montado em código quando ela aparece
         // (EntityBody) e o som é sintetizado (EntityAudio). O colisor impede o jogador de
         // atravessá-la; o corpo rígido cinemático faz a caneta não riscar nela.
-        static GameObject CreateEntityPrefab(Material body, Material eye)
+        static GameObject CreateEntityPrefab(Material body, Material shell, Material bone, Material maw)
         {
             var entity = new GameObject("Entity");
 
             var capsule = entity.AddComponent<CapsuleCollider>();
             capsule.radius = 0.4f;
-            capsule.height = 2.9f;
-            capsule.center = new Vector3(0f, 1.45f, 0f);
+            capsule.height = 3.2f;
+            capsule.center = new Vector3(0f, 1.6f, 0f);
 
             var rigid = entity.AddComponent<Rigidbody>();
             rigid.isKinematic = true;
@@ -480,7 +497,9 @@ namespace BackRooms.EditorTools
 
             var figure = entity.AddComponent<EntityBody>();
             figure.bodyMaterial = body;
-            figure.eyeMaterial = eye;
+            figure.shellMaterial = shell;
+            figure.boneMaterial = bone;
+            figure.mawMaterial = maw;
             entity.AddComponent<EntityAudio>();
 
             // Rede: quem manda na posição é o host (o padrão do NetworkTransform).
@@ -522,17 +541,6 @@ namespace BackRooms.EditorTools
 
             if (hashField != null && (uint)hashField.GetValue(networkObject) == 0)
                 Debug.LogWarning("[BackRooms] O prefab " + prefab.name + " ficou sem identificador de rede. Abra o prefab no editor e salve para o Netcode gerar.");
-        }
-
-        static void AddBodyPart(Transform parent, PrimitiveType shape, string name, Vector3 position, Vector3 scale, Material material)
-        {
-            GameObject part = GameObject.CreatePrimitive(shape);
-            part.name = name;
-            Object.DestroyImmediate(part.GetComponent<Collider>());
-            part.transform.SetParent(parent, false);
-            part.transform.localPosition = position;
-            part.transform.localScale = scale;
-            part.GetComponent<MeshRenderer>().sharedMaterial = material;
         }
 
         // ---------------------------------------------------------------- Volume
@@ -659,6 +667,41 @@ namespace BackRooms.EditorTools
         static Material EnsureDecal(string name, Texture2D texture, float smoothness)
         {
             return EnsureDecal(name, texture, smoothness, Color.white, 1f, true, 0);
+        }
+
+        // Material com cor e relevo pintados em código: grava as duas texturas em PNG (a de
+        // relevo já como mapa de normais) e monta o material com elas.
+        static Material EnsureSurface(string name, Color baseColor, float smoothness, float normalScale, int size,
+                                      Func<Color32[]> paintColor, Func<Color32[]> paintNormal)
+        {
+            Texture2D albedo = EnsurePixels(name + "_Albedo", size, paintColor, false);
+            Texture2D normal = EnsurePixels(name + "_Normal", size, paintNormal, true);
+
+            Material material = EnsureMaterial(name, baseColor, albedo, normal, smoothness, Color.black);
+            if (material == null) return null;
+
+            material.SetFloat("_NormalScale", normalScale);
+            HDMaterial.ValidateMaterial(material);
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        static Texture2D EnsurePixels(string name, int size, Func<Color32[]> paint, bool normalMap)
+        {
+            string path = ArtFolder + "/" + name + ".png";
+
+            if (!File.Exists(path))
+            {
+                WritePng(path, size, size, paint());
+
+                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+                importer.wrapMode = TextureWrapMode.Repeat;
+                importer.anisoLevel = 8;
+                if (normalMap) importer.textureType = TextureImporterType.NormalMap;
+                importer.SaveAndReimport();
+            }
+
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         }
 
         // Material sem iluminação: a cor é o próprio brilho. Transparente, mistura pelo alfa

@@ -140,7 +140,20 @@ namespace BackRooms.UI
             var pen = PlayerNetwork.Local != null ? PlayerNetwork.Local.pen : null;
             string tool = pen != null && pen.Equipped ? "PEN " + pen.ColorName : null;
 
-            Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f);
+            // Gravação de verdade (F9): mostra a fita rodando e, ao parar, que o vídeo foi salvo.
+            string tape = null;
+            ScreenRecorder recorder = ScreenRecorder.Instance;
+            if (recorder != null && recorder.IsRecording)
+            {
+                int seconds = Mathf.FloorToInt(recorder.RecordedSeconds);
+                tape = $"TAPE {seconds / 60}:{seconds % 60:00}";
+            }
+            else if (recorder != null && recorder.SecondsSinceSaved < 3f)
+            {
+                tape = string.IsNullOrEmpty(recorder.LastError) ? "SAVED" : "TAPE ERROR";
+            }
+
+            Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f, tape);
         }
 
         /// <summary>
@@ -148,7 +161,7 @@ namespace BackRooms.UI
         /// de prévia do editor, que roda fora do Play.
         /// </summary>
         public void Draw(bool recording, float recordSeconds, float clockSeconds, float battery, bool lightOn, string tool = null,
-                         bool noSignal = false)
+                         bool noSignal = false, string tape = null)
         {
             EnsureTexture();
 
@@ -175,6 +188,14 @@ namespace BackRooms.UI
             else
             {
                 Text(Margin, Margin + 2, "STBY", 2, White);
+            }
+
+            // Logo abaixo: a fita de verdade. Bolinha vermelha fixa enquanto grava em arquivo.
+            if (!string.IsNullOrEmpty(tape))
+            {
+                bool rolling = tape.StartsWith("TAPE ") && tape != "TAPE ERROR";
+                if (rolling) Disc(Margin + 4, Margin + 27, 3, Red);
+                Text(Margin + (rolling ? 12 : 0), Margin + 24, tape, 1, White);
             }
 
             // Canto de cima, direita: bateria e contador da fita.

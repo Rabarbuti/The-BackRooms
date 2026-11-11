@@ -24,6 +24,8 @@ namespace BackRooms.Net
         public Transform cameraPivot;
         [Tooltip("Corpo visto pelos outros jogadores. O dono não vê o próprio.")]
         public GameObject body;
+        [Tooltip("A figura animada dentro do corpo: recebe agachar, olhar, item na mão e lanterna.")]
+        public PlayerBody figure;
         [Tooltip("Caneta do jogador. O painel da filmadora lê daqui se ela está na mão.")]
         public BackRooms.Items.PenTool pen;
 
@@ -39,6 +41,9 @@ namespace BackRooms.Net
             false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
         readonly NetworkVariable<bool> _hidden = new NetworkVariable<bool>(
+            false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+
+        readonly NetworkVariable<bool> _holding = new NetworkVariable<bool>(
             false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
         float _nextSend;
@@ -159,6 +164,9 @@ namespace BackRooms.Net
             if (_crouching.Value != controller.IsCrouching) _crouching.Value = controller.IsCrouching;
             if (_hidden.Value != controller.IsHidden) _hidden.Value = controller.IsHidden;
 
+            bool holding = pen != null && pen.Equipped;
+            if (_holding.Value != holding) _holding.Value = holding;
+
             if (Time.unscaledTime < _nextSend) return;
             _nextSend = Time.unscaledTime + SendInterval;
 
@@ -181,7 +189,14 @@ namespace BackRooms.Net
 
             flashlight.SetOn(_flashlightOn.Value);
 
-            if (body != null)
+            if (figure != null)
+            {
+                // A figura se agacha de verdade (dobra as pernas), olha para onde o jogador
+                // olha e mostra o que ele tem nas mãos.
+                float crouch = Mathf.InverseLerp(controller.standingEyeHeight, controller.crouchingEyeHeight, _shownEye);
+                figure.SetState(crouch, _shownPitch, _holding.Value, _flashlightOn.Value);
+            }
+            else if (body != null)
             {
                 float height = _shownEye / controller.standingEyeHeight;
                 body.transform.localScale = new Vector3(1f, height, 1f);

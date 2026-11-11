@@ -74,7 +74,7 @@ namespace BackRooms.Entities
         public float searchSeconds = 8f;
 
         [Header("Corpo (metros)")]
-        public float eyeHeight = 2.5f;
+        public float eyeHeight = 2.9f;
         public float bodyRadius = 0.45f;
 
         public EntityState State => (EntityState)_state.Value;

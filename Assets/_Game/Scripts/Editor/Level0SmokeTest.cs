@@ -4,6 +4,7 @@ using BackRooms.Entities;
 using BackRooms.Items;
 using BackRooms.Net;
 using BackRooms.Player;
+using BackRooms.UI;
 using BackRooms.World;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -21,6 +22,11 @@ namespace BackRooms.EditorTools
     ///   jogador e anda; o cliente confere que recebeu o mesmo mapa e que vê o host andar.
     /// • Buracos: todos os papéis andam sobre uma faixa e depois se jogam no vazio, para
     ///   conferir que a faixa segura o jogador e que a queda devolve à sala inicial.
+    /// • Apagão: o primeiro é adiantado para os 20 s. O teste confere que as luminárias avisam
+    ///   (piscando, depois piscando depressa), apagam todas e voltam.
+    /// • Gravação: grava 3 s de vídeo e confere que o arquivo saiu com quadros.
+    /// • Traje e mão: o corpo do outro jogador é a figura nova, mostra o item que ele pegou,
+    ///   e a mão em primeira pessoa aparece com a caneta.
     /// • Entidade: fica desligada até a hora dela. Então o jogador é posto longe da sala e o
     ///   teste confere que ela aparece entre ele e a sala, que ouve o barulho dele, que vai
     ///   atrás e que o pega (e ele volta para a sala). O cliente confere que a vê se mexer.
@@ -81,6 +87,18 @@ namespace BackRooms.EditorTools
         static bool _entitySeen;
         static bool _sawEntityMove;
         static Vector3 _entityFirst;
+        static bool _sawWarning, _sawHurry, _sawDark, _sawLightBack;
+        static int _litBeforeDark;
+        static int _litInDark;
+        static int _recordStep;
+        static double _recordStart;
+        static bool _recordOk;
+        static string _recordNote = "";
+        static RenderTexture _recordTarget;
+        static bool _recordWarm;
+        static bool _handOk;
+        static bool _sawRemoteFigure;
+        static bool _sawRemoteHolding;
         static int _baitStep;
         static double _baitStart;
         static bool _clientCaughtOk;
@@ -157,6 +175,8 @@ namespace BackRooms.EditorTools
             }
 
             if (_stage >= 2) AuditPenRay();
+            if (_stage >= 2) WatchLights();
+            if (_stage >= 3 && _local != null) RecordStage();
 
             switch (_stage)
             {
@@ -165,6 +185,8 @@ namespace BackRooms.EditorTools
                     session.fixedSeed = 1998;
                     // A entidade só entra na etapa dela; antes, atrapalharia as outras.
                     EntityDirector.Paused = true;
+                    // O primeiro apagão é adiantado, para caber no teste. Host e cliente fazem a mesma conta.
+                    if (LightsOut.Instance != null) LightsOut.Instance.firstDarkAt = 20f;
 
                     if (_role == Solo)
                     {
@@ -290,6 +312,10 @@ namespace BackRooms.EditorTools
                         break;
                     }
 
+                    // Com a caneta na mão, a mão em primeira pessoa tem de estar na tela, com a caneta.
+                    if (held != null && held.Equipped && held.hand != null && held.hand.gameObject.activeInHierarchy && held.hand.PenRenderer != null)
+                        _handOk = true;
+
                     double t = Now - _penReady;
 
                     if (t < 0.2)
@@ -399,6 +425,10 @@ namespace BackRooms.EditorTools
             if (_remote == null) return;
 
             _remoteMoved = Mathf.Max(_remoteMoved, Vector3.Distance(_remoteStart, _remote.transform.position));
+
+            // O outro jogador aparece como a figura de traje, e ela mostra o item que ele pegou.
+            if (_remote.figure != null && _remote.body.activeInHierarchy && _remote.figure.GetComponentsInChildren<Renderer>().Length > 20) _sawRemoteFigure = true;
+            if (_remote.figure != null && _remote.figure.Holding) _sawRemoteHolding = true;
             if (_remote.flashlight != null && _remote.flashlight.IsOn) _sawRemoteFlashlight = true;
         }
 
@@ -665,6 +695,95 @@ namespace BackRooms.EditorTools
             return false;
         }
 
+        // Acompanha as fases da energia do andar e conta as luminárias acesas em cada uma.
+        static void WatchLights()
+        {
+            LightsOut lightsOut = LightsOut.Instance;
+            if (lightsOut == null || CeilingLight.All.Count == 0) return;
+
+            int lit = 0;
+            foreach (CeilingLight light in CeilingLight.All) if (light.IsLit) lit++;
+
+            switch (lightsOut.Phase)
+            {
+                case PowerPhase.Warning:
+                    _sawWarning = true;
+                    break;
+
+                case PowerPhase.Hurry:
+                    _sawHurry = true;
+                    break;
+
+                case PowerPhase.Dark:
+                    // O valor da fase muda num quadro e as luminárias no mesmo: conta o pior caso do apagão inteiro.
+                    _sawDark = true;
+                    _litInDark = Mathf.Max(_litInDark, lit);
+                    break;
+
+                default:
+                    if (!_sawDark) _litBeforeDark = Mathf.Max(_litBeforeDark, lit);
+                    else if (lit > 0) _sawLightBack = true;
+                    break;
+            }
+        }
+
+        // Grava 3 s de vídeo numa pasta do projeto e confere o arquivo.
+        static void RecordStage()
+        {
+            ScreenRecorder recorder = ScreenRecorder.Instance;
+            if (_recordStep >= 2) return;
+
+            if (recorder == null)
+            {
+                _recordNote = "cena sem gravador";
+                _recordStep = 2;
+                return;
+            }
+
+            if (_recordStep == 0)
+            {
+                ScreenRecorder.FolderOverride = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..", "Logs", "Gravacoes", _role));
+                _recordStep = recorder.Begin() ? 1 : 2;
+                _recordStart = Now;
+                if (_recordStep == 2) _recordNote = "não começou: " + recorder.LastError;
+                return;
+            }
+
+            // Sem janela (linha de comando) o Unity não desenha a câmera do jogador sozinho, e
+            // é ao desenhar que a filmadora entrega a imagem ao gravador. Aqui o teste manda
+            // desenhar, numa textura, a cada passada.
+            if (Application.isBatchMode && _local.playerCamera != null)
+            {
+                if (_recordTarget == null) _recordTarget = new RenderTexture(1280, 720, 24);
+                _local.playerCamera.targetTexture = _recordTarget;
+                _local.playerCamera.Render();
+
+                // O primeiro desenho pode levar muitos segundos compilando shaders; os 3 s
+                // de gravação contam a partir dele.
+                if (!_recordWarm)
+                {
+                    _recordWarm = true;
+                    _recordStart = Now;
+                }
+            }
+
+            if (Now - _recordStart < 3.0) return;
+
+            recorder.Stop();
+            _recordStep = 2;
+
+            if (_recordTarget != null)
+            {
+                _local.playerCamera.targetTexture = null;
+                Object.Destroy(_recordTarget);
+                _recordTarget = null;
+            }
+
+            long bytes = System.IO.File.Exists(recorder.LastFile) ? new System.IO.FileInfo(recorder.LastFile).Length : 0;
+            _recordOk = recorder.LastFrames >= 20 && bytes > 100000 && recorder.LastError.Length == 0;
+            _recordNote = $"{recorder.LastFrames} quadros, {bytes / 1024} KB" + (recorder.LastError.Length > 0 ? ", erro: " + recorder.LastError : "");
+        }
+
         // Vai e vem em torno do posto: corre para a frente, anda para trás.
         static void MakeNoise(Vector3 position)
         {
@@ -818,6 +937,32 @@ namespace BackRooms.EditorTools
                           $"caminho_direto={(level.PathCells.Count - 1) * 4}m caminho_seguro={(level.SafePathCells.Count - 1) * 4}m setas={arrows}";
             }
 
+            // Apagão. Quem entrou depois fica poucos segundos e pode não ver o ciclo inteiro.
+            if (!(_role == ClientRole && LateJoin))
+            {
+                ok &= _sawWarning && _sawHurry && _sawDark && _sawLightBack && _litBeforeDark > 0 && _litInDark == 0;
+                report += $" apagao: aviso={_sawWarning} aviso_rapido={_sawHurry} escuro={_sawDark} voltou={_sawLightBack} " +
+                          $"acesas_antes={_litBeforeDark} acesas_no_escuro={_litInDark}";
+            }
+
+            if (_recordStep >= 2)
+            {
+                ok &= _recordOk;
+                report += $" gravacao={_recordOk} [{_recordNote}]";
+            }
+
+            if (_role != ClientRole)
+            {
+                ok &= _handOk;
+                report += $" mao_com_caneta={_handOk}";
+            }
+
+            if (_role == ClientRole && !LateJoin)
+            {
+                ok &= _sawRemoteFigure && _sawRemoteHolding;
+                report += $" traje_do_host={_sawRemoteFigure} viu_o_host_com_a_caneta={_sawRemoteHolding}";
+            }
+
             if (_entityTested)
             {
                 ok &= _entitySpawnOk && _entityHeardOk && _entityTrackedOk && _entityCatchOk;
@@ -945,6 +1090,8 @@ namespace BackRooms.EditorTools
             SessionState.SetString(RoleKey, "");
             SessionState.SetBool(LateKey, false);
             EntityDirector.Paused = false;
+            ScreenRecorder.FolderOverride = null;
+            if (ScreenRecorder.Instance != null) ScreenRecorder.Instance.Stop();
 
             if (_local != null && _local.controller != null) _local.controller.Stepped -= OnStepped;
 

@@ -272,7 +272,7 @@ namespace BackRooms.World
         const double HallPillarChance = 0.60;
         const double LoosePillarChance = 0.06;
         const double LightChance = 0.42;
-        const double AlcoveChance = 0.07;
+        const double AlcoveChance = 0.12;
 
         // Setas: poucas e longe umas das outras. Metade no caminho direto, o resto onde o
         // mapa ainda não tem nenhuma. Distâncias em células.

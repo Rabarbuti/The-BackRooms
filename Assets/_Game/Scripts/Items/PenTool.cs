@@ -21,9 +21,12 @@ namespace BackRooms.Items
         [Header("Referências")]
         [Tooltip("De onde sai a mira: a câmera do jogador.")]
         public Transform aim;
-        [Tooltip("Caneta que aparece na mão de quem está usando. Só o dono vê.")]
+        [Tooltip("O que aparece na tela de quem está usando: a mão segurando a caneta. Só o dono vê.")]
         public GameObject viewModel;
+        [Tooltip("Corpo da caneta, quando ela não vem de uma ItemHand.")]
         public Renderer viewModelRenderer;
+        [Tooltip("A mão em primeira pessoa. A cor da tinta vai para a caneta que ela segura.")]
+        public ItemHand hand;
 
         [Header("Uso")]
         [Tooltip("Distância máxima para riscar, em metros.")]
@@ -35,6 +38,9 @@ namespace BackRooms.Items
 
         public bool Equipped { get; private set; }
         public int ColorIndex { get; private set; }
+
+        /// <summary>Verdadeiro enquanto a ponta está de fato encostada e riscando.</summary>
+        public bool IsDrawing => _active;
 
         /// <summary>Nome da cor atual, para o painel da filmadora.</summary>
         public string ColorName => ColorNames[ColorIndex % ColorNames.Length];
@@ -147,13 +153,15 @@ namespace BackRooms.Items
             if (!equipped) EndStroke();
 
             if (viewModel != null) viewModel.SetActive(equipped);
+            if (equipped && hand != null) hand.Build();
             if (equipped && DrawingBoard.Instance != null) ApplyViewModelColor(DrawingBoard.Instance);
         }
 
         void ApplyViewModelColor(DrawingBoard board)
         {
-            if (viewModelRenderer == null || board.inkMaterials == null || board.inkMaterials.Length == 0) return;
-            viewModelRenderer.sharedMaterial = board.inkMaterials[Mathf.Min(ColorIndex, board.inkMaterials.Length - 1)];
+            Renderer body = hand != null && hand.PenRenderer != null ? hand.PenRenderer : viewModelRenderer;
+            if (body == null || board.inkMaterials == null || board.inkMaterials.Length == 0) return;
+            body.sharedMaterial = board.inkMaterials[Mathf.Min(ColorIndex, board.inkMaterials.Length - 1)];
         }
 
         void AddSample(DrawingBoard board, Vector3 point, Vector3 normal)
