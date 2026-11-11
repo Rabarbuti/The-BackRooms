@@ -83,8 +83,10 @@ Packages/packages-lock.json linguist-generated
 *.collada               lfs
 *.dae                   lfs
 *.dxf                   lfs
-*.FBX                   lfs
-*.fbx                   lfs
+# FBX fica direto no Git, como os PNG: a conta está sem orçamento de LFS. Os modelos
+# saem de scripts em Tools/Blender e são pequenos. Para voltar ao LFS, troque "binary" por "lfs".
+*.FBX                   binary
+*.fbx                   binary
 *.jas                   lfs
 *.lws                   lfs
 *.lxo                   lfs
@@ -128,7 +130,9 @@ Packages/packages-lock.json linguist-generated
 *.jpeg                  lfs
 *.jpg                   lfs
 *.pict                  lfs
-*.png                   lfs
+# PNG fica direto no Git: a conta do GitHub está sem orçamento de LFS e as
+# texturas do projeto são pequenas. Para voltar ao LFS, troque "binary" por "lfs".
+*.png                   binary
 *.psd                   lfs
 *.tga                   lfs
 *.tif                   lfs

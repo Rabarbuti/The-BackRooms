@@ -1,0 +1,206 @@
+using System.Collections;
+using System.Collections.Generic;
+using BackRooms.Player;
+using Unity.Netcode;
+using Unity.Netcode.Components;
+using UnityEngine;
+
+namespace BackRooms.Net
+{
+    /// <summary>
+    /// Liga o prefab do jogador à rede. Na máquina do dono, habilita controle, câmera e
+    /// lanterna. Nas outras, o prefab vira só a representação daquele jogador: corpo visível,
+    /// posição pelo NetworkTransform e, por aqui, inclinação da cabeça, agachar e lanterna.
+    /// No prefab, controle, câmera e ouvinte de áudio ficam desligados; quem liga é este script.
+    /// </summary>
+    public sealed class PlayerNetwork : NetworkBehaviour
+    {
+        [Header("Referências")]
+        public PlayerController controller;
+        public Flashlight flashlight;
+        public Footsteps footsteps;
+        public Camera playerCamera;
+        public AudioListener listener;
+        public Transform cameraPivot;
+        [Tooltip("Corpo visto pelos outros jogadores. O dono não vê o próprio.")]
+        public GameObject body;
+        [Tooltip("A figura animada dentro do corpo: recebe agachar, olhar, item na mão e lanterna.")]
+        public PlayerBody figure;
+        [Tooltip("Caneta do jogador. O painel da filmadora lê daqui se ela está na mão.")]
+        public BackRooms.Items.PenTool pen;
+
+        const float SendInterval = 1f / 15f;
+
+        readonly NetworkVariable<float> _pitch = new NetworkVariable<float>(
+            0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+
+        readonly NetworkVariable<bool> _flashlightOn = new NetworkVariable<bool>(
+            false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+
+        readonly NetworkVariable<bool> _crouching = new NetworkVariable<bool>(
+            false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+
+        readonly NetworkVariable<bool> _hidden = new NetworkVariable<bool>(
+            false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+
+        readonly NetworkVariable<bool> _holding = new NetworkVariable<bool>(
+            false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+
+        float _nextSend;
+        float _shownPitch;
+        float _shownEye;
+        bool _ready;
+
+        /// <summary>O jogador desta máquina, quando já está no mapa. Nulo no menu.</summary>
+        public static PlayerNetwork Local { get; private set; }
+
+        /// <summary>Todos os jogadores da sessão que existem nesta máquina. A entidade lê daqui.</summary>
+        public static readonly List<PlayerNetwork> All = new List<PlayerNetwork>();
+
+        /// <summary>Verdadeiro quando este jogador já está posicionado no mapa.</summary>
+        public bool InGame => _ready;
+
+        /// <summary>Agachado? Vale em qualquer máquina: a do dono lê o controle, as outras a rede.</summary>
+        public bool Crouching => IsOwner ? controller.IsCrouching : _crouching.Value;
+
+        /// <summary>Dentro de um esconderijo? Vale em qualquer máquina, como <see cref="Crouching"/>.</summary>
+        public bool Hidden => IsOwner ? controller.IsHidden : _hidden.Value;
+
+        /// <summary>
+        /// Do host para o dono do jogador: a entidade pegou você. A queda de sinal e a volta
+        /// à sala inicial acontecem na máquina do dono, que é quem manda na própria posição.
+        /// </summary>
+        [Rpc(SendTo.Owner)]
+        public void GetCaughtRpc()
+        {
+            controller.GetCaught();
+        }
+
+        public override void OnNetworkSpawn()
+        {
+            All.Add(this);
+            _shownEye = controller.standingEyeHeight;
+
+            if (IsOwner) StartCoroutine(BeginLocal());
+            else BeginRemote();
+        }
+
+        public override void OnNetworkDespawn()
+        {
+            _ready = false;
+            All.Remove(this);
+            if (Local == this) Local = null;
+
+            controller.Respawned -= OnRespawned;
+            controller.RespawnPoint = null;
+        }
+
+        IEnumerator BeginLocal()
+        {
+            if (body != null) body.SetActive(false);
+
+            // O mapa é gerado nesta máquina a partir da seed; espera ele existir para ter chão.
+            GameSession session = GameSession.Instance;
+            while (session != null && !session.LevelReady) yield return null;
+
+            Vector3 spawn = session != null ? session.SpawnPoint(OwnerClientId) : transform.position;
+            controller.Teleport(spawn, 0f);
+
+            // Quem cai num buraco volta para o mesmo ponto em que começou.
+            controller.RespawnPoint = RespawnPoint;
+            controller.Respawned += OnRespawned;
+
+            playerCamera.enabled = true;
+            listener.enabled = true;
+            flashlight.inputEnabled = true;
+            controller.enabled = true;
+            _ready = true;
+            Local = this;
+
+            if (session != null) session.NotifyLocalPlayerReady();
+        }
+
+        Vector3 RespawnPoint()
+        {
+            GameSession session = GameSession.Instance;
+            return session != null ? session.SpawnPoint(OwnerClientId) : transform.position;
+        }
+
+        // Avisa a rede de que a mudança de lugar foi um salto. Sem isso os outros jogadores
+        // veriam este deslizar do fundo do buraco até a sala inicial, atravessando paredes.
+        void OnRespawned()
+        {
+            if (IsSpawned && TryGetComponent(out NetworkTransform networkTransform))
+                networkTransform.Teleport(transform.position, transform.rotation, transform.localScale);
+        }
+
+        void BeginRemote()
+        {
+            controller.enabled = false;
+            playerCamera.enabled = false;
+            listener.enabled = false;
+            flashlight.inputEnabled = false;
+
+            // Quem move este objeto é o NetworkTransform; o CharacterController atrapalharia.
+            if (TryGetComponent(out CharacterController characterController)) characterController.enabled = false;
+
+            if (footsteps != null) footsteps.SetRemote();
+            if (body != null) body.SetActive(true);
+            _ready = true;
+        }
+
+        void Update()
+        {
+            if (!IsSpawned || !_ready) return;
+
+            if (IsOwner) SendState();
+            else ShowState();
+        }
+
+        // Dono: publica o que os outros precisam ver. A posição vai pelo NetworkTransform.
+        void SendState()
+        {
+            if (_flashlightOn.Value != flashlight.IsOn) _flashlightOn.Value = flashlight.IsOn;
+            if (_crouching.Value != controller.IsCrouching) _crouching.Value = controller.IsCrouching;
+            if (_hidden.Value != controller.IsHidden) _hidden.Value = controller.IsHidden;
+
+            bool holding = pen != null && pen.Equipped;
+            if (_holding.Value != holding) _holding.Value = holding;
+
+            if (Time.unscaledTime < _nextSend) return;
+            _nextSend = Time.unscaledTime + SendInterval;
+
+            // Arredonda para graus inteiros: evita mandar atualização por tremidas do mouse.
+            float pitch = Mathf.Round(controller.Pitch);
+            if (Mathf.Abs(pitch - _pitch.Value) >= 1f) _pitch.Value = pitch;
+        }
+
+        // Demais máquinas: aplica o estado recebido, suavizando.
+        void ShowState()
+        {
+            float dt = Time.deltaTime;
+            bool crouching = _crouching.Value;
+
+            _shownPitch = Mathf.Lerp(_shownPitch, _pitch.Value, 1f - Mathf.Exp(-12f * dt));
+            _shownEye = Mathf.MoveTowards(_shownEye, crouching ? controller.crouchingEyeHeight : controller.standingEyeHeight, 4f * dt);
+
+            cameraPivot.localPosition = new Vector3(0f, _shownEye, 0f);
+            cameraPivot.localRotation = Quaternion.Euler(_shownPitch, 0f, 0f);
+
+            flashlight.SetOn(_flashlightOn.Value);
+
+            if (figure != null)
+            {
+                // A figura se agacha de verdade (dobra as pernas), olha para onde o jogador
+                // olha e mostra o que ele tem nas mãos.
+                float crouch = Mathf.InverseLerp(controller.standingEyeHeight, controller.crouchingEyeHeight, _shownEye);
+                figure.SetState(crouch, _shownPitch, _holding.Value, _flashlightOn.Value);
+            }
+            else if (body != null)
+            {
+                float height = _shownEye / controller.standingEyeHeight;
+                body.transform.localScale = new Vector3(1f, height, 1f);
+            }
+        }
+    }
+}

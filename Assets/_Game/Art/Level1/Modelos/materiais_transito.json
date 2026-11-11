@@ -1,0 +1,74 @@
+{
+  "materiais": [
+    {
+      "nome": "Metal_Escuro",
+      "cor": [
+        40,
+        42,
+        44
+      ],
+      "rugosidade": 0.45,
+      "metal": 0.6
+    },
+    {
+      "nome": "Metal_Galvanizado",
+      "cor": [
+        150,
+        156,
+        158
+      ],
+      "rugosidade": 0.38,
+      "metal": 0.75
+    },
+    {
+      "nome": "Metal_Pintado",
+      "cor": [
+        104,
+        114,
+        120
+      ],
+      "rugosidade": 0.48,
+      "metal": 0.25
+    },
+    {
+      "nome": "Placa_Amarela",
+      "cor": [
+        238,
+        188,
+        18
+      ],
+      "rugosidade": 0.45,
+      "metal": 0.0
+    },
+    {
+      "nome": "Placa_Branca",
+      "cor": [
+        232,
+        232,
+        224
+      ],
+      "rugosidade": 0.45,
+      "metal": 0.0
+    },
+    {
+      "nome": "Placa_Preta",
+      "cor": [
+        18,
+        18,
+        20
+      ],
+      "rugosidade": 0.5,
+      "metal": 0.0
+    },
+    {
+      "nome": "Placa_Vermelha",
+      "cor": [
+        188,
+        24,
+        28
+      ],
+      "rugosidade": 0.45,
+      "metal": 0.0
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "materiais": [
+    {
+      "nome": "Madeira_Escura",
+      "cor": [
+        88,
+        56,
+        34
+      ],
+      "rugosidade": 0.62,
+      "metal": 0.0
+    },
+    {
+      "nome": "Plastico_Preto",
+      "cor": [
+        22,
+        22,
+        24
+      ],
+      "rugosidade": 0.5,
+      "metal": 0.0
+    },
+    {
+      "nome": "Tecido_Azul_Gasto",
+      "cor": [
+        84,
+        104,
+        126
+      ],
+      "rugosidade": 0.95,
+      "metal": 0.0
+    },
+    {
+      "nome": "Tecido_Caramelo",
+      "cor": [
+        190,
+        152,
+        104
+      ],
+      "rugosidade": 0.93,
+      "metal": 0.0
+    },
+    {
+      "nome": "Veludo_Marrom_Listrado",
+      "cor": [
+        255,
+        255,
+        255
+      ],
+      "rugosidade": 0.9,
+      "metal": 0.0,
+      "textura": "Veludo_Listrado_Marrom"
+    }
+  ]
+}
