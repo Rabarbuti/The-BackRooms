@@ -8,8 +8,10 @@ using UnityEngine.UIElements;
 namespace BackRooms.UI
 {
     /// <summary>
-    /// Menu inicial: hospedar (ou jogar sozinho) e entrar por IP. Montado em código com
-    /// UI Toolkit. Atalhos de teclado: H hospeda, J entra no endereço digitado.
+    /// Menu inicial: escolher a fase, hospedar (ou jogar sozinho) e entrar por IP. Montado em
+    /// código com UI Toolkit. Atalhos de teclado: H hospeda, J entra no endereço digitado.
+    /// A lista de fases mostra as zeradas e a próxima (<see cref="LevelProgress"/>); no modo
+    /// desenvolvedor, todas.
     /// Durante o jogo vira uma linha de estado no canto e, com o mouse solto (Esc), um
     /// botão para sair da sessão.
     /// </summary>
@@ -22,12 +24,19 @@ namespace BackRooms.UI
         static readonly Color Paper = new Color(0.93f, 0.9f, 0.78f);
         static readonly Color PanelColor = new Color(0.04f, 0.035f, 0.02f, 0.82f);
         static readonly Color ButtonColor = new Color(0.33f, 0.29f, 0.12f);
+        static readonly Color CurrentColor = new Color(0.55f, 0.47f, 0.16f);
+        static readonly Color LockedColor = new Color(0.16f, 0.15f, 0.12f);
 
         VisualElement _panel;
         TextField _address;
         Label _status;
         Label _hud;
         Button _leave;
+        Label _subtitle;
+        Label _devNote;
+        Label _notice;
+        Button[] _levelButtons;
+        float _noticeUntil;
         string _localAddresses;
 
         void OnEnable()
@@ -41,6 +50,20 @@ namespace BackRooms.UI
             BuildHud(root);
 
             _localAddresses = FindLocalAddresses();
+            LevelProgress.LevelCleared += OnLevelCleared;
+        }
+
+        void OnDisable()
+        {
+            LevelProgress.LevelCleared -= OnLevelCleared;
+        }
+
+        void OnLevelCleared(int index)
+        {
+            LevelInfo next = LevelCatalog.Get(index + 1);
+            _notice.text = LevelCatalog.Get(index).Name.ToUpperInvariant() + " ZERADO" +
+                           (next != null ? "   •   " + next.Name + " liberado no menu" : "");
+            _noticeUntil = Time.unscaledTime + 8f;
         }
 
         void BuildPanel(VisualElement root)
@@ -67,11 +90,13 @@ namespace BackRooms.UI
             title.style.marginBottom = 4;
             _panel.Add(title);
 
-            var subtitle = Text("Level 0 — sala de teste", 16, Paper);
-            subtitle.style.unityTextAlign = TextAnchor.MiddleCenter;
-            subtitle.style.marginBottom = 26;
-            subtitle.style.opacity = 0.7f;
-            _panel.Add(subtitle);
+            _subtitle = Text("", 16, Paper);
+            _subtitle.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _subtitle.style.marginBottom = 22;
+            _subtitle.style.opacity = 0.7f;
+            _panel.Add(_subtitle);
+
+            BuildLevelList();
 
             _panel.Add(MenuButton("Hospedar  (ou jogar sozinho)        [H]", () => session.Host()));
 
@@ -96,6 +121,59 @@ namespace BackRooms.UI
             _panel.Add(_status);
         }
 
+        // Uma linha por fase: a atual em destaque, as liberadas clicáveis, as outras apagadas.
+        void BuildLevelList()
+        {
+            var label = Text("Fase", 14, Paper);
+            label.style.opacity = 0.75f;
+            label.style.marginBottom = 4;
+            _panel.Add(label);
+
+            _levelButtons = new Button[LevelCatalog.Count];
+            for (int i = 0; i < LevelCatalog.Count; i++)
+            {
+                int index = i;
+                Button button = MenuButton("", () => session.SwitchLevel(index));
+                button.style.height = 36;
+                button.style.fontSize = 16;
+                button.style.marginBottom = 4;
+                button.style.unityTextAlign = TextAnchor.MiddleLeft;
+                button.style.paddingLeft = 12;
+                _levelButtons[i] = button;
+                _panel.Add(button);
+            }
+
+            _devNote = Text("Modo desenvolvedor: todas as fases liberadas.", 12, Paper);
+            _devNote.style.opacity = 0.5f;
+            _devNote.style.marginBottom = 18;
+            _panel.Add(_devNote);
+        }
+
+        void RefreshLevels()
+        {
+            int current = session.LevelIndex;
+            LevelInfo here = LevelCatalog.Get(current);
+            _subtitle.text = here != null ? here.Name + " — " + here.Subtitle : "";
+            _devNote.style.display = LevelProgress.DevMode ? DisplayStyle.Flex : DisplayStyle.None;
+
+            for (int i = 0; i < _levelButtons.Length; i++)
+            {
+                LevelInfo info = LevelCatalog.Levels[i];
+                bool unlocked = LevelProgress.IsUnlocked(i);
+                string state = i == current ? "aqui"
+                    : LevelProgress.IsCleared(i) ? "zerado"
+                    : unlocked ? "liberado"
+                    : "zere o " + LevelCatalog.Get(i - 1).Name;
+
+                Button button = _levelButtons[i];
+                button.text = info.Name + " — " + info.Subtitle + "   [" + state + "]";
+                button.SetEnabled(unlocked && i != current);
+                button.style.backgroundColor = i == current ? CurrentColor : unlocked ? ButtonColor : LockedColor;
+                // Desabilitado o Unity apaga o botão; a fase atual tem de continuar legível.
+                button.style.opacity = i == current || unlocked ? 1f : 0.55f;
+            }
+        }
+
         void BuildHud(VisualElement root)
         {
             _hud = Text("", 14, Paper);
@@ -105,6 +183,15 @@ namespace BackRooms.UI
             _hud.style.top = 10;
             _hud.style.opacity = 0.65f;
             root.Add(_hud);
+
+            _notice = Text("", 18, Yellow);
+            _notice.pickingMode = PickingMode.Ignore;
+            _notice.style.position = Position.Absolute;
+            _notice.style.left = 0; _notice.style.right = 0;
+            _notice.style.top = 60;
+            _notice.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _notice.style.unityFontStyleAndWeight = FontStyle.Bold;
+            root.Add(_notice);
 
             _leave = MenuButton("Sair da sessão", () => session.Leave());
             _leave.style.position = Position.Absolute;
@@ -151,7 +238,9 @@ namespace BackRooms.UI
             _leave.style.display = playing && UnityEngine.Cursor.lockState != CursorLockMode.Locked ? DisplayStyle.Flex : DisplayStyle.None;
 
             if (playing) _hud.text = DescribeSession();
+            _notice.style.display = Time.unscaledTime < _noticeUntil ? DisplayStyle.Flex : DisplayStyle.None;
             if (inMenu) ReadHotkeys();
+            if (!playing) RefreshLevels();
         }
 
         string DescribeSession()

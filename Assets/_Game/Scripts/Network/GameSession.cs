@@ -6,6 +6,7 @@ using Unity.Collections;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace BackRooms.Net
 {
@@ -18,8 +19,10 @@ namespace BackRooms.Net
 
     /// <summary>
     /// Dona da sessão de rede: hospeda ou entra por IP, sincroniza a seed do mapa e manda
-    /// construir o nível. O mapa em si não trafega — o host envia só a seed e cada máquina
-    /// gera o mesmo labirinto.
+    /// construir o nível. O mapa em si não trafega — o host envia só a seed (e a fase) e cada
+    /// máquina gera o mesmo labirinto.
+    /// Cada fase é uma cena com a sua própria sessão. Trocar de fase destrói esta sessão e
+    /// carrega a cena da outra; quem entra numa sessão de outra fase troca sozinho e reconecta.
     /// Linha de comando: -brHost hospeda ao abrir; -brJoin &lt;endereço&gt; entra ao abrir.
     /// </summary>
     [RequireComponent(typeof(NetworkManager))]
@@ -52,6 +55,9 @@ namespace BackRooms.Net
         public string Address { get; private set; } = "";
         public int Seed { get; private set; }
 
+        /// <summary>Índice desta fase no <see cref="LevelCatalog"/> (pela cena em que o nível está).</summary>
+        public int LevelIndex { get; private set; }
+
         /// <summary>Verdadeiro quando o nível desta sessão já foi construído nesta máquina.</summary>
         public bool LevelReady { get; private set; }
 
@@ -80,17 +86,50 @@ namespace BackRooms.Net
         UnityTransport _transport;
         Coroutine _building;
         double _epoch;
+        bool _clearedThisSession;
+        // Fase pedida pelo host a um cliente que está em outra; a troca acontece no Update.
+        int _switchTo = -1;
+
+        // Sobrevivem à troca de cena: o endereço para reconectar depois de trocar de fase e a
+        // marca de que a linha de comando já foi lida (para não hospedar de novo a cada fase).
+        static string _pendingJoin;
+        static bool _argsHandled;
 
         void Awake()
         {
             Instance = this;
             _net = GetComponent<NetworkManager>();
             _transport = GetComponent<UnityTransport>();
+
+            // O NetworkManager leva este objeto para fora da cena; o nível fica nela.
+            string scene = level != null ? level.gameObject.scene.name : SceneManager.GetActiveScene().name;
+            LevelIndex = Mathf.Max(0, LevelCatalog.IndexOfScene(scene));
+        }
+
+        void OnEnable()
+        {
+            LevelExit.Reached += OnExitReached;
+        }
+
+        void OnDisable()
+        {
+            LevelExit.Reached -= OnExitReached;
         }
 
         void Start()
         {
             ShowBackdrop();
+
+            if (_pendingJoin != null)
+            {
+                string address = _pendingJoin;
+                _pendingJoin = null;
+                Join(address);
+                return;
+            }
+
+            if (_argsHandled) return;
+            _argsHandled = true;
 
             string[] args = Environment.GetCommandLineArgs();
             for (int i = 0; i < args.Length; i++)
@@ -110,6 +149,55 @@ namespace BackRooms.Net
         {
             if (Phase != SessionPhase.Playing && menuCamera != null && menuCamera.enabled)
                 menuCamera.transform.Rotate(0f, menuSpin * Time.deltaTime, 0f, Space.World);
+
+            if (_switchTo >= 0)
+            {
+                // O host está em outra fase: sai, troca de cena e entra de novo no mesmo endereço.
+                int target = _switchTo;
+                _switchTo = -1;
+                string address = Address;
+                EndSession("");
+                LoadLevel(target, address);
+            }
+        }
+
+        // ---------------------------------------------------------------- Fases
+
+        /// <summary>
+        /// Troca para outra fase pelo menu. Só fora de partida e só para fase liberada
+        /// (<see cref="LevelProgress"/>). Esta sessão é destruída junto com a cena atual.
+        /// </summary>
+        public bool SwitchLevel(int index)
+        {
+            if (Phase != SessionPhase.Menu || index == LevelIndex || !LevelProgress.IsUnlocked(index)) return false;
+            LoadLevel(index, null);
+            return true;
+        }
+
+        void LoadLevel(int index, string joinAddress)
+        {
+            LevelInfo info = LevelCatalog.Get(index);
+            if (info == null) return;
+
+            Debug.Log($"[BackRooms] Trocando para {info.Name} ({info.Scene})" + (joinAddress != null ? $", depois entra em {joinAddress}." : "."));
+            _pendingJoin = joinAddress;
+
+            // O objeto da sessão não pertence à cena (o NetworkManager o tirou dela): sem
+            // destruí-lo à mão, a fase nova ficaria com duas sessões.
+            Unsubscribe();
+            if (_net != null && _net.IsListening) _net.Shutdown();
+            Destroy(gameObject);
+            SceneManager.LoadScene(info.Scene, LoadSceneMode.Single);
+        }
+
+        // Quem chega à saída na própria máquina zera a fase (uma vez por sessão).
+        void OnExitReached(BackRooms.Player.PlayerController player)
+        {
+            if (Phase != SessionPhase.Playing || _clearedThisSession || player == null) return;
+            if (!player.TryGetComponent(out PlayerNetwork network) || !network.IsOwner) return;
+
+            _clearedThisSession = true;
+            LevelProgress.MarkCleared(LevelIndex);
         }
 
         // ---------------------------------------------------------------- Entrar e sair
@@ -125,6 +213,7 @@ namespace BackRooms.Net
             _transport.SetConnectionData("127.0.0.1", port, localOnly ? "127.0.0.1" : "0.0.0.0");
             Subscribe();
             LevelReady = false;
+            _clearedThisSession = false;
             ClearDrawings();
             SetPhase(SessionPhase.Connecting, "Abrindo a sessão...");
 
@@ -151,6 +240,7 @@ namespace BackRooms.Net
             _transport.SetConnectionData(address, port);
             Subscribe();
             LevelReady = false;
+            _clearedThisSession = false;
             ClearDrawings();
             Address = address;
             SetPhase(SessionPhase.Connecting, "Conectando a " + address + ":" + port + "...");
@@ -207,11 +297,12 @@ namespace BackRooms.Net
         {
             if (!_net.IsServer || clientId == _net.LocalClientId) return;
 
-            // A seed do mapa e o instante em que a sessão começou, no relógio do servidor.
-            using (var writer = new FastBufferWriter(sizeof(int) + sizeof(double), Allocator.Temp))
+            // A seed do mapa, o instante em que a sessão começou, no relógio do servidor, e a fase.
+            using (var writer = new FastBufferWriter(sizeof(int) * 2 + sizeof(double), Allocator.Temp))
             {
                 writer.WriteValueSafe(Seed);
                 writer.WriteValueSafe(_epoch);
+                writer.WriteValueSafe(LevelIndex);
                 _net.CustomMessagingManager.SendNamedMessage(SeedMessage, clientId, writer);
             }
 
@@ -233,6 +324,16 @@ namespace BackRooms.Net
         {
             reader.ReadValueSafe(out int seed);
             reader.ReadValueSafe(out _epoch);
+            reader.ReadValueSafe(out int levelIndex);
+
+            if (levelIndex != LevelIndex && LevelCatalog.IsValid(levelIndex))
+            {
+                // A troca destrói esta sessão: não dá para fazer de dentro do tratamento da mensagem.
+                Status = "O host está no " + LevelCatalog.Get(levelIndex).Name + ". Trocando de fase...";
+                _switchTo = levelIndex;
+                return;
+            }
+
             BuildLevel(seed);
         }
 

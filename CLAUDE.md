@@ -43,6 +43,9 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   `EntityBody` (corpo de cipós e animação), `EntityHeadMesh` (cabeça esculpida como malha) e
   `EntityAudio`, tudo feito em código. O inimigo do Level 1, o Capitão, por enquanto só corpo:
   `CaptainBody` e `CaptainHeadMesh`.
+- `Scripts/Systems/LevelCatalog.cs` — as fases em ordem (`LevelCatalog`: nome e cena) e o
+  progresso desta máquina (`LevelProgress`: zeradas + a próxima liberadas; tudo no modo
+  desenvolvedor). Fase nova entra no catálogo e na lista de cenas da build.
 - `Scripts/Systems/FigureKit.cs` — peças para montar figuras em código (junta, osso, volume). A
   entidade, o Capitão, o traje dos jogadores (`PlayerBody`) e a mão (`ItemHand`) usam.
 - `Scripts/UI` — filmadora (`Camcorder`, `CamcorderPass`) e gravação em vídeo (`ScreenRecorder`,
@@ -63,7 +66,7 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
 
 WASD anda, Shift corre, Ctrl ou C agacha, Espaço pula, F lanterna, 1 pega e guarda a caneta,
 botão esquerdo risca, R troca a cor, F9 grava a tela, Esc solta o mouse. No menu: H hospeda,
-J entra.
+J entra; a lista "Fase" troca de nível (no editor todas ficam liberadas).
 
 ## Conteúdo gerado: não editar à mão
 
@@ -206,6 +209,11 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   sem atravessá-lo. Sai com 0 se passou, 3 se falhou; linha `[BackRooms] Teste do Level 1`.
   "Encostou" se mede pela colisão que o `CharacterController` relata, não por distância: numa
   pilha, a cadeira de cima, inclinada, barra o jogador antes da de baixo.
+- `LevelSelectTest.BatchRun` — seletor de fase em Play: fase bloqueada sem progresso, troca
+  para o Level 1 com uma sessão só, saída zera a fase, volta ao Level 0. Dois editores:
+  `LevelSelectTest.BatchHostLevel1` + `BatchJoinFromLevel0` (o cliente tem de ser levado ao
+  Level 1 e montar a mesma mobília). Restaura o progresso salvo; linha `[BackRooms] Teste do
+  seletor de fase`.
 - `Level1Models.BatchUpdateAndCapture` — cria os materiais dos lotes, reimporta os modelos,
   escreve as medidas no log e salva fotos em `Logs/Previews/moveis_*.png` (todos, ou só os de
   `-moveis Nome1,Nome2`), além da vitrine de jantar, da loja e da sala dos sofás.

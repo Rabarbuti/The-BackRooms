@@ -104,11 +104,22 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
 - **Gravação de verdade:** F9 grava o que o jogador vê, com som, num AVI de 854 x 480 a 20
   quadros por segundo, na pasta Vídeos do usuário, em "The BackRooms". Para sozinha aos 15 min.
 
+### Fases e progresso
+
+- **Seletor no menu:** lista as fases do `LevelCatalog` (hoje Level 0 e Level 1 de teste); a
+  atual fica em destaque. Escolher outra fecha a sessão e carrega a cena dela
+  (`GameSession.SwitchLevel`). Cada fase é uma cena com a própria sessão.
+- **Progresso** (`LevelProgress`, nas preferências desta máquina): uma fase está zerada quando o
+  jogador desta máquina chega à saída dela. Ficam liberadas as zeradas e a próxima. O aviso
+  "LEVEL N ZERADO" aparece no alto da tela.
+- **Modo desenvolvedor:** no editor, em build de desenvolvimento ou com `-brDev`, todas liberadas.
+
 ### Rede
 
 - Host autoritativo por IP direto, porta 7777. Jogar sozinho é hospedar sem ninguém entrar.
   No menu, H hospeda e J entra; por linha de comando, `-brHost` e `-brJoin <endereço>`.
-- O host envia a seed e o instante de início da sessão; cada máquina gera o mesmo mapa.
+- O host envia a seed, o instante de início da sessão e a fase; cada máquina gera o mesmo mapa.
+  Quem entra estando em outra fase troca sozinho para a do host e reconecta no mesmo endereço.
 - Para jogar pela internet hoje é preciso abrir a porta 7777 no roteador de quem hospeda ou
   usar uma VPN de jogo.
 
@@ -128,7 +139,9 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
 - **Opções:** gráficos, resolução e pasta da gravação.
 - **Mais níveis.** O segundo está projetado em `level1-mostruario.md`. Existe uma versão de
   teste jogável (`Scenes/Level1_Test.unity`: mapa pequeno mobiliado, sem entidade) e o corpo do
-  inimigo (`CaptainBody`); não há ainda passagem do Level 0 para ele.
+  inimigo (`CaptainBody`); já dá para escolher a fase no menu, mas sair por uma porta ainda não
+  leva à seguinte, e o objetivo de cada fase (seção 2.3) ainda não existe: hoje chegar à saída
+  basta para zerar.
 
 ---
 
