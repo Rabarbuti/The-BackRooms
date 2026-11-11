@@ -33,6 +33,10 @@ namespace BackRooms.World
         const float PillarSize = 0.8f;
         const float PanelWidth = 0.6f;
         const float PanelLength = 1.2f;
+        // Calha da luminária: aro de chapa em volta do difusor, saindo do forro.
+        const float TrofferDrop = 0.045f;
+        const float TrofferRim = 0.03f;
+        const float DiffuserInset = 0.005f;
 
         // Parede grossa com nicho (medidas em metros).
         const float AlcoveHalfThickness = 0.7f;
@@ -58,6 +62,8 @@ namespace BackRooms.World
         public Material baseboardMaterial;
         public Material panelOnMaterial;
         public Material panelOffMaterial;
+        [Tooltip("Chapa da calha em volta do difusor. Vazio = painel plano colado ao forro, sem calha.")]
+        public Material lightHousingMaterial;
         [Tooltip("Papel de parede e carpete sem nenhum encardido, usados só na sala inicial.")]
         public Material cleanWallMaterial;
         public Material cleanFloorMaterial;
@@ -91,9 +97,19 @@ namespace BackRooms.World
         public Material[] floorWetDecals;
         public Material floorWearDecal;
 
+        [Header("Grelhas de ar")]
+        [Tooltip("Chapa da grelha de retorno de ar. Vazio = sem grelhas.")]
+        public Material ventMaterial;
+        [Tooltip("Altura do centro da grelha, em metros.")]
+        public float ventHeight = 3.45f;
+
         [Header("Saída")]
         public Material exitDoorMaterial;
         public Material exitSignMaterial;
+        [Tooltip("Porta em 3D (folha, batente e barra antipânico), com a frente em -Z, o pé em Y = 0 e o fundo na face da parede. " +
+                 "Vazio = porta plana antiga.")]
+        public Mesh exitDoorModel;
+        public Material exitDoorModelMaterial;
 
         [Tooltip("Versão do Level0Setup que gerou esta cena. O editor usa isso para avisar quando o conteúdo ficou velho.")]
         [HideInInspector] public int contentVersion;
@@ -562,6 +578,10 @@ namespace BackRooms.World
         {
             GameObject root = CreateChild("Luminarias");
             Mesh panelMesh = CreateQuadMesh("Painel", PanelWidth, PanelLength, horizontal: true);
+            bool housed = lightHousingMaterial != null;
+            Mesh housingMesh = housed ? CreateTrofferMesh() : null;
+            // Com calha, o difusor desce junto com o aro (fica 5 mm para dentro dele).
+            float panelHeight = housed ? WallHeight - TrofferDrop + DiffuserInset : WallHeight - 0.004f;
 
             int count = 0;
             foreach (LightState state in Data.Lights)
@@ -583,15 +603,64 @@ namespace BackRooms.World
                     float pz = Mathf.Round((cz - PanelLength * 0.5f) / CeilingTile) * CeilingTile + PanelLength * 0.5f;
 
                     MeshRenderer panel = CreateRenderer($"Luminaria_{x}_{z}", panelMesh, panelOffMaterial, ShadowCastingMode.Off, root.transform);
-                    panel.transform.localPosition = new Vector3(px, WallHeight - 0.004f, pz);
+                    panel.transform.localPosition = new Vector3(px, panelHeight, pz);
+
+                    if (housed)
+                    {
+                        // Sem sombra: a luz fica dentro da calha e não pode ser tapada por ela.
+                        MeshRenderer housing = CreateRenderer("Calha", housingMesh, lightHousingMaterial, ShadowCastingMode.Off, panel.transform);
+                        // Colisor do mesmo tamanho da calha fechada (aro + difusor).
+                        var box = housing.gameObject.AddComponent<BoxCollider>();
+                        box.center = new Vector3(0f, TrofferDrop * 0.5f - DiffuserInset, 0f);
+                        box.size = new Vector3(PanelWidth + TrofferRim * 2f, TrofferDrop, PanelLength + TrofferRim * 2f);
+                    }
 
                     HDAdditionalLightData[] lights = null;
                     if (state != LightState.Dead)
+                    {
                         lights = new[] { CreateCeilingLight(panel.transform, shadowResolution) };
+                        // A luz fica sempre 3,4 cm abaixo do forro, com ou sem calha, para a
+                        // iluminação do andar não mudar.
+                        lights[0].transform.localPosition = new Vector3(0f, WallHeight - 0.034f - panelHeight, 0f);
+                    }
 
                     panel.gameObject.AddComponent<CeilingLight>().Init(state, lights, panel, panelOnMaterial, panelOffMaterial);
                 }
             }
+        }
+
+        /// <summary>
+        /// Calha de luminária de embutir: laterais de chapa do forro até o aro, o aro em volta
+        /// do difusor e a borda de 5 mm até ele. No espaço do painel: difusor em Y = 0, forro em
+        /// Y = TrofferDrop - DiffuserInset. 24 triângulos, a mesma malha em todas as luminárias.
+        /// </summary>
+        static Mesh CreateTrofferMesh()
+        {
+            var mesh = new MeshBuilder(1f);
+            float ix = PanelWidth * 0.5f, iz = PanelLength * 0.5f;
+            float ox = ix + TrofferRim, oz = iz + TrofferRim;
+            float top = TrofferDrop - DiffuserInset;
+            float rim = -DiffuserInset;
+
+            // Laterais de fora, do forro até o aro.
+            mesh.AddQuad(new Vector3(ox, rim, -oz), new Vector3(ox, top, -oz), new Vector3(ox, top, oz), new Vector3(ox, rim, oz), Vector3.right);
+            mesh.AddQuad(new Vector3(-ox, rim, -oz), new Vector3(-ox, top, -oz), new Vector3(-ox, top, oz), new Vector3(-ox, rim, oz), Vector3.left);
+            mesh.AddQuad(new Vector3(-ox, rim, oz), new Vector3(-ox, top, oz), new Vector3(ox, top, oz), new Vector3(ox, rim, oz), Vector3.forward);
+            mesh.AddQuad(new Vector3(-ox, rim, -oz), new Vector3(-ox, top, -oz), new Vector3(ox, top, -oz), new Vector3(ox, rim, -oz), Vector3.back);
+
+            // Aro, visto de baixo.
+            mesh.AddQuad(new Vector3(-ox, rim, -oz), new Vector3(ox, rim, -oz), new Vector3(ox, rim, -iz), new Vector3(-ox, rim, -iz), Vector3.down);
+            mesh.AddQuad(new Vector3(-ox, rim, iz), new Vector3(ox, rim, iz), new Vector3(ox, rim, oz), new Vector3(-ox, rim, oz), Vector3.down);
+            mesh.AddQuad(new Vector3(-ox, rim, -iz), new Vector3(-ix, rim, -iz), new Vector3(-ix, rim, iz), new Vector3(-ox, rim, iz), Vector3.down);
+            mesh.AddQuad(new Vector3(ix, rim, -iz), new Vector3(ox, rim, -iz), new Vector3(ox, rim, iz), new Vector3(ix, rim, iz), Vector3.down);
+
+            // Borda de dentro, do aro até o difusor.
+            mesh.AddQuad(new Vector3(ix, rim, -iz), new Vector3(ix, 0f, -iz), new Vector3(ix, 0f, iz), new Vector3(ix, rim, iz), Vector3.left);
+            mesh.AddQuad(new Vector3(-ix, rim, -iz), new Vector3(-ix, 0f, -iz), new Vector3(-ix, 0f, iz), new Vector3(-ix, rim, iz), Vector3.right);
+            mesh.AddQuad(new Vector3(-ix, rim, iz), new Vector3(-ix, 0f, iz), new Vector3(ix, 0f, iz), new Vector3(ix, rim, iz), Vector3.back);
+            mesh.AddQuad(new Vector3(-ix, rim, -iz), new Vector3(-ix, 0f, -iz), new Vector3(ix, 0f, -iz), new Vector3(ix, rim, -iz), Vector3.forward);
+
+            return mesh.ToMesh("Calha");
         }
 
         // Uma luz pontual projeta sombra em 6 faces (um cubo). Escolhe a maior resolução por
@@ -745,9 +814,18 @@ namespace BackRooms.World
         void BuildDecorations()
         {
             GameObject root = CreateChild("Marcas");
+            Transform vents = null;
 
             foreach (Decoration mark in Data.Decorations)
             {
+                if (mark.Kind == DecorationKind.Vent)
+                {
+                    if (ventMaterial == null) continue;
+                    if (vents == null) vents = CreateChild("Grelhas").transform;
+                    AddVent(vents, mark);
+                    continue;
+                }
+
                 if (mark.Side == WallSide.Floor)
                 {
                     AddFloorMark(root.transform, mark);
@@ -809,6 +887,89 @@ namespace BackRooms.World
                 Vector3 wallPosition = center + normal * 0.06f + tangent * along + Vector3.up * centerHeight;
                 AddDecal(root.transform, material, wallPosition, rotation, new Vector3(size.x, size.y, 0.16f), isGrime && mark.Flip, mark.Strength);
             }
+        }
+
+        // Grelha de retorno de ar (medidas em metros).
+        const float VentWidth = 0.6f;
+        const float VentHeight = 0.36f;
+        const float VentRim = 0.035f;
+        const float VentDepth = 0.025f;
+        const int VentSlats = 8;
+
+        Mesh _ventMesh;
+        Mesh _ventBackMesh;
+
+        // Grelha de ar encostada na parede, no alto. A mesma malha em todas, com colisor dela
+        // mesma: fica ao alcance da caneta (olho a 1,65 m + 2,2 m).
+        void AddVent(Transform parent, Decoration mark)
+        {
+            WallFace(mark.X, mark.Z, mark.Side, out Vector3 center, out Vector3 normal);
+            Vector3 tangent = Mathf.Abs(normal.z) > 0.5f ? Vector3.right : Vector3.forward;
+
+            if (_ventMesh == null) _ventMesh = CreateVentMesh();
+
+            MeshRenderer vent = CreateRenderer("Grelha", _ventMesh, ventMaterial, ShadowCastingMode.Off, parent);
+            vent.transform.localPosition = center + tangent * mark.Along + Vector3.up * ventHeight;
+            vent.transform.localRotation = Quaternion.LookRotation(-normal, Vector3.up);
+            vent.gameObject.AddComponent<MeshCollider>().sharedMesh = _ventMesh;
+
+            // Fundo escuro atrás das aletas: pelas frestas aparece o duto, não o papel de parede.
+            if (pitVoidMaterial == null) return;
+            if (_ventBackMesh == null)
+                _ventBackMesh = CreateQuadMesh("FundoDaGrelha", VentWidth - VentRim * 2f, VentHeight - VentRim * 2f, horizontal: false);
+            MeshRenderer back = CreateRenderer("FundoDaGrelha", _ventBackMesh, pitVoidMaterial, ShadowCastingMode.Off, vent.transform);
+            back.transform.localPosition = new Vector3(0f, 0f, -0.002f);
+        }
+
+        /// <summary>
+        /// Grelha de retorno de ar: aro de chapa saindo 2,5 cm da parede e aletas inclinadas
+        /// para baixo, com as duas faces. No espaço da grelha: centro na origem, parede em Z = 0,
+        /// frente para -Z. 72 triângulos.
+        /// </summary>
+        static Mesh CreateVentMesh()
+        {
+            var mesh = new MeshBuilder(1f);
+            float ox = VentWidth * 0.5f, oy = VentHeight * 0.5f;
+            float ix = ox - VentRim, iy = oy - VentRim;
+            float front = -VentDepth;
+
+            // Laterais de fora do aro.
+            mesh.AddQuad(new Vector3(ox, -oy, 0f), new Vector3(ox, oy, 0f), new Vector3(ox, oy, front), new Vector3(ox, -oy, front), Vector3.right);
+            mesh.AddQuad(new Vector3(-ox, -oy, 0f), new Vector3(-ox, oy, 0f), new Vector3(-ox, oy, front), new Vector3(-ox, -oy, front), Vector3.left);
+            mesh.AddQuad(new Vector3(-ox, oy, 0f), new Vector3(ox, oy, 0f), new Vector3(ox, oy, front), new Vector3(-ox, oy, front), Vector3.up);
+            mesh.AddQuad(new Vector3(-ox, -oy, 0f), new Vector3(ox, -oy, 0f), new Vector3(ox, -oy, front), new Vector3(-ox, -oy, front), Vector3.down);
+
+            // Frente do aro.
+            mesh.AddQuad(new Vector3(-ox, iy, front), new Vector3(ox, iy, front), new Vector3(ox, oy, front), new Vector3(-ox, oy, front), Vector3.back);
+            mesh.AddQuad(new Vector3(-ox, -oy, front), new Vector3(ox, -oy, front), new Vector3(ox, -iy, front), new Vector3(-ox, -iy, front), Vector3.back);
+            mesh.AddQuad(new Vector3(-ox, -iy, front), new Vector3(-ix, -iy, front), new Vector3(-ix, iy, front), new Vector3(-ox, iy, front), Vector3.back);
+            mesh.AddQuad(new Vector3(ix, -iy, front), new Vector3(ox, -iy, front), new Vector3(ox, iy, front), new Vector3(ix, iy, front), Vector3.back);
+
+            // Bordas de dentro do aro, da frente até a parede.
+            mesh.AddQuad(new Vector3(-ix, iy, front), new Vector3(ix, iy, front), new Vector3(ix, iy, 0f), new Vector3(-ix, iy, 0f), Vector3.down);
+            mesh.AddQuad(new Vector3(-ix, -iy, front), new Vector3(ix, -iy, front), new Vector3(ix, -iy, 0f), new Vector3(-ix, -iy, 0f), Vector3.up);
+            mesh.AddQuad(new Vector3(-ix, -iy, front), new Vector3(-ix, iy, front), new Vector3(-ix, iy, 0f), new Vector3(-ix, -iy, 0f), Vector3.right);
+            mesh.AddQuad(new Vector3(ix, -iy, front), new Vector3(ix, iy, front), new Vector3(ix, iy, 0f), new Vector3(ix, -iy, 0f), Vector3.left);
+
+            // Aletas: descem da parede para a frente, uma encobrindo a fresta da de baixo.
+            float pitch = iy * 2f / VentSlats;
+            float drop = pitch * 0.75f;
+            float back = -0.004f, tip = front + 0.004f;
+            // Face de cima da aleta: aponta para cima e para fora da parede.
+            Vector3 up = new Vector3(0f, back - tip, -drop).normalized;
+
+            for (int i = 0; i < VentSlats; i++)
+            {
+                float top = iy - pitch * i;
+                var a = new Vector3(-ix, top, back);
+                var b = new Vector3(ix, top, back);
+                var c = new Vector3(ix, top - drop, tip);
+                var d = new Vector3(-ix, top - drop, tip);
+                mesh.AddQuad(a, b, c, d, up);
+                mesh.AddQuad(a, b, c, d, -up);
+            }
+
+            return mesh.ToMesh("Grelha");
         }
 
         // Tamanho e altura de cada tipo de mancha de parede.
@@ -902,9 +1063,19 @@ namespace BackRooms.World
             root.transform.localRotation = facing;
 
             // No espaço local da saída, -Z aponta para dentro da célula.
-            MeshRenderer door = CreateRenderer("Porta", CreateQuadMesh("Porta", 0.95f, 2.05f, horizontal: false),
-                                               exitDoorMaterial, ShadowCastingMode.Off, root.transform);
-            door.transform.localPosition = new Vector3(0f, 1.025f, -0.012f);
+            if (exitDoorModel != null && exitDoorModelMaterial != null)
+            {
+                // Porta em relevo: avança até 13 cm da parede, então tem colisor da mesma malha
+                // (a caneta risca nela e ninguém atravessa a barra).
+                MeshRenderer model = CreateRenderer("PortaModelo", exitDoorModel, exitDoorModelMaterial, ShadowCastingMode.On, root.transform);
+                model.gameObject.AddComponent<MeshCollider>().sharedMesh = exitDoorModel;
+            }
+            else
+            {
+                MeshRenderer door = CreateRenderer("Porta", CreateQuadMesh("Porta", 0.95f, 2.05f, horizontal: false),
+                                                   exitDoorMaterial, ShadowCastingMode.Off, root.transform);
+                door.transform.localPosition = new Vector3(0f, 1.025f, -0.012f);
+            }
 
             MeshRenderer sign = CreateRenderer("Placa", CreateQuadMesh("Placa", 0.56f, 0.21f, horizontal: false),
                                                exitSignMaterial, ShadowCastingMode.Off, root.transform);

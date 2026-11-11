@@ -38,7 +38,10 @@ namespace BackRooms.World
         FloorWet,
 
         /// <summary>Trecho mais claro, gasto, no carpete.</summary>
-        FloorWear
+        FloorWear,
+
+        /// <summary>Grelha de retorno de ar na parede, perto do forro. É peça com colisor, não decalque.</summary>
+        Vent
     }
 
     /// <summary>Uma marca na parede ou no chão: sangue, palavra rabiscada ou seta.</summary>
@@ -387,6 +390,8 @@ namespace BackRooms.World
             PlaceWallMarks(data, rng, usedFaces);
             PlaceFloorPools(data, rng);
             PlaceGrime(data, rng);
+            // Última etapa: sorteia depois de tudo, então não muda nada do que já existia por seed.
+            PlaceVents(data, rng, usedFaces);
 
             return data;
         }
@@ -1268,6 +1273,32 @@ namespace BackRooms.World
                     Height = height,
                     Variant = variant
                 });
+                placed++;
+            }
+        }
+
+        /// <summary>Uma grelha de ar a cada tantas células, em média.</summary>
+        public const int CellsPerVent = 12;
+
+        // Grelhas de retorno de ar no alto das paredes: uma em cada CellsPerVent células, em
+        // paredes livres (sem sangue, palavra, seta, nicho nem saída) fora da sala inicial,
+        // nunca duas na mesma face. A posição ao longo da parede varia; a altura é fixa.
+        static void PlaceVents(LevelData d, Random rng, HashSet<int> usedFaces)
+        {
+            int count = Math.Max(2, d.Width * d.Height / CellsPerVent);
+            int placed = 0;
+
+            for (int attempt = 0; attempt < count * 20 && placed < count; attempt++)
+            {
+                int x = rng.Next(d.Width);
+                int z = rng.Next(d.Height);
+                WallSide side = Sides[rng.Next(Sides.Length)];
+                float along = (float)(rng.NextDouble() * 2.0 - 1.0) * 1.1f;
+
+                if (d.InRoom(x, z) || !IsFreeFace(d, x, z, side, usedFaces)) continue;
+
+                usedFaces.Add(FaceKey(d, x, z, side));
+                d.Decorations.Add(new Decoration { Kind = DecorationKind.Vent, X = x, Z = z, Side = side, Along = along });
                 placed++;
             }
         }

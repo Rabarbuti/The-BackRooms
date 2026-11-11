@@ -151,6 +151,8 @@ namespace BackRooms.EditorTools
 
                 if (player != null) ShootBlackout(builder, player, camera, torch, target, readback, folder);
 
+                if (player != null) ShootCeilingLight(builder, player, camera, target, readback, folder);
+
                 // A tela de quem acabou de cair num buraco.
                 if (camcorder != null)
                 {
@@ -295,6 +297,18 @@ namespace BackRooms.EditorTools
 
                 LevelBuilder.WallFace(mark.X, mark.Z, mark.Side, out Vector3 center, out Vector3 normal);
                 Vector3 tangent = Mathf.Abs(normal.z) > 0.5f ? Vector3.right : Vector3.forward;
+
+                if (mark.Kind == DecorationKind.Vent)
+                {
+                    // A grelha fica no alto: a câmera inclina para cima até ela.
+                    Vector3 spot = builder.transform.TransformPoint(center + tangent * mark.Along + normal * 2.0f);
+                    Quaternion level = camera.transform.localRotation;
+                    float rise = builder.ventHeight - 1.65f;
+                    camera.transform.localRotation = Quaternion.Euler(-Mathf.Atan2(rise, 2.0f) * Mathf.Rad2Deg, 0f, 0f);
+                    ShootPair(player, camera, torch, target, readback, folder, "grelha", spot, -normal);
+                    camera.transform.localRotation = level;
+                    continue;
+                }
                 Vector3 from = builder.transform.TransformPoint(center + tangent * mark.Along + normal * 2.2f);
                 ShootPair(player, camera, torch, target, readback, folder, "marca_" + mark.Kind.ToString().ToLowerInvariant(), from, -normal);
             }
@@ -309,6 +323,12 @@ namespace BackRooms.EditorTools
             LevelBuilder.WallFace(data.ExitX, data.ExitZ, data.ExitSide, out Vector3 exitCenter, out Vector3 exitNormal);
             ShootPair(player, camera, torch, target, readback, folder, "saida",
                       builder.transform.TransformPoint(exitCenter + exitNormal * 3f), -exitNormal);
+
+            // De perto e de lado, para ver o relevo da porta.
+            Vector3 exitTangent = Vector3.Cross(Vector3.up, exitNormal);
+            Vector3 near = builder.transform.TransformPoint(exitCenter + exitNormal * 1.5f + exitTangent * 0.9f);
+            ShootPair(player, camera, torch, target, readback, folder, "saida_perto", near,
+                      builder.transform.TransformPoint(exitCenter) - near);
         }
 
         static void ShootPair(Transform player, Camera camera, Light torch, RenderTexture target, Texture2D readback,
@@ -575,6 +595,45 @@ namespace BackRooms.EditorTools
                 foreach (CeilingLight light in lights) light.SetPower(PowerPhase.Steady);
                 lightsOut.SetDarkness(0f);
                 if (body != null) UnityEngine.Object.DestroyImmediate(body.gameObject);
+            }
+        }
+
+        // Uma luminária da sala inicial vista de baixo, a 1,6 m na horizontal: acesa e apagada.
+        static void ShootCeilingLight(LevelBuilder builder, Transform player, Camera camera,
+                                      RenderTexture target, Texture2D readback, string folder)
+        {
+            CeilingLight chosen = null;
+            float best = float.MaxValue;
+            foreach (CeilingLight light in builder.GetComponentsInChildren<CeilingLight>())
+            {
+                if (!light.Works) continue;
+                float distance = (light.transform.position - builder.SpawnCenter).sqrMagnitude;
+                if (distance < best) { best = distance; chosen = light; }
+            }
+
+            if (chosen == null) return;
+
+            Vector3 panel = chosen.transform.position;
+            Vector3 toward = (builder.SpawnCenter - new Vector3(panel.x, builder.SpawnCenter.y, panel.z));
+            toward = toward.sqrMagnitude < 0.01f ? Vector3.back : toward.normalized;
+            player.position = new Vector3(panel.x, 0.05f, panel.z) + toward * 1.6f;
+            player.rotation = Quaternion.LookRotation(-toward, Vector3.up);
+
+            Quaternion level = camera.transform.localRotation;
+            Vector3 eye = camera.transform.position;
+            float pitch = Mathf.Atan2(panel.y - eye.y, 1.6f) * Mathf.Rad2Deg;
+            camera.transform.localRotation = Quaternion.Euler(-pitch + 8f, 0f, 0f);
+
+            try
+            {
+                Shoot(camera, target, readback, Path.Combine(folder, "luminaria.png"));
+                chosen.SetPower(PowerPhase.Dark);
+                Shoot(camera, target, readback, Path.Combine(folder, "luminaria_apagada.png"));
+            }
+            finally
+            {
+                chosen.SetPower(PowerPhase.Steady);
+                camera.transform.localRotation = level;
             }
         }
 

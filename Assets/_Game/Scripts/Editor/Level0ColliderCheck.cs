@@ -64,7 +64,9 @@ namespace BackRooms.EditorTools
                 var visual = new List<GameObject>();
                 foreach (MeshFilter filter in builder.GetComponentsInChildren<MeshFilter>())
                 {
-                    if (filter.sharedMesh == null || filter.GetComponentInParent<CeilingLight>() != null) continue;
+                    // Luminárias contam: a calha tem colisor do tamanho dela, e o difusor fica 5 mm
+                    // para dentro do aro (sem calha, o painel fica 4 mm abaixo do forro).
+                    if (filter.sharedMesh == null) continue;
                     // So a estrutura conta: rodape, porta e placa sao enfeites sem colisor, por projeto.
                     if (filter.name == "Rodapes" || filter.name == "Porta" || filter.name == "Placa") continue;
                     // A fumaca dos buracos aparece mas nao e solida, tambem por projeto.

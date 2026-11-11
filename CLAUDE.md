@@ -41,6 +41,10 @@ A cena `Scenes/Level0_Test.unity`, os prefabs `Player` e `Entity`, o perfil de V
 `Art/Level0` (texturas e materiais) são **gerados** por `Level0Setup` (menu BackRooms > Montar
 Level 0). Mudança nesses arquivos se faz no gerador, não no arquivo.
 
+Exceção: `Art/Fontes` guarda os modelos **GLB originais** gerados por IA (Higgsfield). Eles não são
+gerados pelo `Level0Setup`, que os lê com `GlbReader` (sem pacote de glTF) e assa em `Art/Level0`
+a malha já encaixada e as texturas do HDRP (`ImportedModels`). Apagar um GLB volta à peça antiga.
+
 Ao mudar algo que só aparece depois de recriar (texturas, materiais, objetos da cena, valores
 padrão do `LevelBuilder`), **aumente `Level0Setup.ContentVersion`**. O `Level0AutoUpdate` compara
 com a versão gravada na cena e oferece recriar; sem isso o jogo roda código novo sobre conteúdo

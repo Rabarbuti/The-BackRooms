@@ -46,7 +46,7 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 13;
+        public const int ContentVersion = 14;
 
         [MenuItem("BackRooms/Montar Level 0 (sala de teste)")]
         public static void Build()
@@ -104,8 +104,14 @@ namespace BackRooms.EditorTools
             Material floor = EnsureMaterial("Carpet", Color.white, carpetAlbedo, carpetNormal, 0.05f, Color.black);
             Material ceiling = EnsureMaterial("Ceiling", Color.white, ceilingAlbedo, ceilingNormal, 0.1f, Color.black);
             Material baseboard = EnsureMaterial("Baseboard", Rgb(184, 160, 64), null, null, 0.35f, Color.black);
-            Material panelOn = EnsureMaterial("LightPanel_On", Color.white, null, null, 0.5f, new Color(1f, 0.98f, 0.92f) * 900f);
-            Material panelOff = EnsureMaterial("LightPanel_Off", Rgb(118, 116, 104), null, null, 0.5f, Color.black);
+            // Difusor de acrílico prismático com duas lâmpadas tubulares atrás: acesa, as faixas
+            // das lâmpadas brilham mais; apagada, aparecem como sombra cinza através do acrílico.
+            Texture2D diffuserGlow = EnsurePainting("LightPanel_Glow", 128, 256, false, rng => PaintDiffuser(true));
+            Texture2D diffuserAlbedo = EnsurePainting("LightPanel_Albedo", 128, 256, false, rng => PaintDiffuser(false));
+            Material panelOn = EnsureMaterial("LightPanel_On", Color.white, diffuserAlbedo, null, 0.5f, new Color(1f, 0.98f, 0.92f) * 900f, diffuserGlow);
+            Material panelOff = EnsureMaterial("LightPanel_Off", Rgb(150, 148, 134), diffuserAlbedo, null, 0.5f, Color.black);
+            // Chapa pintada da calha das luminárias.
+            Material lightHousing = EnsureMaterial("LightHousing", Rgb(196, 192, 176), null, null, 0.45f, Color.black);
 
             // Concreto das paredes e do fundo dos buracos.
             Texture2D concreteAlbedo = EnsureTexture("Concrete_Albedo", 512, PaintConcrete, normalFromHeight: false);
@@ -174,6 +180,10 @@ namespace BackRooms.EditorTools
             Texture2D signTexture = EnsurePainting("ExitSign", 256, 96, false, PaintExitSign);
             Material exitSign = EnsureMaterial("ExitSign", Color.white, signTexture, null, 0.4f, Color.white * 90f, signTexture);
             Material exitDoor = EnsureMaterial("ExitDoor", Rgb(16, 14, 12), null, null, 0.3f, Color.black);
+            // Porta em 3D gerada no Higgsfield (Art/Fontes/ExitDoor.glb). Sem o arquivo, fica a plana.
+            ImportedModels.EnsureExitDoor(ArtFolder, out Mesh exitDoorModel, out Material exitDoorModelMaterial);
+            // Grelhas de ar nas paredes (geometria em código no LevelBuilder): chapa pintada, já amarelada.
+            Material ventMaterial = EnsureMaterial("Vent", Rgb(188, 182, 160), null, null, 0.35f, Color.black);
 
             VolumeProfile profile = EnsureVolumeProfile();
 
@@ -223,6 +233,7 @@ namespace BackRooms.EditorTools
             builder.baseboardMaterial = baseboard;
             builder.panelOnMaterial = panelOn;
             builder.panelOffMaterial = panelOff;
+            builder.lightHousingMaterial = lightHousing;
             builder.contentVersion = ContentVersion;
             builder.cleanWallMaterial = wallClean;
             builder.cleanFloorMaterial = floorClean;
@@ -239,6 +250,9 @@ namespace BackRooms.EditorTools
             builder.floorWearDecal = floorWear;
             builder.exitSignMaterial = exitSign;
             builder.exitDoorMaterial = exitDoor;
+            builder.exitDoorModel = exitDoorModel;
+            builder.exitDoorModelMaterial = exitDoorModelMaterial;
+            builder.ventMaterial = ventMaterial;
 
             // Câmera do menu: mostra o mapa de fundo até o jogador local entrar.
             var menuCameraObject = new GameObject("CameraDoMenu");
@@ -1000,6 +1014,43 @@ namespace BackRooms.EditorTools
             else h = (byte)(150 + noise * 14f);
 
             return new Color32(h, h, h, 255);
+        }
+
+        // ---------------------------------------------------------------- Difusor das luminárias
+
+        // U atravessa o painel (0,6 m), V corre ao longo dele (1,2 m). Duas lâmpadas tubulares
+        // a 30% e 70% da largura, pontas mais escuras, borda sombreada pela calha e o
+        // quadriculado fino do acrílico prismático. Aceso vira mapa de emissão; apagado, a cor.
+        static Color32[] PaintDiffuser(bool lit)
+        {
+            const int width = 128, height = 256;
+            var pixels = new Color32[width * height];
+
+            for (int y = 0; y < height; y++)
+            {
+                float v = (y + 0.5f) / height;
+                for (int x = 0; x < width; x++)
+                {
+                    float u = (x + 0.5f) / width;
+                    float tube = Mathf.Exp(-Mathf.Pow((u - 0.3f) / 0.085f, 2f)) + Mathf.Exp(-Mathf.Pow((u - 0.7f) / 0.085f, 2f));
+                    // As lâmpadas não chegam às pontas do painel.
+                    float along = Mathf.Clamp01(Mathf.Min(v, 1f - v) / 0.06f);
+                    tube *= along;
+
+                    float edge = Mathf.Clamp01(Mathf.Min(Mathf.Min(u, 1f - u) * 0.6f, Mathf.Min(v, 1f - v) * 1.2f) / 0.025f);
+                    float prism = (x + y) % 4 == 0 || (x - y + 1024) % 4 == 0 ? 0.94f : 1f;
+
+                    float value = lit
+                        ? (0.5f + 0.5f * Mathf.Clamp01(tube)) * Mathf.Lerp(0.7f, 1f, edge)
+                        : (0.95f - 0.22f * Mathf.Clamp01(tube)) * Mathf.Lerp(0.8f, 1f, edge);
+                    value *= prism;
+
+                    byte c = (byte)Mathf.RoundToInt(Mathf.Clamp01(value) * 255f);
+                    pixels[y * width + x] = new Color32(c, c, c, 255);
+                }
+            }
+
+            return pixels;
         }
 
         // ---------------------------------------------------------------- Pinturas (decalques)
