@@ -105,6 +105,11 @@ MonoBehaviour:
   boneMaterial: {fileID: 2100000, guid: 0ff73ce82b1dcb8418a04d0f7c684bc3, type: 2}
   mawMaterial: {fileID: 2100000, guid: 5f9b4b7c22bc0aa478649bb83c70f865, type: 2}
   strideLength: 2.8
+  model: {fileID: 4900000, guid: 6f3e1519f59668a4e9e0ad731e4e0255, type: 3}
+  modelMaterials:
+  - {fileID: 2100000, guid: cccafed87759c95499f99c6d0ccdb9f3, type: 2}
+  - {fileID: 2100000, guid: 05cadde3f5f87ec4ba4515759606cfb4, type: 2}
+  - {fileID: 2100000, guid: 07b1598f3f64b42448d9e119c418c377, type: 2}
 --- !u!114 &3269831421120619165
 MonoBehaviour:
   m_ObjectHideFlags: 0

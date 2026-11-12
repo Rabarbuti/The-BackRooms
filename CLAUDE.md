@@ -3,7 +3,8 @@
 Jogo de terror 3D em co-op no estilo Backrooms, feito em Unity. Hoje existe o Level 0
 jogável por IP, com interface de filmadora VHS, o primeiro item (caneta de riscar), buracos
 com faixas de travessia, apagões periódicos, a primeira entidade, que caça os jogadores pelo
-barulho, e gravação da tela em vídeo (F9). A segunda fase, o **Level 1 — O Mostruário**, tem
+barulho, e gravação da tela em vídeo (F9). Os dois inimigos (a entidade e o Capitão) são
+esculpidos no Blender e vestidos sobre juntas montadas em código (seção "Inimigos esculpidos"). A segunda fase, o **Level 1 — O Mostruário**, tem
 projeto, uma versão de teste jogável mobiliada com modelos feitos no Blender e o corpo do
 inimigo dela, o Capitão (seção "Level 1: onde parou e como continuar"). A terceira, o
 **Level 2 — As Piscinas** (as Poolrooms), tem projeto e uma versão de teste jogável feita de
@@ -46,27 +47,33 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
 - `Scripts/Entities` — a entidade do Level 0: `EntityDirector` (quando e onde aparece),
   `EntityBrain` (sentidos e decisão, só no host), `LevelNav` (caminho na grade do mapa),
   `EntityBody` (corpo de cipós e animação), `EntityHeadMesh` (cabeça esculpida como malha) e
-  `EntityAudio`, tudo feito em código. O inimigo do Level 1, o Capitão, por enquanto só corpo:
-  `CaptainBody` e `CaptainHeadMesh`.
+  `EntityAudio`. O inimigo do Level 1, o Capitão, por enquanto só corpo: `CaptainBody` (e
+  `CaptainHeadMesh`, do corpo antigo). Os corpos montam as juntas e a animação em código; a
+  aparência é o modelo do Blender (`model` no componente; vazio, volta o corpo antigo de peças).
 - `Scripts/Systems/LevelCatalog.cs` — as fases em ordem (`LevelCatalog`: nome e cena) e o
   progresso desta máquina (`LevelProgress`: zeradas + a próxima liberadas; tudo no modo
   desenvolvedor). Fase nova entra no catálogo e na lista de cenas da build.
 - `Scripts/Systems/FigureKit.cs` — peças para montar figuras em código (junta, osso, volume). A
   entidade, o Capitão, o traje dos jogadores (`PlayerBody`) e a mão (`ItemHand`) usam.
+- `Scripts/Systems/CharacterModel.cs` — lê o modelo de personagem do Blender (`.bytes`) e o veste
+  nas juntas como `SkinnedMeshRenderer`.
 - `Scripts/UI` — filmadora (`Camcorder`, `CamcorderPass`) e gravação em vídeo (`ScreenRecorder`,
   `AviWriter`, `RecorderAudioTap`).
 - `Scripts/Editor` — gerador do Level 0 (`Level0Setup`, que também monta outras fases por
   `SceneOptions`), modelos GLB gerados por IA (`GlbReader`, `ImportedModels`), pintores de textura
   (`ProceduralPaint`, `StainPainter`, `EntityPainter`), o Level 1 (`Level1Setup`, `Level1Models`,
-  `Level1PlayTest`, `CaptainPreview`), o Level 2 (`Level2Setup`: materiais, perfil de Volume e
-  conferência; `Level2Preview`: fotos; `Level2PlayTest`) e as demais ferramentas de teste e prévia
-  (menu **BackRooms**).
+  `Level1PlayTest`, `CaptainPreview`), os inimigos esculpidos (`CharacterModels`: esqueleto para o
+  Blender e materiais), o Level 2 (`Level2Setup`: materiais, perfil de Volume e conferência;
+  `Level2Preview`: fotos; `Level2PlayTest`) e as demais ferramentas de teste e prévia (menu
+  **BackRooms**).
 - `Tools/compila.ps1` — compila os scripts sem abrir o Unity (usa o compilador do editor e as
   referências da última compilação em `Library/Bee`). Serve para conferir erro de compilação em
   segundos e para vários agentes trabalharem ao mesmo tempo; não substitui os testes.
 - `Tools/Blender` — modelos feitos por script no Blender e exportados em FBX:
   `moveis_base.py` (biblioteca: peças, paleta, UV, exportação, conferência, foto rápida) e um
-  script por lote em `lotes/` (`basicos`, `estofados`, `loja`, `detalhes`, `transito`).
+  script por lote em `lotes/` (`basicos`, `estofados`, `loja`, `detalhes`, `transito`). Os inimigos:
+  `personagem_base.py` (escultura por SDF), `personagem_export.py` (do esculpido ao jogo) e
+  `personagens/` (`capitao.py`, `entidade.py`, `conferir_modelo.py`, `esqueleto_*.json`).
 - `Docs/` — `plano-coop.md` (estado atual e plano do jogo, arquitetura de rede; ler antes de
   mexer em rede ou em geração de fase), `historico.md` (registro cronológico de cada rodada),
   `level1-mostruario.md` (projeto do Level 1 e do Capitão), `level2-piscinas.md` (projeto do Level 2, as
@@ -94,6 +101,10 @@ substituem; o `Level0Setup.EnsureTexture` usa o arquivo de lá no lugar da pintu
 
 A cena `Scenes/Level1_Test.unity` é **gerada** por `Level1Setup` (menu BackRooms > Montar Level 1
 (teste)), com o mesmo montador do Level 0 (`Level0Setup.SceneOptions`).
+
+Tudo em `Art/Personagens` é **gerado**: `<Nome>.bytes`, `_Cor.png` e `_Normal.png` pelos scripts de
+`Tools/Blender/personagens` com `--exportar`, e os materiais por `CharacterModels`. Os
+`esqueleto_*.json` de `Tools/Blender/personagens` são gravados pelo Unity (`CharacterModels`).
 
 A cena `Scenes/Level2_Test.unity` (As Piscinas), os materiais e texturas de `Art/Level2` e o perfil
 `Settings/Level2_Volume.asset` são **gerados** por `Level2Setup` (menu BackRooms > Montar Level 2
@@ -174,6 +185,29 @@ velho. Mudança só de código não precisa. A cena do Level 1 não tem versão:
   Estado que quem entra depois precisa ver (riscos, por exemplo) tem de ser reenviado na conexão,
   como faz `DrawingBoard.SendAll`.
 
+## Inimigos esculpidos
+
+Os dois inimigos são esculpidos por script no Blender (formas de distância com sinal: elipsoides,
+cápsulas, vincos cavados) e vestidos sobre as juntas que `EntityBody` e `CaptainBody` montam e
+animam em código. O caminho (detalhes em `Docs/modelos-blender.md`, seção 9):
+
+1. **Esqueleto:** BackRooms > Personagens > Exportar esqueletos (ou
+   `CharacterModels.BatchDumpSkeletons`) monta cada corpo na **pose de encaixe** (a pose em que o
+   `Build` termina: parada) e grava `Tools/Blender/personagens/esqueleto_<nome>.json`.
+2. **Escultura e exportação:** `blender.exe -b --factory-startup -P Tools/Blender/personagens/<nome>.py -- --exportar`
+   esculpe sobre esse esqueleto, reduz (~40 mil triângulos), abre o UV num mapa só, assa cor e
+   relevo (2048) e calcula os pesos de cada junta. Sem `--exportar`, só fotos de prévia em
+   `Logs/Blender/personagens` (`-- --rosto` no Capitão: só a cabeça, mais rápido).
+3. **Conferência no Blender:** `conferir_modelo.py -- Capitao` (ou `Entidade`) lê o `.bytes` de
+   volta e fotografa com as faces de trás escondidas (`Logs/Blender/personagens/jogo_*.png`).
+4. **No Unity:** `CaptainPreview.BatchCapture` e `Level0Preview.BatchSceneAndCapture` (que
+   recria a cena e o prefab `Entity`) criam os materiais e fotografam dentro da fase.
+
+**Mudou junta, comprimento de osso ou a pose parada** de um corpo? O modelo sai do lugar:
+exporte o esqueleto de novo e rode o script com `--exportar`. Mudou só a animação (as rotações
+fora da pose parada)? Nada a refazer. Os nomes das juntas são a ligação entre os dois lados (a
+lista `BONES` de cada script): renomear junta quebra o modelo (o log avisa qual falta).
+
 ## Level 1: onde parou e como continuar
 
 O projeto completo está em `Docs/level1-mostruario.md` (espaço, zonas, catálogo, como os objetos
@@ -191,7 +225,9 @@ são postos, o Capitão e as regras dele, objetivo, som, ordem de construção e
   só aparece na fase se entrar nas listas de algum tema (`WallItem`, `CornerItem`).
 - **43 modelos** feitos no Blender em 5 lotes (lista em `Docs/modelos-blender.md`, seção 7).
 - **O Capitão:** só o corpo (`CaptainBody.Pose(fase, velocidade, parado, boca, tempo)`), ainda
-  fora da fase. Desenho a partir de imagens do filme *Backrooms* (2026), a pedido; antes de
+  fora da fase. Modelo esculpido no Blender (seção "Inimigos esculpidos"): mais sujo e
+  assustador, de olhos injetados e mãos em garra; parado, estica os braços para a frente. A boca
+  não abre mais com `mouth` (o modelo já tem a boca aberta). Desenho a partir de imagens do filme *Backrooms* (2026), a pedido; antes de
   publicar, ver a decisão em aberto 4 de `level1-mostruario.md` (direitos autorais).
 
 **Próximos passos** (ordem de `level1-mostruario.md`, seção 8): passagem do Level 0 para o
@@ -247,6 +283,8 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   Level 1 e montar a mesma mobília) e `BatchHostDoor` + `BatchJoinDoor` (o cliente abre a porta
   e espera; quando o host abre, os dois passam para o Level 1 e o cliente reconecta). Restaura o
   progresso salvo; linha `[BackRooms] Teste do seletor de fase`.
+- `CharacterModels.BatchDumpSkeletons` — grava os esqueletos dos inimigos para o Blender
+  (`Tools/Blender/personagens/esqueleto_*.json`).
 - `Level0Preview.BatchCaptureHud` — só o painel da filmadora, em 1920 x 1080, de frente para a
   porta de saída (`Logs/Previews/painel_*.png`). Não recria a cena.
 - `Level2Setup.BatchCheck` — recria a cena e os materiais das Piscinas e confere 5 seeds

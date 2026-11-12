@@ -46,7 +46,7 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 16;
+        public const int ContentVersion = 17;
 
         [MenuItem("BackRooms/Montar Level 0 (sala de teste)")]
         public static void Build()
@@ -438,7 +438,9 @@ namespace BackRooms.EditorTools
             var camera = pivot.AddComponent<Camera>();
             camera.fieldOfView = 70f;
             camera.nearClipPlane = 0.05f;
-            camera.farClipPlane = 150f;
+            // Em quase todo mapa há um corredor reto de 80 m (medido em 40 seeds): menos que isso
+            // abriria um buraco no fim dele.
+            camera.farClipPlane = 85f;
             camera.enabled = false;
             var listener = pivot.AddComponent<AudioListener>();
             // Apanha o som que sai para as caixas, para a gravação em vídeo.
@@ -553,6 +555,9 @@ namespace BackRooms.EditorTools
             figure.shellMaterial = shell;
             figure.boneMaterial = bone;
             figure.mawMaterial = maw;
+            // O corpo esculpido no Blender (CharacterModels), se já foi exportado.
+            figure.model = CharacterModels.Model("Entidade");
+            figure.modelMaterials = CharacterModels.Materials("Entidade");
             entity.AddComponent<EntityAudio>();
 
             // Rede: quem manda na posição é o host (o padrão do NetworkTransform).
@@ -619,11 +624,14 @@ namespace BackRooms.EditorTools
             sky.gradientDiffusion.Override(1f);
             sky.exposure.Override(0f);
             sky.multiplier.Override(1f);
+            // Desligado em 12/11/2026 (ajuste feito à mão no editor e trazido para cá): a fase
+            // fica só com a luz das luminárias, e a exposição subiu para compensar.
+            sky.active = false;
 
             // Exposição fixa: a automática clarearia as áreas escuras.
             var exposure = Add<Exposure>(profile);
             exposure.mode.Override(ExposureMode.Fixed);
-            exposure.fixedExposure.Override(5.5f);
+            exposure.fixedExposure.Override(6.5460577f);
 
             var fog = Add<Fog>(profile);
             fog.enabled.Override(true);
@@ -639,6 +647,8 @@ namespace BackRooms.EditorTools
             var occlusion = Add<ScreenSpaceAmbientOcclusion>(profile);
             occlusion.intensity.Override(1.2f);
             occlusion.radius.Override(1.5f);
+            // Desligada em 12/11/2026, pelo mesmo ajuste à mão.
+            occlusion.active = false;
 
             // Pós de filmadora.
             var bloom = Add<Bloom>(profile);

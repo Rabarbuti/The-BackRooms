@@ -359,6 +359,20 @@ namespace BackRooms.EditorTools
 
             setups.Add(new Setup
             {
+                Name = "4b Como era: luz ate 70 m, marcas ate 60 m, visao ate 150 m",
+                Torch = true,
+                Note = "As distancias de antes de 12/11/2026 (hoje: luz 45 m, marcas 25 m, visao 85 m).",
+                Apply = () =>
+                {
+                    Action undo = Fade(70f, null, 60f);
+                    float far = _camera.farClipPlane;
+                    _camera.farClipPlane = 150f;
+                    return () => { undo(); _camera.farClipPlane = far; };
+                }
+            });
+
+            setups.Add(new Setup
+            {
                 Name = "5 Atual, sem nevoa volumetrica",
                 Torch = true,
                 Note = "A névoa volumétrica inteira desligada (é o que o perfil Performant faz).",

@@ -148,9 +148,42 @@ aparece na fase se a `PropLayer` souber onde pô-lo (as listas de cada tema em `
    Blender (com a UV de 1 m já pronta), exportados como PNG ao lado do FBX.
 2. **LOD:** quando o `PropLayer` existir e a fase encher, gerar LOD1 (≈50%) e LOD2 (≈25%) no
    script para os móveis grandes e montar o `LOD Group` no Unity.
-3. **O Capitão no Blender:** hoje é montado em código com cápsulas e malhas esculpidas
-   (`CaptainBody`). No Blender ele viraria uma malha única com esqueleto e pesos, com
-   deformação de verdade nas juntas. A animação pode continuar em código, girando os ossos.
-   Pelo guia: escultura → retopologia → UV → rig → FBX com `Rig: Generic`.
+3. ~~O Capitão no Blender~~: feito, com a entidade (seção 9).
 4. **Mais móveis do catálogo:** cômoda, cabideiro, vaso, balcão, máquina de lavar, placas de
    trânsito, carro, espreguiçadeira, divisória de cubículo.
+
+## 9. Personagens: os inimigos esculpidos
+
+Os móveis são caixas e cilindros; gente e monstro não. Para eles há outro caminho, em
+`Tools/Blender/personagem_base.py` e `personagem_export.py`:
+
+- **Escultura por distância com sinal (SDF).** Cada peça é uma função que diz, para um ponto, a
+  que distância ele está da superfície (negativa dentro). Elipsoides, cápsulas e caixas se juntam
+  com união suave (`smin`) e se cavam com subtração suave (`smax(d, -outra)`): crânio, nariz,
+  pálpebras, vincos, o rasgo do chapéu. A função é amostrada numa grade (de 2 a 4 mm; primeiro
+  numa grade rala, depois só perto da superfície) e vira malha por *surface nets*. As cores
+  (pele, hematomas, sangue, sujeira) são pintadas nos vértices por outra função da posição.
+  Pelos (barba, sobrancelha) são uma camada fina sobre a pele que afina até a borda.
+- **Cipós** (entidade) são curvas do Blender com raio por ponto, em grupos (tronco, cada membro,
+  cada cipó solto), porque cada grupo é movido por juntas diferentes.
+- **Prévia:** sem argumentos, os scripts montam um pedaço de sala e fotografam com o EEVEE
+  (`Logs/Blender/personagens`). É onde se acerta a aparência; leva 1 a 2 minutos.
+- **Para o jogo (`--exportar`):** o script lê o esqueleto que o Unity gravou
+  (`esqueleto_<nome>.json`, juntas na pose parada) e esculpe sobre ele. Depois
+  `personagem_export.export` reduz cada peça (meta de triângulos por peça; ~40 mil no total),
+  abre o UV de tudo num mapa só (rosto e mãos com mais espaço), assa no Cycles a cor e o relevo
+  de cada peça cheia na reduzida (`_Cor.png` e `_Normal.png`, 2048) e calcula os pesos: cada
+  peça diz quais juntas a movem (`chain`: pela distância aos ossos, dividindo o vértice perto das
+  dobras; `rigid`: uma junta só; `blend`: mistura das duas, como o pescoço do Capitão e a cauda
+  do crânio da entidade, que fica presa às costas). Grava `<Nome>.bytes` (formato descrito em
+  `CharacterModel.cs`), já nas coordenadas do Unity.
+- **No Unity**, `CharacterModel.Attach` cria a `SkinnedMeshRenderer` e a prende às juntas pelo
+  nome, na pose em que o corpo terminou de montar. A animação continua sendo girar juntas em
+  `Pose`; não há Animator nem rig importado.
+- **Conferência:** `conferir_modelo.py -- <Nome>` reconstrói o modelo do `.bytes` com a textura
+  e fotografa com faces de trás escondidas (`jogo_*.png`), antes de abrir o Unity.
+
+Limites conhecidos: o mapa UV automático tem muitas ilhas pequenas (peças reduzidas viram
+retalhos); a gola da camisa e partes finas perdem pedaços na redução; o relevo assado da
+entidade é fraco (os cipós são assados deles mesmos). Melhorias: retopologia mais cuidadosa das
+peças finas, mais triângulos para as mangas e UV por peça antes de juntar.

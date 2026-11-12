@@ -87,6 +87,8 @@ Packages/packages-lock.json linguist-generated
 # saem de scripts em Tools/Blender e são pequenos. Para voltar ao LFS, troque "binary" por "lfs".
 *.FBX                   binary
 *.fbx                   binary
+# Os inimigos esculpidos (Art/Personagens/*.bytes, de Tools/Blender/personagens) também.
+*.bytes                 binary
 *.jas                   lfs
 *.lws                   lfs
 *.lxo                   lfs

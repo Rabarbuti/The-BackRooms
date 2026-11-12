@@ -253,10 +253,13 @@ O Backrooms copiou o dono **com a fantasia**, e não sabe onde termina uma e com
 Capitão não tira a roupa, não fala e não pisca: é a lembrança de um comercial, esticada até
 caber no corredor.
 
-### 5.2 Aparência (já implementada em `CaptainBody` e `CaptainHeadMesh`)
+### 5.2 Aparência (esculpida no Blender: `Tools/Blender/personagens/capitao.py`)
 
 Desenhado a partir das imagens de referência do filme enviadas em 11/11/2026: homem alto e
-magro em fantasia de pirata gasta, de rosto assustado.
+magro em fantasia de pirata gasta, de rosto assustado. Em 12/11/2026, a pedido, ficou mais
+assustador e menos "brinquedo": cores apagadas e encardidas, pele acinzentada, órbitas fundas e
+escuras, olhos amarelados e injetados, careta larga de dentes podres, sangue seco do nariz e da
+boca, casaco rasgado e furado, mãos em garra; parado, estica os braços para a frente.
 
 - **2,6 m até o alto da cabeça, 2,8 m com o chapéu.** Magro, de pescoço comprido, braços
   afastados do corpo e duros.

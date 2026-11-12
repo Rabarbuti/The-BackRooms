@@ -97,3 +97,21 @@ O de dois editores não foi rodado: a mudança não mexe em rede.
   carregar a fase.
 - **O custo fixo de ~25 ms**: medir perfil gráfico, pós-processamento, passada da filmadora e
   resolução, um de cada vez.
+
+## Rodada de 12/11/2026: distâncias, malhas juntas e vazamento de luz
+
+- **Vazamento de luz.** A sombra das luminárias sumia a 50 m e a luz só a 70 m: nesse intervalo a
+  luminária iluminava sem sombra, atravessando as paredes. Agora a luz some a 45 m
+  (`LevelBuilder.lightFadeDistance`) e a sombra vai 20% além. A resolução baixa da sombra (64
+  pontos por face, o que cabe no atlas para 152 luminárias) foi testada e não é a causa: numa
+  célula sem luminária, sombra de 256 pontos muda 4% da luz que chega, e as fotos saem iguais.
+- **Calhas e grelhas** viram uma malha cada (eram um objeto por luminária e dois por grelha).
+  Marcar como "static" não tem efeito num mapa montado ao hospedar; juntar as malhas é o
+  equivalente. As luzes já tinham a sombra em cache, que é o que "estático" daria a elas.
+- **Marcas** somem a 25 m (`decalDrawDistance`), as setas da saída a 40 m (`arrowDrawDistance`).
+- **Visão** até 85 m, não menos: 35 de 40 seeds têm um corredor reto de mais de 60 m (o maior, 80 m).
+- **Medido:** nenhuma diferença fora da variação entre rodadas. Com as distâncias antigas (luz 70 m,
+  marcas 60 m, visão 150 m) a caminhada deu 20,4 ms; com as novas, entre 19,5 e 24,3 ms conforme
+  a passada. O quadro caiu de 27 para cerca de 20 ms desde a rodada anterior por causa dos ajustes
+  do volume (oclusão de ambiente e céu desligados). O que sobra de caro são as luminárias: só com
+  a lanterna o quadro custa 12 ms.

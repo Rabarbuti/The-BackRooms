@@ -1649,7 +1649,7 @@ namespace BackRooms.World
                     float c = Data.Ceiling[cell.x, cell.y];
                     float ox = Mathf.Round(Mathf.Lerp(-1.2f, 1.2f, r0) / 0.2f) * 0.2f, oz = Mathf.Round(Mathf.Lerp(-1.2f, 1.2f, r1) / 0.2f) * 0.2f;
                     var position = new Vector3((cell.x + 0.5f) * Cell + ox, c - 0.06f, (cell.y + 0.5f) * Cell + oz);
-                    AddDecal(Root(), Stain(2), position, Quaternion.LookRotation(Vector3.up, Vector3.forward), new Vector3(1.2f, 1.2f, 0.16f), flip);
+                    AddDecal(Root(), Stain(2), position, Quaternion.LookRotation(Vector3.up, Vector3.forward), new Vector3(1.2f, 1.2f, 0.16f), decalDrawDistance, flip);
                     budget--;
                     continue;
                 }
@@ -1724,7 +1724,7 @@ namespace BackRooms.World
             Vector3 tangent = Mathf.Abs(dir.x) > 0.5f ? Vector3.forward : Vector3.right;
             Vector3 face = new Vector3((x + 0.5f) * Cell, 0f, (z + 0.5f) * Cell) + dir * (Cell * 0.5f - inset);
             Vector3 position = face + normal * 0.06f + tangent * along + Vector3.up * centerY;
-            AddDecal(root, material, position, Quaternion.LookRotation(-normal, Vector3.up), new Vector3(size.x, size.y, 0.16f), flip);
+            AddDecal(root, material, position, Quaternion.LookRotation(-normal, Vector3.up), new Vector3(size.x, size.y, 0.16f), decalDrawDistance, flip);
         }
 
         // ---------------------------------------------------------------- Luz

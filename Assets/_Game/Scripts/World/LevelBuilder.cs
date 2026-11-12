@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.HighDefinition;
@@ -138,6 +139,14 @@ namespace BackRooms.World
         public int maxShadowResolution = 256;
         [Tooltip("As luminárias do teto acendem a névoa volumétrica. Caro: um quarto do tempo de cada quadro, para quase nenhuma diferença na imagem.")]
         public bool lampsLightFog = false;
+        [Tooltip("As luminárias deixam de iluminar a esta distância da câmera, em metros. A sombra vai 20% além: luz acesa sem sombra atravessa as paredes.")]
+        public float lightFadeDistance = 45f;
+
+        [Header("Distância das marcas")]
+        [Tooltip("Sangue, palavras, sujeira e desgaste somem a esta distância da câmera, em metros.")]
+        public float decalDrawDistance = 25f;
+        [Tooltip("As setas da saída aparecem de mais longe: são pista para o jogador.")]
+        public float arrowDrawDistance = 40f;
 
         [Header("Marcas (decalques)")]
         public Material[] bloodDecals;
@@ -659,6 +668,11 @@ namespace BackRooms.World
 
             int shadowResolution = ResolveShadowResolution(count);
 
+            // As calhas não mudam nem se mexem: todas viram uma malha só (um objeto para a
+            // placa de vídeo em vez de um por luminária). O difusor fica separado, porque
+            // troca de material ao acender e apagar.
+            var housings = new List<CombineInstance>();
+
             for (int z = 0; z < Data.Height; z++)
             {
                 for (int x = 0; x < Data.Width; x++)
@@ -677,10 +691,12 @@ namespace BackRooms.World
 
                     if (housed)
                     {
-                        // Sem sombra: a luz fica dentro da calha e não pode ser tapada por ela.
-                        MeshRenderer housing = CreateRenderer("Calha", housingMesh, lightHousingMaterial, ShadowCastingMode.Off, panel.transform);
+                        housings.Add(new CombineInstance { mesh = housingMesh, transform = Matrix4x4.Translate(panel.transform.localPosition) });
+
                         // Colisor do mesmo tamanho da calha fechada (aro + difusor).
-                        var box = housing.gameObject.AddComponent<BoxCollider>();
+                        var housing = new GameObject("Calha");
+                        housing.transform.SetParent(panel.transform, false);
+                        var box = housing.AddComponent<BoxCollider>();
                         box.center = new Vector3(0f, TrofferDrop * 0.5f - DiffuserInset, 0f);
                         box.size = new Vector3(PanelWidth + TrofferRim * 2f, TrofferDrop, PanelLength + TrofferRim * 2f);
                     }
@@ -697,6 +713,19 @@ namespace BackRooms.World
                     panel.gameObject.AddComponent<CeilingLight>().Init(state, lights, panel, panelOnMaterial, panelOffMaterial);
                 }
             }
+
+            // Sem sombra: a luz fica dentro da calha e não pode ser tapada por ela.
+            if (housings.Count > 0)
+                CreateRenderer("Calhas", Combine("Calhas", housings), lightHousingMaterial, ShadowCastingMode.Off, root.transform);
+        }
+
+        // Junta cópias de malhas que nunca mudam numa malha só.
+        static Mesh Combine(string meshName, List<CombineInstance> parts)
+        {
+            var mesh = new Mesh { name = meshName, indexFormat = IndexFormat.UInt32, hideFlags = HideFlags.DontSave };
+            mesh.CombineMeshes(parts.ToArray(), true, true);
+            mesh.RecalculateBounds();
+            return mesh;
         }
 
         /// <summary>
@@ -773,8 +802,10 @@ namespace BackRooms.World
             source.intensity = lightCandela;
             source.range = lightRange;
 
-            hd.fadeDistance = 70f;
-            hd.shadowFadeDistance = 50f;
+            // A sombra tem de ir além da luz. Antes a sombra sumia a 50 m e a luz a 70 m: nesse
+            // intervalo a luminária iluminava sem sombra, atravessando as paredes.
+            hd.fadeDistance = lightFadeDistance;
+            hd.shadowFadeDistance = lightFadeDistance * 1.2f;
 
             // As luminárias não acendem a névoa: medido, era um quarto do tempo de cada quadro
             // (37 ms -> 28 ms) e na imagem quase não se nota. A névoa continua existindo e a
@@ -896,7 +927,12 @@ namespace BackRooms.World
                 if (mark.Kind == DecorationKind.Vent)
                 {
                     if (ventMaterial == null) continue;
-                    if (vents == null) vents = CreateChild("Grelhas").transform;
+                    if (vents == null)
+                    {
+                        vents = CreateChild("Grelhas").transform;
+                        _ventParts.Clear();
+                        _ventBackParts.Clear();
+                    }
                     AddVent(vents, mark);
                     continue;
                 }
@@ -960,8 +996,11 @@ namespace BackRooms.World
                 }
 
                 Vector3 wallPosition = center + normal * 0.06f + tangent * along + Vector3.up * centerHeight;
-                AddDecal(root.transform, material, wallPosition, rotation, new Vector3(size.x, size.y, 0.16f), isGrime && mark.Flip, mark.Strength);
+                AddDecal(root.transform, material, wallPosition, rotation, new Vector3(size.x, size.y, 0.16f),
+                         mark.Kind == DecorationKind.Arrow ? arrowDrawDistance : decalDrawDistance, isGrime && mark.Flip, mark.Strength);
             }
+
+            FinishVents(vents);
         }
 
         // Grelha de retorno de ar (medidas em metros).
@@ -972,10 +1011,14 @@ namespace BackRooms.World
         const int VentSlats = 8;
 
         Mesh _ventMesh;
+        readonly List<CombineInstance> _ventParts = new List<CombineInstance>();
+        readonly List<CombineInstance> _ventBackParts = new List<CombineInstance>();
         Mesh _ventBackMesh;
 
         // Grelha de ar encostada na parede, no alto. A mesma malha em todas, com colisor dela
         // mesma: fica ao alcance da caneta (olho a 1,65 m + 2,2 m).
+        // As grelhas não mudam nem se mexem: cada uma é só um colisor, e o desenho de todas vai
+        // em duas malhas (chapas e fundos), montadas por FinishVents.
         void AddVent(Transform parent, Decoration mark)
         {
             WallFace(mark.X, mark.Z, mark.Side, out Vector3 center, out Vector3 normal);
@@ -983,17 +1026,32 @@ namespace BackRooms.World
 
             if (_ventMesh == null) _ventMesh = CreateVentMesh();
 
-            MeshRenderer vent = CreateRenderer("Grelha", _ventMesh, ventMaterial, ShadowCastingMode.Off, parent);
+            var vent = new GameObject("Grelha");
+            vent.transform.SetParent(parent, false);
             vent.transform.localPosition = center + tangent * mark.Along + Vector3.up * ventHeight;
             vent.transform.localRotation = Quaternion.LookRotation(-normal, Vector3.up);
-            vent.gameObject.AddComponent<MeshCollider>().sharedMesh = _ventMesh;
+            vent.AddComponent<MeshCollider>().sharedMesh = _ventMesh;
+
+            Matrix4x4 place = Matrix4x4.TRS(vent.transform.localPosition, vent.transform.localRotation, Vector3.one);
+            _ventParts.Add(new CombineInstance { mesh = _ventMesh, transform = place });
 
             // Fundo escuro atrás das aletas: pelas frestas aparece o duto, não o papel de parede.
             if (pitVoidMaterial == null) return;
             if (_ventBackMesh == null)
                 _ventBackMesh = CreateQuadMesh("FundoDaGrelha", VentWidth - VentRim * 2f, VentHeight - VentRim * 2f, horizontal: false);
-            MeshRenderer back = CreateRenderer("FundoDaGrelha", _ventBackMesh, pitVoidMaterial, ShadowCastingMode.Off, vent.transform);
-            back.transform.localPosition = new Vector3(0f, 0f, -0.002f);
+            _ventBackParts.Add(new CombineInstance { mesh = _ventBackMesh, transform = place * Matrix4x4.Translate(new Vector3(0f, 0f, -0.002f)) });
+        }
+
+        void FinishVents(Transform parent)
+        {
+            if (parent == null || _ventParts.Count == 0) return;
+
+            CreateRenderer("Chapas", Combine("Grelhas", _ventParts), ventMaterial, ShadowCastingMode.Off, parent);
+            if (_ventBackParts.Count > 0)
+                CreateRenderer("Fundos", Combine("FundosDasGrelhas", _ventBackParts), pitVoidMaterial, ShadowCastingMode.Off, parent);
+
+            _ventParts.Clear();
+            _ventBackParts.Clear();
         }
 
         /// <summary>
@@ -1095,7 +1153,7 @@ namespace BackRooms.World
             if (material == null) return;
 
             var position = new Vector3((mark.X + 0.5f) * Cell + mark.Along * 1.2f, 0.1f, (mark.Z + 0.5f) * Cell + mark.Height * 1.2f);
-            AddDecal(root, material, position, Quaternion.Euler(90f, mark.Yaw, 0f), new Vector3(size, size, 0.2f), mark.Flip, mark.Strength);
+            AddDecal(root, material, position, Quaternion.Euler(90f, mark.Yaw, 0f), new Vector3(size, size, 0.2f), decalDrawDistance, mark.Flip, mark.Strength);
         }
 
         static Material Pick(Material[] materials, int variant)
@@ -1104,7 +1162,7 @@ namespace BackRooms.World
             return materials[Mathf.Abs(variant) % materials.Length];
         }
 
-        static void AddDecal(Transform parent, Material material, Vector3 position, Quaternion rotation, Vector3 size, bool flip = false, float strength = 0f)
+        static void AddDecal(Transform parent, Material material, Vector3 position, Quaternion rotation, Vector3 size, float drawDistance, bool flip = false, float strength = 0f)
         {
             var go = new GameObject("Marca");
             go.transform.SetParent(parent, false);
@@ -1115,8 +1173,9 @@ namespace BackRooms.World
             projector.material = material;
             projector.size = size;
             projector.pivot = new Vector3(0f, 0f, size.z * 0.5f);
-            projector.drawDistance = 60f;
-            projector.fadeScale = 0.85f;
+            // Some aos poucos nos últimos 30% da distância, em vez de piscar.
+            projector.drawDistance = drawDistance;
+            projector.fadeScale = 0.7f;
             // Força zero significa que não foi informada: vale a opacidade cheia do material.
             projector.fadeFactor = strength > 0f ? Mathf.Clamp01(strength) : 1f;
 

@@ -32,6 +32,18 @@ namespace BackRooms.Entities
         [Tooltip("Metros andados por ciclo completo de passada (dois passos).")]
         public float strideLength = 2.8f;
 
+        [Header("Modelo do Blender")]
+        [Tooltip("Malha esculpida no Blender (Tools/Blender/personagens), vestida sobre as juntas. Vazio: o corpo antigo, montado em código.")]
+        public TextAsset model;
+        [Tooltip("Materiais do modelo, um por parte (o nome termina com o nome da parte).")]
+        public Material[] modelMaterials;
+
+        /// <summary>
+        /// Só para a ferramenta que exporta o esqueleto para o Blender: monta as juntas na pose de
+        /// encaixe e não funde nem tira nenhuma peça.
+        /// </summary>
+        public static bool KeepAllJoints;
+
         /// <summary>Disparado a cada pé que bate no chão, com a velocidade do momento.</summary>
         public event Action<float> Stepped;
 
@@ -296,9 +308,16 @@ namespace BackRooms.Entities
             }
 
             // Centenas de hastes soltas viram uma malha por junta e por material.
-            foreach (Transform joint in new List<Transform>(_live)) FigureKit.Bake(joint, _live);
+            // Com modelo, as hastes de código saem e fica só o esqueleto; sem, as centenas de
+            // hastes soltas viram uma malha por junta e por material.
+            bool dressed = model != null && !KeepAllJoints;
+            if (!KeepAllJoints)
+                foreach (Transform joint in new List<Transform>(_live))
+                    if (dressed) FigureKit.Strip(joint, _live); else FigureKit.Bake(joint, _live);
 
+            // A pose parada é a de encaixe: foi nela que o Blender esculpiu o modelo.
             Pose(0f, 0f, 0f, 0f);
+            if (dressed) CharacterModel.Attach(transform, model, modelMaterials);
         }
 
         // Cabeça comprida, esticada para trás, sem olhos: crânio e mandíbula esculpidos como
