@@ -217,6 +217,11 @@ namespace BackRooms.EditorTools
 
             // Cena
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            // Ajustes feitos à mão na cena do Level 0 em 12/11/2026 e trazidos para cá; só nela,
+            // para as cenas do Level 1 e do Level 2 saírem como estão.
+            bool level0 = options.scenePath == ScenePath;
+            // Sem o céu do Unity: o HDRP não usa este material (o céu dele vem do Volume).
+            if (level0) RenderSettings.skybox = null;
 
             var volumeObject = new GameObject("Global Volume");
             var volume = volumeObject.AddComponent<Volume>();
@@ -303,6 +308,14 @@ namespace BackRooms.EditorTools
             var sessionObject = new GameObject("Sessao");
             var manager = sessionObject.AddComponent<NetworkManager>();
             var transport = sessionObject.AddComponent<UnityTransport>();
+            if (level0)
+            {
+                // Valor de cena sem efeito: GameSession.Host define o endereço de escuta ao
+                // hospedar (0.0.0.0, ou 127.0.0.1 só na sessão local) e Join o de conexão.
+                var connection = transport.ConnectionData;
+                connection.ServerListenAddress = "127.0.0.1";
+                transport.ConnectionData = connection;
+            }
             if (manager.NetworkConfig == null) manager.NetworkConfig = new NetworkConfig();
             manager.NetworkConfig.NetworkTransport = transport;
             manager.NetworkConfig.PlayerPrefab = playerPrefab;
@@ -643,12 +656,21 @@ namespace BackRooms.EditorTools
             fog.enableVolumetricFog.Override(true);
             fog.albedo.Override(new Color(0.9f, 0.85f, 0.6f));
             fog.anisotropy.Override(0.2f);
+            // Valor do ajuste à mão de 12/11/2026, sem override: não vale enquanto a qualidade da
+            // névoa vier do perfil do HDRP. Só para o arquivo gerado sair igual ao commitado.
+            fog.volumetricFogBudget = 0.5f;
 
             var occlusion = Add<ScreenSpaceAmbientOcclusion>(profile);
             occlusion.intensity.Override(1.2f);
             occlusion.radius.Override(1.5f);
-            // Desligada em 12/11/2026, pelo mesmo ajuste à mão.
+            // Desligada em 12/11/2026, pelo mesmo ajuste à mão: o quadro caiu de 27 para cerca de
+            // 20 ms junto com o céu desligado (Docs/desempenho-level0.md).
             occlusion.active = false;
+            // Também do ajuste à mão, sem override e só da oclusão por traçado de raios (que o
+            // jogo não usa): sem efeito, repetidos para o arquivo gerado sair igual.
+            occlusion.rayLength = 3f;
+            occlusion.sampleCount = 2;
+            occlusion.denoiserRadius = 0.5f;
 
             // Pós de filmadora.
             var bloom = Add<Bloom>(profile);
