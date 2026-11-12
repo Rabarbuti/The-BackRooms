@@ -125,6 +125,8 @@ namespace BackRooms.World
         public Color poolLampColor = new Color(0.55f, 0.95f, 1f);
         [Tooltip("Decalques de mancha, nesta ordem: 0 limo da linha d'água, 1 escorrido de calcário, 2 mofo no rejunte, 3 ferrugem. Vazio = sem manchas.")]
         public Material[] poolStainDecals;
+        [Tooltip("Marcações pintadas, nesta ordem: 0 profundidade (1.2 M), 1 proibido mergulhar, 2 DEEP END, 3 T de fim de raia. Vazio = sem marcações.")]
+        public Material[] poolMarkDecals;
 
         [Header("Luminárias")]
         [Tooltip("Intensidade em candela.")]
@@ -1162,7 +1164,7 @@ namespace BackRooms.World
             return materials[Mathf.Abs(variant) % materials.Length];
         }
 
-        static void AddDecal(Transform parent, Material material, Vector3 position, Quaternion rotation, Vector3 size, float drawDistance, bool flip = false, float strength = 0f)
+        static GameObject AddDecal(Transform parent, Material material, Vector3 position, Quaternion rotation, Vector3 size, float drawDistance, bool flip = false, float strength = 0f)
         {
             var go = new GameObject("Marca");
             go.transform.SetParent(parent, false);
@@ -1184,6 +1186,7 @@ namespace BackRooms.World
                 projector.uvScale = new Vector2(-1f, 1f);
                 projector.uvBias = new Vector2(1f, 0f);
             }
+            return go;
         }
 
         // Porta escura com placa EXIT vermelha, na parede da célula mais distante do spawn.

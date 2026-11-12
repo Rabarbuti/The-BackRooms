@@ -51,6 +51,320 @@ namespace BackRooms.EditorTools
             Level1Setup.ExitWithLevel0Open(code);
         }
 
+        /// <summary>
+        /// Linha de comando, modo enxuto: -executeMethod BackRooms.EditorTools.Level2Preview.BatchCloseups
+        /// [-seed N]. Só os closes do acabamento (tijolo de vidro, janelão, poço redondo, teto de
+        /// vidro Full, manchas, marcações, uma sala com elas e a vista longa de uma raia), em
+        /// Logs/Previews/level2_s{seed}_*.png, sem apagar as outras fotos. Também procura, nas seeds
+        /// de conferência, quais têm poço redondo, tijolo de vidro e janelão.
+        /// </summary>
+        public static void BatchCloseups()
+        {
+            int code = 1;
+            try
+            {
+                string report = Closeups(SeedArgument(1998), out bool ok);
+                Debug.Log("[BackRooms] Closes do Level 2: " + report);
+                code = ok ? 0 : 3;
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+            Level1Setup.ExitWithLevel0Open(code);
+        }
+
+        static readonly int[] ScanSeeds = { 1998, 7, 4242, 31337, 90210, 5, 21 };
+
+        static string Closeups(int seed, out bool ok)
+        {
+            ok = false;
+            WallSide[] sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
+
+            // Que seed tem o quê (só a planta: rápido).
+            var scan = new List<string>();
+            foreach (int s in ScanSeeds)
+            {
+                LevelData plan = LevelGenerator.Generate(s, 16, 16, false, false, true);
+                var wells = new List<string>();
+                int glass = 0, window = 0, full = 0;
+                for (int z = 0; z < plan.Height; z++)
+                    for (int x = 0; x < plan.Width; x++)
+                    {
+                        if (LevelBuilder.IsRoundWell(plan, x, z)) wells.Add($"({x},{z}) {plan.Rooms[plan.Room[x, z]].Kind}");
+                        if (plan.IsSolid(x, z)) continue;
+                        if (plan.Sky[x, z] == PoolSky.Full) full++;
+                        foreach (WallSide side in sides)
+                        {
+                            if (plan.EdgeAt(x, z, side) == PoolEdge.GlassBlock) glass++;
+                            if (plan.EdgeAt(x, z, side) == PoolEdge.Window) window++;
+                        }
+                    }
+                scan.Add($"seed {s}: poço redondo {(wells.Count > 0 ? string.Join(" ", wells) : "nenhum")}, tijolo de vidro {glass}, janelão {window}, células Full {full}");
+            }
+            Debug.Log("[BackRooms] Procura nas seeds:\n" + string.Join("\n", scan));
+
+            Level2Setup.BuildScene();
+            EditorSceneManager.OpenScene(Level2Setup.ScenePath, OpenSceneMode.Single);
+            var builder = Object.FindFirstObjectByType<LevelBuilder>();
+            if (builder == null || !builder.poolsEnabled) return "a cena não tem LevelBuilder com as Piscinas ligadas";
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
+            if (prefab == null) return "sem o prefab do jogador";
+
+            builder.seed = seed;
+            builder.Rebuild();
+            LevelData d = builder.Data;
+            WakeWater(builder);
+            foreach (HDAdditionalLightData light in builder.GetComponentsInChildren<HDAdditionalLightData>(true))
+                light.shadowUpdateMode = ShadowUpdateMode.EveryFrame;
+            Debug.Log($"[BackRooms] Seed {seed}: {builder.PoolStats}\nManchas e marcações: {builder.PoolDecalLog}");
+            string ascii = PlanText(d);
+            if (!string.IsNullOrEmpty(ascii)) Debug.Log($"[BackRooms] Planta das Piscinas, seed {seed}:\n{ascii}");
+
+            string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Logs", "Previews"));
+            Directory.CreateDirectory(folder);
+            foreach (string old in Directory.GetFiles(folder, $"level2_s{seed}_*.png")) File.Delete(old);
+
+            GameObject rig = Level0Preview.CreateCameraRig(prefab, out Camera camera);
+            bool asyncBefore = ShaderUtil.allowAsyncCompilation;
+            ShaderUtil.allowAsyncCompilation = false;
+            var target = new RenderTexture(1280, 720, 24, RenderTextureFormat.ARGB32);
+            var readback = new Texture2D(target.width, target.height, TextureFormat.RGBA32, false);
+            var names = new List<string>();
+            var missing = new List<string>();
+            var camcorder = Object.FindFirstObjectByType<BackRooms.UI.Camcorder>();
+            var water = builder.GetComponentInChildren<PoolWater>();
+            Volume under = null;
+            if (water != null)
+                foreach (Volume v in water.GetComponentsInChildren<Volume>(true))
+                    if (v.gameObject.name == "DebaixoDagua") under = v;
+            float underBefore = under != null ? under.weight : 0f;
+
+            try
+            {
+                if (camcorder != null) camcorder.Draw(true, 61.4f, 61.4f, 0.95f, false);
+                camera.targetTexture = target;
+                camera.farClipPlane = Mathf.Max(camera.farClipPlane, 150f);
+
+                void Shot(string name, Vector3 foot, Vector3 look, float pitch, bool underwater = false)
+                {
+                    look.y = 0f;
+                    if (look.sqrMagnitude < 1e-6f) look = Vector3.forward;
+                    if (under != null) under.weight = underwater ? 1f : underBefore;
+                    if (camcorder != null) camcorder.Draw(true, 61.4f, 61.4f, 0.95f, false, underwater: underwater, air: underwater ? 0.6f : 1f);
+                    rig.transform.SetPositionAndRotation(builder.transform.TransformPoint(foot), Quaternion.LookRotation(look.normalized, Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+                    string file = $"level2_s{seed}_{name}.png";
+                    Shoot(camera, target, readback, Path.Combine(folder, file));
+                    names.Add(file);
+                }
+
+                // Olhando de onde está o pé para um ponto (pitch para baixo positivo).
+                float PitchTo(Vector3 foot, Vector3 point)
+                {
+                    Vector3 flat = point - foot;
+                    flat.y = 0f;
+                    return Mathf.Clamp(Mathf.Atan2(foot.y + Eye - point.y, Mathf.Max(0.3f, flat.magnitude)) * Mathf.Rad2Deg, -70f, 70f);
+                }
+
+                (int x, int z) CellOf(Vector3 p) => (Mathf.Clamp(Mathf.FloorToInt(p.x / LevelBuilder.Cell), 0, d.Width - 1),
+                                                     Mathf.Clamp(Mathf.FloorToInt(p.z / LevelBuilder.Cell), 0, d.Height - 1));
+
+                // Tijolo de vidro e janelão, de frente, a 3 m.
+                foreach (PoolEdge kind in new[] { PoolEdge.GlassBlock, PoolEdge.Window })
+                {
+                    string name = kind == PoolEdge.Window ? "janelao" : "tijolo_de_vidro";
+                    bool found = false;
+                    for (int z = 0; z < d.Height && !found; z++)
+                        for (int x = 0; x < d.Width && !found; x++)
+                        {
+                            if (d.IsSolid(x, z)) continue;
+                            foreach (WallSide side in sides)
+                            {
+                                if (d.EdgeAt(x, z, side) != kind) continue;
+                                Vector3 dir = Dir(side);
+                                Vector3 foot = CellCenter(d, x, z) + dir * (LevelBuilder.Cell * 0.5f - 3.2f);
+                                foot.y = StandHeight(d, x, z);
+                                Shot(name, foot, dir, -6f);
+                                Vector3 oblique = Vector3.Cross(Vector3.up, dir) * 1.6f;
+                                Shot(name + "_obliquo", foot + oblique, dir - oblique * 0.35f, -2f);
+                                found = true;
+                                break;
+                            }
+                        }
+                    if (!found) missing.Add(name);
+                }
+
+                // Poço redondo: da superfície, na funda ao lado, e de dentro d'água, olhando o furo.
+                bool well = false;
+                for (int z = 0; z < d.Height && !well; z++)
+                    for (int x = 0; x < d.Width && !well; x++)
+                    {
+                        if (!LevelBuilder.IsRoundWell(d, x, z)) continue;
+                        foreach (WallSide side in sides)
+                        {
+                            if (!d.IsOpen(x, z, side) || !d.Neighbor(x, z, side, out int nx, out int nz) || d.Depth[nx, nz] != PoolDepth.Deep) continue;
+                            Vector3 dir = Dir(side);
+                            Vector3 center = CellCenter(d, x, z);
+                            Vector3 foot = center + dir * 3f;
+                            foot.y = LevelData.DepthFloor(PoolDepth.Deep);
+                            Shot("poco_redondo", foot, -dir, 45f);
+                            Vector3 diver = center + dir * 2.4f;
+                            diver.y = -0.5f - Eye;
+                            Shot("poco_redondo_debaixo", diver, -dir, 50f, underwater: true);
+                            well = true;
+                            break;
+                        }
+                    }
+                if (!well) missing.Add("poço redondo");
+
+                // Teto de vidro Full: a emenda entre duas células vizinhas da mesma sala, e a faixa toda de uma ponta.
+                bool roof = false;
+                for (int z = 0; z < d.Height && !roof; z++)
+                    for (int x = 0; x + 1 < d.Width && !roof; x++)
+                    {
+                        if (d.IsSolid(x, z) || d.IsSolid(x + 1, z) || d.Sky[x, z] != PoolSky.Full || d.Sky[x + 1, z] != PoolSky.Full) continue;
+                        if (d.Room[x, z] != d.Room[x + 1, z] || d.Rooms[d.Room[x, z]].Vault) continue;
+                        float seam = (x + 1) * LevelBuilder.Cell;
+                        Vector3 foot = new Vector3(seam - 2.6f, StandHeight(d, x, z), (z + 0.5f) * LevelBuilder.Cell);
+                        Shot("teto_full_emenda", foot, Vector3.right, -62f);
+                        int first = x;
+                        while (first > 0 && d.Sky[first - 1, z] == PoolSky.Full && d.Room[first - 1, z] == d.Room[x, z]) first--;
+                        Vector3 end = CellCenter(d, first, z) + Vector3.left * 1.4f;
+                        end.y = StandHeight(d, first, z);
+                        Shot("teto_full_faixa", end, Vector3.right, -38f);
+                        roof = true;
+                    }
+                if (!roof) missing.Add("teto Full com duas células");
+
+                // Decalques: um close de cada material, de frente (parede) ou de trás do desenho (piso).
+                var seen = new HashSet<string>();
+                var perRoom = new Dictionary<int, int>();
+                foreach (string group in new[] { "Manchas", "Marcacoes" })
+                {
+                    Transform parent = builder.transform.Find(group);
+                    if (parent == null) { missing.Add(group); continue; }
+                    foreach (DecalProjector decal in parent.GetComponentsInChildren<DecalProjector>())
+                    {
+                        Vector3 local = builder.transform.InverseTransformPoint(decal.transform.position);
+                        Vector3 into = builder.transform.InverseTransformDirection(decal.transform.forward);
+                        Vector3 up = builder.transform.InverseTransformDirection(decal.transform.up);
+                        var (cx, cz) = CellOf(local - (Mathf.Abs(into.y) < 0.5f ? into * 0.5f : Vector3.zero));
+                        int room = d.Room[cx, cz];
+                        if (room >= 0) perRoom[room] = (perRoom.TryGetValue(room, out int n) ? n : 0) + 1;
+
+                        string material = decal.material != null ? decal.material.name.Replace("Decal_", "").ToLowerInvariant() : "decal";
+                        if (!seen.Add(material)) continue;
+
+                        if (into.y > 0.5f)
+                        {
+                            // No teto: de baixo.
+                            Vector3 foot = local - up * 2.4f;
+                            var (fx, fz) = CellOf(foot);
+                            foot.y = StandHeight(d, fx, fz);
+                            Shot("close_" + material, foot, up, PitchTo(foot, local));
+                        }
+                        else if (into.y < -0.5f)
+                        {
+                            // No piso: de quem lê o desenho (atrás do pé dele).
+                            Vector3 foot = local - up * 1.9f;
+                            var (fx, fz) = CellOf(foot);
+                            foot.y = StandHeight(d, fx, fz);
+                            Shot("close_" + material, foot, up, PitchTo(foot, local));
+                            // A mesma, de longe: a marcação na sala.
+                            Vector3 back = local - up * 5f;
+                            var (bx, bz) = CellOf(back);
+                            if (!d.IsSolid(bx, bz) && d.Room[bx, bz] == room)
+                            {
+                                back.y = StandHeight(d, bx, bz);
+                                Shot("sala_" + material, back, up, PitchTo(back, local) * 0.6f);
+                            }
+                            if (local.y < -0.1f)
+                            {
+                                Vector3 diver = local - up * 2.2f;
+                                diver.y = -0.4f - Eye;
+                                Shot("close_" + material + "_debaixo", diver, up, PitchTo(diver, local), underwater: true);
+                            }
+                        }
+                        else
+                        {
+                            // De frente, a 2,4 m; o que está alto, de mais longe (no máximo 45° para cima).
+                            Vector3 foot = local - into * 2.4f;
+                            var (fx, fz) = CellOf(foot);
+                            float rise = local.y - (StandHeight(d, fx, fz) + Eye);
+                            if (rise > 2.4f)
+                            {
+                                foot = local - into * Mathf.Min(rise, 7f);
+                                (fx, fz) = CellOf(foot);
+                            }
+                            foot.y = StandHeight(d, fx, fz);
+                            if (local.y < -0.3f)
+                            {
+                                // Debaixo d'água: de frente, nadando na altura dela.
+                                foot = local - into * 2f;
+                                foot.y = local.y - Eye;
+                                Shot("close_" + material, foot, into, 0f, underwater: true);
+                            }
+                            else Shot("close_" + material, foot, into, PitchTo(foot, local));
+                        }
+                    }
+                }
+
+                // As duas salas com mais decalques, em contexto: da passagem para o meio.
+                var rooms = new List<int>(perRoom.Keys);
+                rooms.Sort((a, b) => perRoom[b] != perRoom[a] ? perRoom[b].CompareTo(perRoom[a]) : a.CompareTo(b));
+                for (int k = 0; k < Mathf.Min(2, rooms.Count); k++)
+                {
+                    PoolRoom room = d.Rooms[rooms[k]];
+                    string kind = room.Kind.ToString().ToLowerInvariant();
+                    Vector3 middle = new Vector3((room.X0 + room.Width * 0.5f) * LevelBuilder.Cell, 0f, (room.Z0 + room.Height * 0.5f) * LevelBuilder.Cell);
+                    middle.y = StandHeight(d, Mathf.Min(room.X0 + room.Width / 2, d.Width - 1), Mathf.Min(room.Z0 + room.Height / 2, d.Height - 1));
+                    if (FindDoor(d, room, out int dx, out int dz, out WallSide side))
+                    {
+                        Vector3 dir = Dir(side);
+                        Vector3 foot = CellCenter(d, dx, dz) + dir * (LevelBuilder.Cell * 0.5f - 0.7f);
+                        foot.y = StandHeight(d, dx, dz);
+                        Vector3 look = middle - foot;
+                        if (new Vector2(look.x, look.z).sqrMagnitude < 1f) look = -dir;
+                        Shot($"contexto_sala{room.Id:00}_{kind}", foot, look, 10f);
+                    }
+                    Vector3 toWall = room.Width >= room.Height ? Vector3.forward : Vector3.right;
+                    Shot($"contexto_sala{room.Id:00}_{kind}_meio", middle - toWall * (Mathf.Min(room.Width, room.Height) * LevelBuilder.Cell * 0.35f), toWall, 6f);
+                }
+
+                // Vista longa (a luz das claraboias some longe sem atravessar parede): ao longo da
+                // sala mais comprida, de uma ponta, e do início para o lado mais longe do mapa.
+                PoolRoom longest = null;
+                foreach (PoolRoom room in d.Rooms)
+                    if (longest == null || Mathf.Max(room.Width, room.Height) > Mathf.Max(longest.Width, longest.Height)) longest = room;
+                if (longest != null)
+                {
+                    bool alongX = longest.Width >= longest.Height;
+                    int x0 = alongX ? longest.X0 : longest.X0 + longest.Width / 2, z0 = alongX ? longest.Z0 + longest.Height / 2 : longest.Z0;
+                    Vector3 foot = CellCenter(d, x0, z0) - (alongX ? Vector3.right : Vector3.forward) * 1.6f;
+                    foot.y = StandHeight(d, x0, z0);
+                    Shot($"vista_longa_{longest.Kind.ToString().ToLowerInvariant()}", foot, alongX ? Vector3.right : Vector3.forward, 3f);
+                }
+                Vector3 spawn = builder.transform.InverseTransformPoint(builder.SpawnCenter);
+                Shot("vista_do_inicio", spawn, new Vector3(d.Width, 0f, d.Height) * (LevelBuilder.Cell * 0.5f) - spawn, 2f);
+
+                ok = names.Count > 0;
+            }
+            finally
+            {
+                if (under != null) under.weight = underBefore;
+                camera.targetTexture = null;
+                RenderTexture.active = null;
+                Object.DestroyImmediate(target);
+                Object.DestroyImmediate(readback);
+                Object.DestroyImmediate(rig);
+                ShaderUtil.allowAsyncCompilation = asyncBefore;
+            }
+
+            return $"seed {seed}, {names.Count} fotos em {folder}: {string.Join(", ", names)}" +
+                   (missing.Count > 0 ? $"; não há nesta seed: {string.Join(", ", missing)}" : "");
+        }
+
         static int SeedArgument(int fallback)
         {
             string[] args = Environment.GetCommandLineArgs();

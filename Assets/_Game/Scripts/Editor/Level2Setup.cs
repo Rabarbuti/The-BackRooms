@@ -126,6 +126,8 @@ namespace BackRooms.EditorTools
             // Manchas (decalques), nesta ordem: limo, calcário, mofo, ferrugem. O construtor escolhe
             // onde: poucas e longe do início.
             builder.poolStainDecals = m.Stains;
+            // Marcações pintadas (Folha D), nesta ordem: 1.2 M, NO DIVING, DEEP END, T de raia.
+            builder.poolMarkDecals = m.Marks;
 
             // Claraboias de vidro fosco: acesas de dia; no apagão, vidro azul-noite.
             builder.panelOnMaterial = m.SkylightOn;
@@ -215,8 +217,15 @@ namespace BackRooms.EditorTools
                 if (Object.FindFirstObjectByType<FluorescentHum>() != null) problems.Add("a cena ainda tem o zumbido de lâmpada fluorescente");
                 if (builder.waterMaterial == null || builder.poolCausticsMaterial == null) problems.Add("falta o material da água ou da cáustica");
 
+                if (builder.poolStainDecals == null || builder.poolStainDecals.Length != 4 || builder.poolStainDecals.Any(m => m == null))
+                    problems.Add("falta algum material de mancha (Decal_Stain_*)");
+                if (builder.poolMarkDecals == null || builder.poolMarkDecals.Length != 4 || builder.poolMarkDecals.Any(m => m == null))
+                    problems.Add("falta algum material de marcação (Decal_Mark_*)");
+
                 builder.seed = CheckSeeds[0];
                 builder.Rebuild();
+                lines.Add($"montagem da seed {builder.seed}: {builder.PoolStats}");
+                lines.Add($"manchas e marcações: {builder.PoolDecalLog}");
                 lines.Add("fotos: " + Capture(builder));
             }
             finally
@@ -510,6 +519,8 @@ namespace BackRooms.EditorTools
             public Material Tile, Mosaic, Accent, Coping, Water, Caustics, Window, GlassBlock, Lamp, Rail, SkylightOn, SkylightOff;
             /// <summary>Manchas, na ordem do LevelBuilder.poolStainDecals: limo, calcário, mofo, ferrugem.</summary>
             public Material[] Stains;
+            /// <summary>Marcações, na ordem do LevelBuilder.poolMarkDecals: 1.2 M, NO DIVING, DEEP END, T de raia.</summary>
+            public Material[] Marks;
         }
 
         static PoolMaterials EnsureMaterials()
@@ -553,7 +564,16 @@ namespace BackRooms.EditorTools
                 Stain("Stain_Waterline", new Color(0.9f, 0.92f, 0.86f), 0.55f, 0.45f),
                 Stain("Stain_Limescale", new Color(1f, 1f, 0.97f), 0.5f, 0.25f),
                 Stain("Stain_GroutMold", new Color(0.9f, 0.92f, 0.88f), 0.5f, 0.3f),
-                Stain("Stain_Rust", new Color(0.85f, 0.82f, 0.8f), 0.45f, 0.3f),
+                // Debaixo d'água a cáustica e a névoa apagam a ferrugem: um pouco mais forte que as outras.
+                Stain("Stain_Rust", new Color(0.85f, 0.82f, 0.8f), 0.65f, 0.3f),
+            };
+            // Marcações da Folha D (tinta preta e o T azul-marinho, com falhas): é tinta, quase opaca.
+            Material[] marks =
+            {
+                Stain("Mark_Depth", Color.white, 0.92f, 0.45f),
+                Stain("Mark_NoDiving", Color.white, 0.92f, 0.45f),
+                Stain("Mark_DeepEnd", Color.white, 0.92f, 0.45f),
+                Stain("Mark_LaneEnd", Color.white, 0.95f, 0.6f),
             };
             Texture2D frosted = Painted("Skylight_Glow", 256, PaintFrosted, TextureKind.Color);
 
@@ -581,6 +601,7 @@ namespace BackRooms.EditorTools
             m.Water = WaterMaterial(waterNormal, waterDetail);
             m.Caustics = CausticsMaterial(caustics, causticsDetail);
             m.Stains = stains;
+            m.Marks = marks;
 
             AssetDatabase.SaveAssets();
             return m;
@@ -728,8 +749,8 @@ namespace BackRooms.EditorTools
             HeightToNormal
         }
 
-        // Decalque de mancha (HDRP/Decal) com a textura da Folha C. Mistura pelo alfa da textura;
-        // só cor e brilho (sem relevo).
+        // Decalque (HDRP/Decal) com a textura de mesmo nome em Art/Fontes/Level2: manchas da Folha C
+        // e marcações da Folha D. Mistura pelo alfa da textura; só cor e brilho (sem relevo).
         static Material Stain(string name, Color tint, float blend, float smoothness)
         {
             string texturePath = $"{SourceFolder}/{name}.png";

@@ -43,9 +43,21 @@ namespace BackRooms.World
         const int ColumnSides = 24;
         const int VaultSegments = 24;
         const float CausticsLift = 0.01f;
+        // Manchas: no máximo uma a cada tantas células com piso, e um teto para o mapa inteiro.
+        const int CellsPerStain = 10;
+        const int MaxStains = 10;
+        const int MaxRust = 3;
+        // Mofo no rejunte (Stain_GroutMold.png): as linhas da textura ficam a cada 0,209 da largura;
+        // a do meio está 0,045 acima e 0,0215 à direita do centro. O decalque tem o tamanho que
+        // põe uma linha por junta do azulejo.
+        float MouldSize => poolTileMeters / 6f / 0.209f;
+        const float MouldLineUp = 0.045f;
+        const float MouldLineRight = 0.0215f;
 
         /// <summary>Resumo da última montagem das Piscinas (objetos, vértices, luzes), para as ferramentas de teste.</summary>
         public string PoolStats { get; private set; }
+        /// <summary>Onde a última montagem pôs cada mancha e marcação (tipo, célula, lado), para as ferramentas de teste.</summary>
+        public string PoolDecalLog { get; private set; }
 
         enum Surface : byte { Wall, Floor, Bottom, Coping, Accent }
 
@@ -124,6 +136,14 @@ namespace BackRooms.World
             public readonly List<LitOpening> Lit = new List<LitOpening>();
             public GameObject Colliders;
             public int Lights, ShadowLights, Objects;
+            /// <summary>Caixas dos decalques já postos (manchas e marcações), para um não cair em cima do outro.</summary>
+            public readonly List<Bounds> Decals = new List<Bounds>();
+            /// <summary>Faces de parede (célula * 4 + lado) que já têm mancha ou marcação.</summary>
+            public readonly HashSet<int> DecalFaces = new HashSet<int>();
+            /// <summary>Onde ficou cada mancha e marcação, para o registro das ferramentas de teste.</summary>
+            public readonly List<string> DecalLog = new List<string>();
+            public readonly int[] StainCount = new int[5];
+            public readonly int[] MarkCount = new int[4];
         }
 
         PoolKit _kit;
@@ -195,6 +215,8 @@ namespace BackRooms.World
             BuildSkylights(resolution);
             BuildLitOpenings(resolution);
             BuildLamps();
+            BuildPoolStains();
+            BuildPoolMarks();
             BuildExit();
 
             int vertices = 0;
@@ -202,8 +224,12 @@ namespace BackRooms.World
                 if (filter.sharedMesh != null) vertices += filter.sharedMesh.vertexCount;
             int renderers = GetComponentsInChildren<MeshRenderer>().Length;
             int boxes = _kit.Colliders.GetComponents<BoxCollider>().Length;
+            int[] st = _kit.StainCount, mk = _kit.MarkCount;
             PoolStats = $"{renderers} malhas desenhadas, {vertices} vértices, {boxes} caixas de colisão, " +
-                        $"{_kit.Lights} luzes ({_kit.ShadowLights} com sombra de uma face em cache, resolução {resolution})";
+                        $"{_kit.Lights} luzes ({_kit.ShadowLights} com sombra de uma face em cache, resolução {resolution}); " +
+                        $"manchas {st[0] + st[1] + st[2] + st[3] + st[4]} (limo {st[0]}, calcário {st[1]}, mofo {st[2]}, mofo no teto {st[3]}, ferrugem {st[4]}), " +
+                        $"marcações {mk[0] + mk[1] + mk[2] + mk[3]} (1.2 M {mk[0]}, NO DIVING {mk[1]}, DEEP END {mk[2]}, T de raia {mk[3]})";
+            PoolDecalLog = string.Join("; ", _kit.DecalLog);
             _kit = null;
         }
 
@@ -275,17 +301,21 @@ namespace BackRooms.World
         {
             for (int z = 0; z < Data.Height; z++)
                 for (int x = 0; x < Data.Width; x++)
-                {
-                    if (!OpenCell(x, z) || Data.Depth[x, z] != PoolDepth.Well) continue;
-                    bool round = true;
-                    foreach (WallSide side in PoolSides)
-                    {
-                        if (Data.StairAt(x, z, side, out _)) { round = false; break; }
-                        if (!Data.IsOpen(x, z, side) || !Data.Neighbor(x, z, side, out int nx, out int nz) || !OpenCell(nx, nz)) continue;
-                        if (Data.Depth[nx, nz] != PoolDepth.Deep) { round = false; break; }
-                    }
-                    _kit.RoundWell[x, z] = round;
-                }
+                    _kit.RoundWell[x, z] = IsRoundWell(Data, x, z);
+        }
+
+        /// <summary>A célula vira poço redondo? Poço sem escada cujas vizinhas abertas são todas fundas.</summary>
+        public static bool IsRoundWell(LevelData d, int x, int z)
+        {
+            bool Open(int cx, int cz) => cx >= 0 && cz >= 0 && cx < d.Width && cz < d.Height && !d.IsSolid(cx, cz) && d.Room[cx, cz] >= 0;
+            if (!Open(x, z) || d.Depth[x, z] != PoolDepth.Well) return false;
+            foreach (WallSide side in PoolSides)
+            {
+                if (d.StairAt(x, z, side, out _)) return false;
+                if (!d.IsOpen(x, z, side) || !d.Neighbor(x, z, side, out int nx, out int nz) || !Open(nx, nz)) continue;
+                if (d.Depth[nx, nz] != PoolDepth.Deep) return false;
+            }
+            return true;
         }
 
         // ---------------------------------------------------------------- Emissão de faces
@@ -1574,13 +1604,16 @@ namespace BackRooms.World
         /// Poucas manchas (decalques), só longe do início e nunca na sala inicial nem na da saída:
         /// limo na linha d'água, escorrido de calcário do alto da parede, mofo no rejunte (salas
         /// escuras, cantos sem claraboia) e ferrugem embaixo das lâmpadas submersas. No máximo uma
-        /// a cada 6 células com piso. Só em parede cheia (nada sobre janela, vão ou vigia).
+        /// a cada <see cref="CellsPerStain"/> células com piso e <see cref="MaxStains"/> no mapa (as
+        /// referências quase não têm sujeira). Só em parede cheia (nada sobre janela, vão ou vigia),
+        /// longe de escada, coluna e lâmpada.
         /// </summary>
         void BuildPoolStains()
         {
             if (poolStainDecals == null || poolStainDecals.Length == 0) return;
             var rng = new System.Random(Data.Seed * 7919 + 37);
             Material Stain(int index) => index < poolStainDecals.Length ? poolStainDecals[index] : null;
+            List<Bounds> obstacles = DecalObstacles();
 
             var roomSky = new bool[Data.Rooms.Count];
             int floorCells = 0;
@@ -1591,7 +1624,7 @@ namespace BackRooms.World
                     floorCells++;
                     if (Data.Sky[x, z] != PoolSky.None) roomSky[Data.Room[x, z]] = true;
                 }
-            int budget = floorCells / 6;
+            int budget = Mathf.Min(floorCells / CellsPerStain, MaxStains);
             if (budget <= 0) return;
 
             var slime = new List<(int x, int z, WallSide side)>();
@@ -1616,21 +1649,26 @@ namespace BackRooms.World
 
             Transform root = null;
             Transform Root() => root != null ? root : (root = CreateChild("Manchas").transform);
-            var used = new HashSet<int>();
-            int FaceKey(int x, int z, WallSide side) => (x + z * Data.Width) * 4 + (int)side;
 
-            // Ferrugem: embaixo de algumas lâmpadas submersas.
+            // Ferrugem: embaixo de algumas lâmpadas submersas, escorrendo da borda do disco até no
+            // máximo o piso.
             if (Stain(3) != null)
                 foreach (PoolLamp lamp in Data.Lamps)
                 {
                     bool roll = rng.NextDouble() < 0.6;
-                    if (budget <= 0 || !roll || !StainAllowed(lamp.X, lamp.Z)) continue;
+                    if (budget <= 0 || !roll || _kit.StainCount[4] >= MaxRust || !StainAllowed(lamp.X, lamp.Z)) continue;
                     Segment s = SideSegment(lamp.X, lamp.Z, lamp.Side);
                     if (s != null && s.Holes.Count > 0) continue;
-                    if (!used.Add(FaceKey(lamp.X, lamp.Z, lamp.Side))) continue;
+                    if (_kit.DecalFaces.Contains(FaceKey(lamp.X, lamp.Z, lamp.Side))) continue;
                     float inset = HasWallBox(lamp.X, lamp.Z, lamp.Side) ? HalfWall : 0f;
-                    WallStain(Root(), Stain(3), lamp.X, lamp.Z, lamp.Side, inset, 0f, lamp.Y - 0.15f - 0.47f, new Vector2(0.6f, 0.9f), false);
-                    budget--;
+                    // O topo fica logo abaixo da caixa da lâmpada (0,16 m) mais a folga do PlaceDecal.
+                    float top = lamp.Y - 0.22f, bottom = Mathf.Max(top - 0.9f, FloorTop(lamp.X, lamp.Z) + 0.02f);
+                    if (top - bottom < 0.3f) continue;
+                    if (WallDecal(Root(), Stain(3), lamp.X, lamp.Z, lamp.Side, inset, 0f, (top + bottom) * 0.5f, new Vector2(0.6f, top - bottom), false, obstacles, "ferrugem"))
+                    {
+                        _kit.StainCount[4]++;
+                        budget--;
+                    }
                 }
 
             // Os outros três tipos em rodízio, cada um sorteando entre os seus lugares.
@@ -1647,10 +1685,18 @@ namespace BackRooms.World
                     Vector2Int cell = mouldCeiling[pick];
                     mouldCeiling.RemoveAt(pick);
                     float c = Data.Ceiling[cell.x, cell.y];
-                    float ox = Mathf.Round(Mathf.Lerp(-1.2f, 1.2f, r0) / 0.2f) * 0.2f, oz = Mathf.Round(Mathf.Lerp(-1.2f, 1.2f, r1) / 0.2f) * 0.2f;
-                    var position = new Vector3((cell.x + 0.5f) * Cell + ox, c - 0.06f, (cell.y + 0.5f) * Cell + oz);
-                    AddDecal(Root(), Stain(2), position, Quaternion.LookRotation(Vector3.up, Vector3.forward), new Vector3(1.2f, 1.2f, 0.16f), decalDrawDistance, flip);
-                    budget--;
+                    // Linhas do mofo sobre o rejunte do teto. O decalque olha para cima com o topo
+                    // da textura em +Z, então a direita dela é -X (ou +X, espelhado).
+                    float size = MouldSize, tile = poolTileMeters / 6f;
+                    float lineX = Mathf.Round(((cell.x + 0.5f) * Cell + Mathf.Lerp(-1.2f, 1.2f, r0)) / tile) * tile;
+                    float lineZ = Mathf.Round(((cell.y + 0.5f) * Cell + Mathf.Lerp(-1.2f, 1.2f, r1)) / tile) * tile;
+                    var position = new Vector3(lineX + MouldLineRight * size * (flip ? -1f : 1f), c - 0.06f, lineZ - MouldLineUp * size);
+                    if (PlaceDecal(Root(), Stain(2), position, Quaternion.LookRotation(Vector3.up, Vector3.forward), new Vector3(size, size, 0.16f),
+                                   flip, obstacles, $"mofo no teto ({cell.x},{cell.y})"))
+                    {
+                        _kit.StainCount[3]++;
+                        budget--;
+                    }
                     continue;
                 }
 
@@ -1665,27 +1711,39 @@ namespace BackRooms.World
                 int index = rng.Next(list.Count);
                 var (x, z, side) = list[index];
                 list.RemoveAt(index);
-                if (!used.Add(FaceKey(x, z, side))) continue;
+                if (_kit.DecalFaces.Contains(FaceKey(x, z, side))) continue;
 
+                bool placed;
                 switch (type)
                 {
                     case 0:
                         // Faixa de limo: a linha escura da textura (62% abaixo do topo) em Y = 0.
-                        WallStain(Root(), material, x, z, side, HalfWall, Mathf.Round(Mathf.Lerp(-0.6f, 0.6f, r0) / 0.2f) * 0.2f,
-                                  0.62f * 0.5f - 0.25f, new Vector2(2.4f, 0.5f), flip);
+                        placed = WallDecal(Root(), material, x, z, side, HalfWall, Mathf.Round(Mathf.Lerp(-0.6f, 0.6f, r0) / 0.2f) * 0.2f,
+                                           0.62f * 0.5f - 0.25f, new Vector2(2.4f, 0.5f), flip, obstacles, "limo");
                         break;
                     case 1:
-                        // Calcário: colado no alto da parede, escorrendo para baixo.
-                        WallStain(Root(), material, x, z, side, HalfWall, Mathf.Lerp(-1f, 1f, r0),
-                                  Data.Ceiling[x, z] - 0.8f, new Vector2(1.6f, 1.6f), flip);
+                        // Calcário: o topo da textura (que não esmaece) colado no começo da sanca,
+                        // escorrendo para baixo. Acima dele a sanca curva, onde o decalque esticaria.
+                        placed = WallDecal(Root(), material, x, z, side, HalfWall, Mathf.Lerp(-1f, 1f, r0),
+                                           Data.Ceiling[x, z] - CoveRadius - 0.8f, new Vector2(1.6f, 1.6f), flip, obstacles, "calcário");
                         break;
                     default:
-                        // Mofo: alinhado ao rejunte (múltiplos de 0,2 m).
-                        float y = Mathf.Round((Mathf.Max(FloorTop(x, z), 0f) + 0.8f + r1 * 1.2f) / 0.2f) * 0.2f;
-                        WallStain(Root(), material, x, z, side, HalfWall, Mathf.Round(Mathf.Lerp(-1.2f, 1.2f, r0) / 0.2f) * 0.2f,
-                                  y, new Vector2(1.2f, 1.2f), flip);
+                    {
+                        // Mofo: as linhas da textura sobre o rejunte do azulejo (UV do mundo, um
+                        // azulejo = poolTileMeters / 6). O meio da face cai numa junta (2 m = 15 azulejos).
+                        float size = MouldSize, tile = poolTileMeters / 6f;
+                        Vector3 dir = SideDir(side);
+                        Vector3 tangent = Mathf.Abs(dir.x) > 0.5f ? Vector3.forward : Vector3.right;
+                        float rightSign = Mathf.Sign(Vector3.Dot(Vector3.Cross(Vector3.up, dir), tangent)) * (flip ? -1f : 1f);
+                        float lineY = Mathf.Round((Mathf.Max(FloorTop(x, z), 0f) + 0.8f + r1 * 1.2f) / tile) * tile;
+                        float lineAlong = Mathf.Round(Mathf.Lerp(-1.2f, 1.2f, r0) / tile) * tile;
+                        placed = WallDecal(Root(), material, x, z, side, HalfWall, lineAlong - rightSign * MouldLineRight * size,
+                                           lineY - MouldLineUp * size, new Vector2(size, size), flip, obstacles, "mofo");
                         break;
+                    }
                 }
+                if (!placed) continue;
+                _kit.StainCount[type]++;
                 budget--;
             }
         }
@@ -1716,15 +1774,384 @@ namespace BackRooms.World
             return !(x == Data.ExitX && z == Data.ExitZ && side == Data.ExitSide);
         }
 
-        // Decalque na face da parede daquele lado da célula, olhando para dentro dela.
-        void WallStain(Transform root, Material material, int x, int z, WallSide side, float inset, float along, float centerY, Vector2 size, bool flip)
+        int FaceKey(int x, int z, WallSide side) => (x + z * Data.Width) * 4 + (int)side;
+
+        /// <summary>
+        /// Decalque na face da parede daquele lado da célula, olhando para dentro dela. Recusa (e
+        /// devolve falso) se a face já tem decalque, se ele sairia do piso à sanca (ou ao arranque
+        /// da abóbada) ou se encosta numa escada, coluna, lâmpada ou outro decalque.
+        /// </summary>
+        bool WallDecal(Transform root, Material material, int x, int z, WallSide side, float inset, float along, float centerY, Vector2 size, bool flip,
+                       List<Bounds> obstacles, string label)
         {
+            int key = FaceKey(x, z, side);
+            if (_kit.DecalFaces.Contains(key)) return false;
+            float top = centerY + size.y * 0.5f, bottom = centerY - size.y * 0.5f;
+            float roof = ClearHeight(x, z, side) - (RoomAt(x, z).Vault ? 0f : CoveRadius);
+            if (top > roof + 1e-3f || bottom < FloorTop(x, z) - 1e-3f) return false;
+            if (Mathf.Abs(along) + size.x * 0.5f > SegmentHalf + 1e-3f) return false;
+
             Vector3 dir = SideDir(side);
             Vector3 normal = -dir;
             Vector3 tangent = Mathf.Abs(dir.x) > 0.5f ? Vector3.forward : Vector3.right;
             Vector3 face = new Vector3((x + 0.5f) * Cell, 0f, (z + 0.5f) * Cell) + dir * (Cell * 0.5f - inset);
             Vector3 position = face + normal * 0.06f + tangent * along + Vector3.up * centerY;
-            AddDecal(root, material, position, Quaternion.LookRotation(-normal, Vector3.up), new Vector3(size.x, size.y, 0.16f), decalDrawDistance, flip);
+            if (!PlaceDecal(root, material, position, Quaternion.LookRotation(-normal, Vector3.up), new Vector3(size.x, size.y, 0.16f), flip, obstacles,
+                            $"{label} ({x},{z},{side})"))
+                return false;
+            _kit.DecalFaces.Add(key);
+            return true;
+        }
+
+        /// <summary>Põe o decalque se a caixa dele (com 5 cm de folga) não encosta em nenhum obstáculo; ele vira obstáculo.</summary>
+        bool PlaceDecal(Transform root, Material material, Vector3 position, Quaternion rotation, Vector3 size, bool flip, List<Bounds> obstacles, string label)
+        {
+            if (material == null) return false;
+            Bounds box = DecalBox(position, rotation, size);
+            Bounds padded = box;
+            padded.Expand(0.1f);
+            foreach (Bounds other in obstacles)
+                if (padded.Intersects(other)) return false;
+            foreach (Bounds other in _kit.Decals)
+                if (padded.Intersects(other)) return false;
+
+            GameObject decal = AddDecal(root, material, position, rotation, size, decalDrawDistance, flip);
+            decal.name = material.name;
+            _kit.Decals.Add(box);
+            _kit.DecalLog.Add(label);
+            return true;
+        }
+
+        // A caixa do DecalProjector no espaço do nível (o pivô fica na face da frente: a caixa vai para trás).
+        static Bounds DecalBox(Vector3 position, Quaternion rotation, Vector3 size)
+        {
+            Vector3 center = position + rotation * new Vector3(0f, 0f, size.z * 0.5f);
+            var box = new Bounds(center, Vector3.zero);
+            for (int k = 0; k < 8; k++)
+            {
+                var corner = new Vector3((k & 1) == 0 ? -0.5f : 0.5f, (k & 2) == 0 ? -0.5f : 0.5f, (k & 4) == 0 ? -0.5f : 0.5f);
+                box.Encapsulate(center + rotation * Vector3.Scale(corner, size));
+            }
+            return box;
+        }
+
+        /// <summary>
+        /// O que um decalque não pode cobrir: escadas (do pé dos degraus e dos corrimãos até 0,8 m
+        /// para dentro do patamar de cima), colunas e lâmpadas submersas. Na ordem de Data.
+        /// </summary>
+        List<Bounds> DecalObstacles()
+        {
+            var list = new List<Bounds>();
+            foreach (PoolStair stair in Data.Stairs)
+            {
+                if (!OpenCell(stair.X, stair.Z) || !Data.Neighbor(stair.X, stair.Z, stair.Side, out int ux, out int uz) || !OpenCell(ux, uz)) continue;
+                bool well = Data.Depth[stair.X, stair.Z] == PoolDepth.Well;
+                float upper = FloorTop(ux, uz);
+                float foot = well ? LevelData.WellStairFoot : FloorTop(stair.X, stair.Z);
+                int steps = Mathf.Max(1, Mathf.RoundToInt((upper - foot) / LevelData.StepRise));
+                int boxes = well ? steps : steps - 1;
+                Vector3 toUpper = SideDir(stair.Side);
+                Vector3 across = Abs(Vector3.Cross(Vector3.up, toUpper));
+                float start = HasWallBox(stair.X, stair.Z, stair.Side) ? HalfWall : 0f;
+                Vector3 edge = new Vector3((stair.X + 0.5f) * Cell, 0f, (stair.Z + 0.5f) * Cell) + toUpper * (Cell * 0.5f - start);
+                float halfWidth = Mathf.Min(stair.Width, Cell) * 0.5f;
+                Vector3 far = edge - toUpper * (StepRun * boxes + 0.5f), near = edge + toUpper * 0.8f;
+                var box = new Bounds((far + near) * 0.5f + Vector3.up * ((foot - 0.5f + upper + 1.2f) * 0.5f), Vector3.zero);
+                box.size = across * (halfWidth * 2f + 0.1f) + Abs(near - far) + Vector3.up * (upper + 1.2f - foot + 0.5f);
+                list.Add(box);
+            }
+            foreach (PoolColumn column in Data.Columns)
+                list.Add(new Bounds(new Vector3(column.X, 0f, column.Z), new Vector3(column.Radius * 2f + 0.1f, 40f, column.Radius * 2f + 0.1f)));
+            foreach (PoolLamp lamp in Data.Lamps)
+            {
+                if (!OpenCell(lamp.X, lamp.Z)) continue;
+                Vector3 dir = SideDir(lamp.Side);
+                float inset = HasWallBox(lamp.X, lamp.Z, lamp.Side) ? HalfWall : 0f;
+                Vector3 face = new Vector3((lamp.X + 0.5f) * Cell, lamp.Y, (lamp.Z + 0.5f) * Cell) + dir * (Cell * 0.5f - inset);
+                list.Add(new Bounds(face, new Vector3(0.32f, 0.32f, 0.32f)));
+            }
+            return list;
+        }
+
+        // ---------------------------------------------------------------- Marcações
+
+        // Largura de cada marcação, em metros, e a proporção largura/altura do desenho
+        // (Art/Fontes/Level2/Mark_*.png): 0 profundidade, 1 proibido mergulhar, 2 DEEP END, 3 T de raia.
+        static readonly float[] MarkWidth = { 0.7f, 0.7f, 1.1f, 1.0f };
+        static readonly float[] MarkAspect = { 1.777f, 0.928f, 2.482f, 0.704f };
+        static readonly string[] MarkLabel = { "1.2 M", "NO DIVING", "DEEP END", "T de raia" };
+        const int MaxDepthMarks = 6;
+        const int MaxNoDivingMarks = 4;
+        // Distância do pé dos desenhos de piso à borda (1.2 M: logo depois da capa) e do T à ponta da raia.
+        const float DepthMarkGap = CopingWidth + 0.05f;
+        const float LaneMarkGap = 0.6f;
+
+        static float MarkHeight(int kind) => MarkWidth[kind] / MarkAspect[kind];
+
+        /// <summary>
+        /// Marcações pintadas, poucas e onde uma piscina de verdade as tem: "1.2 M" no deque seco
+        /// rente à área funda (ou na parede logo acima da água de uma área funda), NO DIVING em
+        /// parede cega de sala rasa com deque ou escada, DEEP END em parede cega de sala com poço e
+        /// o T azul no fundo, nas duas pontas de uma raia funda. Nada sobre abertura, escada,
+        /// coluna, lâmpada ou mancha (ver <see cref="PlaceDecal"/>). Só System.Random da seed.
+        /// </summary>
+        void BuildPoolMarks()
+        {
+            if (poolMarkDecals == null || poolMarkDecals.Length == 0) return;
+            var rng = new System.Random(Data.Seed * 6151 + 11);
+            Material Mark(int index) => index < poolMarkDecals.Length ? poolMarkDecals[index] : null;
+            List<Bounds> obstacles = DecalObstacles();
+            Transform root = null;
+            Transform Root() => root != null ? root : (root = CreateChild("Marcacoes").transform);
+
+            foreach (PoolRoom room in Data.Rooms)
+            {
+                if (!OpenCell(room.X0, room.Z0)) continue;
+                PoolRoomKind kind = room.Kind;
+
+                // Profundidade: 1 ou 2 por piscina, raia ou canal.
+                if ((kind == PoolRoomKind.Basin || kind == PoolRoomKind.Lane || kind == PoolRoomKind.Canal) && Mark(0) != null)
+                {
+                    int want = 1 + rng.Next(2);
+                    List<(int x, int z, WallSide side, bool deck)> spots = DepthMarkSpots(room);
+                    Shuffle(spots, rng);
+                    foreach (var spot in spots)
+                    {
+                        if (want <= 0 || _kit.MarkCount[0] >= MaxDepthMarks) break;
+                        if (spot.deck ? DeckDepthMark(Root(), Mark(0), spot.x, spot.z, spot.side, obstacles)
+                                      : WallDepthMark(Root(), Mark(0), spot.x, spot.z, spot.side, obstacles))
+                        {
+                            _kit.MarkCount[0]++;
+                            want--;
+                        }
+                    }
+                }
+
+                // T de fim de raia, no fundo, nas duas pontas.
+                if ((kind == PoolRoomKind.Basin || kind == PoolRoomKind.Lane || kind == PoolRoomKind.Canal) && Mark(3) != null)
+                    LaneMarks(Root(), Mark(3), room, obstacles);
+
+                // Proibido mergulhar: sala com água rasa junto de deque ou escada.
+                bool noDivingKind = kind == PoolRoomKind.Start || kind == PoolRoomKind.Terrace || kind == PoolRoomKind.Hall || kind == PoolRoomKind.Basin;
+                if (noDivingKind && Mark(1) != null && _kit.MarkCount[1] < MaxNoDivingMarks && ShallowBesideDeckOrStair(room))
+                {
+                    bool roll = kind == PoolRoomKind.Start || rng.NextDouble() < 0.7;
+                    var spots = new List<(int x, int z, WallSide side)>();
+                    ForWalls(room, (x, z, side) =>
+                    {
+                        if (Data.Depth[x, z] == PoolDepth.Dry || Data.Depth[x, z] == PoolDepth.Shallow) spots.Add((x, z, side));
+                    });
+                    Shuffle(spots, rng);
+                    if (roll)
+                        foreach (var (x, z, side) in spots)
+                            if (WallMark(Root(), Mark(1), 1, x, z, side, Mathf.Max(FloorTop(x, z), 0f) + 1.6f, obstacles))
+                                break;
+                }
+
+                // DEEP END: parede cega de sala com poço, a mais perto do poço (entre as três mais perto).
+                if (Mark(2) != null)
+                {
+                    var wells = new List<Vector2>();
+                    for (int z = room.Z0; z < room.Z0 + room.Height; z++)
+                        for (int x = room.X0; x < room.X0 + room.Width; x++)
+                            if (OpenCell(x, z) && Data.Depth[x, z] == PoolDepth.Well) wells.Add(new Vector2(x, z));
+                    if (wells.Count > 0)
+                    {
+                        var spots = new List<(int x, int z, WallSide side, float distance, int order)>();
+                        ForWalls(room, (x, z, side) =>
+                        {
+                            float best = float.MaxValue;
+                            foreach (Vector2 w in wells) best = Mathf.Min(best, (new Vector2(x, z) - w).sqrMagnitude);
+                            spots.Add((x, z, side, best, spots.Count));
+                        });
+                        spots.Sort((a, b) => a.distance != b.distance ? a.distance.CompareTo(b.distance) : a.order.CompareTo(b.order));
+                        int first = spots.Count > 0 ? rng.Next(Mathf.Min(3, spots.Count)) : 0;
+                        for (int k = 0; k < spots.Count; k++)
+                        {
+                            var (x, z, side, _, _) = spots[(first + k) % spots.Count];
+                            if (WallMark(Root(), Mark(2), 2, x, z, side, Mathf.Max(FloorTop(x, z), 0f) + 1.5f, obstacles)) break;
+                        }
+                    }
+                }
+            }
+        }
+
+        static void Shuffle<T>(List<T> list, System.Random rng)
+        {
+            for (int i = list.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (list[i], list[j]) = (list[j], list[i]);
+            }
+        }
+
+        // Cada lado de parede cheia (sem abertura) das células da sala, na ordem z, x, lado.
+        void ForWalls(PoolRoom room, System.Action<int, int, WallSide> action)
+        {
+            for (int z = room.Z0; z < room.Z0 + room.Height; z++)
+                for (int x = room.X0; x < room.X0 + room.Width; x++)
+                {
+                    if (!OpenCell(x, z) || Data.Room[x, z] != room.Id) continue;
+                    foreach (WallSide side in PoolSides)
+                        if (HasWallBox(x, z, side) && PlainWall(x, z, side)) action(x, z, side);
+                }
+        }
+
+        bool ShallowBesideDeckOrStair(PoolRoom room)
+        {
+            for (int z = room.Z0; z < room.Z0 + room.Height; z++)
+                for (int x = room.X0; x < room.X0 + room.Width; x++)
+                {
+                    if (!OpenCell(x, z) || Data.Depth[x, z] != PoolDepth.Shallow) continue;
+                    foreach (WallSide side in PoolSides)
+                    {
+                        if (Data.StairAt(x, z, side, out _)) return true;
+                        if (Data.IsOpen(x, z, side) && Data.Neighbor(x, z, side, out int nx, out int nz) && OpenCell(nx, nz) &&
+                            Data.Depth[nx, nz] == PoolDepth.Dry)
+                            return true;
+                    }
+                }
+            return false;
+        }
+
+        // Lugares da marca de profundidade: deque seco com área funda ao lado (sem parede entre
+        // eles) ou parede cheia de uma célula funda.
+        List<(int x, int z, WallSide side, bool deck)> DepthMarkSpots(PoolRoom room)
+        {
+            var spots = new List<(int x, int z, WallSide side, bool deck)>();
+            for (int z = room.Z0; z < room.Z0 + room.Height; z++)
+                for (int x = room.X0; x < room.X0 + room.Width; x++)
+                {
+                    if (!OpenCell(x, z) || Data.Room[x, z] != room.Id) continue;
+                    PoolDepth depth = Data.Depth[x, z];
+                    foreach (WallSide side in PoolSides)
+                    {
+                        if (depth == PoolDepth.Dry)
+                        {
+                            if (HasWallBox(x, z, side) || !Data.Neighbor(x, z, side, out int nx, out int nz) || !OpenCell(nx, nz)) continue;
+                            if (Data.Depth[nx, nz] == PoolDepth.Deep && !_kit.RoundWell[nx, nz]) spots.Add((x, z, side, true));
+                        }
+                        else if (depth == PoolDepth.Deep && HasWallBox(x, z, side) && PlainWall(x, z, side))
+                            spots.Add((x, z, side, false));
+                    }
+                }
+            return spots;
+        }
+
+        // "1.2 M" no deque: lido por quem está no deque olhando para a água (o topo do desenho para a água).
+        bool DeckDepthMark(Transform root, Material material, int x, int z, WallSide side, List<Bounds> obstacles)
+        {
+            Vector3 toWater = SideDir(side);
+            float width = MarkWidth[0], height = MarkHeight(0);
+            float y = FloorTop(x, z);
+            Vector3 border = new Vector3((x + 0.5f) * Cell, y, (z + 0.5f) * Cell) + toWater * (Cell * 0.5f);
+            Vector3 center = border - toWater * (DepthMarkGap + height * 0.5f);
+            if (!FloorRectInside(center, toWater, width, height, (cx, cz) => Data.Depth[cx, cz] == PoolDepth.Dry && Mathf.Approximately(FloorTop(cx, cz), y))) return false;
+            return PlaceDecal(root, material, center + Vector3.up * 0.08f, Quaternion.LookRotation(Vector3.down, toWater), new Vector3(width, height, 0.16f),
+                              false, obstacles, $"{MarkLabel[0]} no deque ({x},{z},{side})");
+        }
+
+        // "1.2 M" na parede de uma célula funda, logo acima da água (e da faixa azul, se a sala tem).
+        bool WallDepthMark(Transform root, Material material, int x, int z, WallSide side, List<Bounds> obstacles)
+        {
+            int room = Data.Room[x, z];
+            float bottom = (_kit.AccentRoom[room] ? _kit.Band[room] + 0.2f : 0f) + 0.12f;
+            return WallMark(root, material, 0, x, z, side, bottom + MarkHeight(0) * 0.5f, obstacles);
+        }
+
+        // Marcação na face de parede cheia, no meio do trecho; fora das faixas azuis e acima da água.
+        bool WallMark(Transform root, Material material, int kind, int x, int z, WallSide side, float centerY, List<Bounds> obstacles)
+        {
+            float width = MarkWidth[kind], height = MarkHeight(kind);
+            int room = Data.Room[x, z];
+            if (_kit.AccentRoom[room])
+            {
+                float band = _kit.Band[room];
+                if (centerY + height * 0.5f > 2f - 0.05f && centerY - height * 0.5f < 2.2f + 0.05f) centerY = 2f - 0.05f - height * 0.5f;
+                if (centerY - height * 0.5f < band + 0.2f + 0.05f && centerY + height * 0.5f > band - 0.05f) centerY = band + 0.25f + height * 0.5f;
+            }
+            if (centerY - height * 0.5f < Mathf.Max(FloorTop(x, z), 0f) + 0.05f) return false;
+            if (!WallDecal(root, material, x, z, side, HalfWall, 0f, centerY, new Vector2(width, height), false, obstacles, MarkLabel[kind])) return false;
+            _kit.MarkCount[kind] += kind == 0 ? 0 : 1;
+            return true;
+        }
+
+        // O retângulo de piso (centro, para onde aponta o topo do desenho, largura e altura) cabe
+        // inteiro em células que aceitam a marca, sem entrar nas paredes?
+        bool FloorRectInside(Vector3 center, Vector3 up, float width, float height, System.Func<int, int, bool> accept)
+        {
+            Vector3 right = Vector3.Cross(Vector3.up, up);
+            for (int k = 0; k < 4; k++)
+            {
+                Vector3 p = center + right * ((k & 1) == 0 ? -0.5f : 0.5f) * width + up * ((k & 2) == 0 ? -0.5f : 0.5f) * height;
+                int cx = Mathf.FloorToInt(p.x / Cell), cz = Mathf.FloorToInt(p.z / Cell);
+                if (!OpenCell(cx, cz) || _kit.RoundWell[cx, cz] || !accept(cx, cz)) return false;
+                CellRect(cx, cz, out float x0, out float x1, out float z0, out float z1);
+                if (p.x < x0 + 0.05f || p.x > x1 - 0.05f || p.z < z0 + 0.05f || p.z > z1 - 0.05f) return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// T azul no fundo, nas duas pontas de uma raia: a trave do T a 0,6 m da parede ou da borda
+        /// da ponta e a haste para o meio da raia. Raia = fileira de células fundas ao longo do lado
+        /// maior da sala (na piscina, a do meio; no canal e na raia longa, a funda). Se a escada
+        /// ocupa a ponta, o T vai para depois do pé dela (até 2,4 m); se não couber, fica sem.
+        /// </summary>
+        void LaneMarks(Transform root, Material material, PoolRoom room, List<Bounds> obstacles)
+        {
+            bool alongX = room.Width > room.Height;
+            int length = alongX ? room.Width : room.Height, span = alongX ? room.Height : room.Width;
+            int Cx(int a, int c) => alongX ? room.X0 + a : room.X0 + c;
+            int Cz(int a, int c) => alongX ? room.Z0 + c : room.Z0 + a;
+            bool DeepAt(int a, int c) => OpenCell(Cx(a, c), Cz(a, c)) && Data.Depth[Cx(a, c), Cz(a, c)] == PoolDepth.Deep;
+
+            // A fileira mais funda e mais perto do meio: a sequência de fundas mais longa.
+            int bestC = -1, bestStart = 0, bestEnd = -1;
+            float bestScore = float.MinValue;
+            for (int c = 0; c < span; c++)
+            {
+                int a = 0;
+                while (a < length)
+                {
+                    if (!DeepAt(a, c)) { a++; continue; }
+                    int s = a;
+                    while (a + 1 < length && DeepAt(a + 1, c)) a++;
+                    float score = (a - s + 1) * 10f - Mathf.Abs(c - (span - 1) * 0.5f);
+                    if (score > bestScore) { bestScore = score; bestC = c; bestStart = s; bestEnd = a; }
+                    a++;
+                }
+            }
+            if (bestC < 0 || bestEnd - bestStart + 1 < 2) return;
+
+            Vector3 axis = alongX ? Vector3.right : Vector3.forward;
+            float cross = ((alongX ? room.Z0 : room.X0) + bestC + 0.5f) * Cell;
+            float y = LevelData.DepthFloor(PoolDepth.Deep);
+            WallSide startSide = alongX ? WallSide.West : WallSide.South, endSide = alongX ? WallSide.East : WallSide.North;
+            int sx = Cx(bestStart, bestC), sz = Cz(bestStart, bestC), ex = Cx(bestEnd, bestC), ez = Cz(bestEnd, bestC);
+            float startLine = ((alongX ? room.X0 : room.Z0) + bestStart) * Cell + (HasWallBox(sx, sz, startSide) ? HalfWall : 0f);
+            float endLine = ((alongX ? room.X0 : room.Z0) + bestEnd + 1) * Cell - (HasWallBox(ex, ez, endSide) ? HalfWall : 0f);
+            float width = MarkWidth[3], height = MarkHeight(3);
+            float middle = (startLine + endLine) * 0.5f;
+
+            for (int end = 0; end < 2; end++)
+            {
+                float line = end == 0 ? startLine : endLine;
+                Vector3 toEnd = end == 0 ? -axis : axis;
+                for (float gap = LaneMarkGap; gap <= 2.4f + 1e-3f; gap += 0.3f)
+                {
+                    float along = line - (end == 0 ? -1f : 1f) * (gap + height * 0.5f);
+                    if (end == 0 ? along + height * 0.5f > middle : along - height * 0.5f < middle) break;
+                    Vector3 center = alongX ? new Vector3(along, y, cross) : new Vector3(cross, y, along);
+                    if (!FloorRectInside(center, toEnd, width, height, (cx, cz) => Data.Depth[cx, cz] == PoolDepth.Deep)) break;
+                    if (PlaceDecal(root, material, center + Vector3.up * 0.08f, Quaternion.LookRotation(Vector3.down, toEnd), new Vector3(width, height, 0.16f),
+                                   false, obstacles, $"{MarkLabel[3]} a {gap:0.0} m da ponta ({room.Kind} {room.Id})"))
+                    {
+                        _kit.MarkCount[3]++;
+                        break;
+                    }
+                }
+            }
         }
 
         // ---------------------------------------------------------------- Luz
@@ -1973,8 +2400,9 @@ namespace BackRooms.World
             source.colorTemperature = poolSkyTemperature;
             source.areaSize = new Vector2(maxX - minX + 0.05f, maxY - minY + 0.05f);
             source.range = (glassY + 0.03f - lowest) / Mathf.Cos(tilt) + 2f;
-            hd.fadeDistance = 90f;
-            hd.shadowFadeDistance = 70f;
+            // A sombra vai 20% além da luz: luz acesa sem sombra atravessa as paredes (como no Level 0).
+            hd.fadeDistance = lightFadeDistance;
+            hd.shadowFadeDistance = lightFadeDistance * 1.2f;
             hd.affectsVolumetric = poolSkyBeams;
             hd.shadowNearPlane = 0.05f;
             if (poolSkyCookie != null && poolSkyCookie.dimension == TextureDimension.Tex2D) hd.SetCookie(poolSkyCookie);
@@ -2078,8 +2506,8 @@ namespace BackRooms.World
                 source.spotAngle = 130f;
                 source.innerSpotAngle = 50f;
                 source.range = 16f;
-                hd.fadeDistance = 80f;
-                hd.shadowFadeDistance = 60f;
+                hd.fadeDistance = lightFadeDistance;
+                hd.shadowFadeDistance = lightFadeDistance * 1.2f;
                 hd.affectsVolumetric = false;
                 SetupShadow(hd, source, resolution);
                 _kit.Lights++;
