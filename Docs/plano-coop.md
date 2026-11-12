@@ -152,6 +152,9 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
   seguinte, mas o objetivo de cada fase (seção 2.3) ainda não existe: hoje abrir a porta basta
   para zerar. A porta não tem som nem animação de abrir, e ainda não existe jogador morto (todos
   os que estão no mapa precisam chegar à porta).
+  O terceiro, **As Piscinas** (Poolrooms), está projetado em `level2-piscinas.md` e tem versão de
+  teste jogável (`Scenes/Level2_Test.unity`): profundidades, escadas, água, nado e fôlego; ainda
+  sem maré, ralo, objetivo e som.
 
 ---
 

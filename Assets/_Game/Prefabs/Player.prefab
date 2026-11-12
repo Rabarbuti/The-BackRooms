@@ -643,6 +643,14 @@ MonoBehaviour:
   staminaSeconds: 6
   staminaRegenDelay: 2
   staminaRegenSeconds: 4
+  airSeconds: 20
+  airRefillSeconds: 3
+  wadeShallow: 0.85
+  wadeDeep: 0.55
+  swimSpeed: 0.45
+  swimDepth: 1.3
+  floatDepth: 1.4
+  swimVerticalSpeed: 1.6
   standingHeight: 1.8
   crouchingHeight: 1.1
   standingEyeHeight: 1.65

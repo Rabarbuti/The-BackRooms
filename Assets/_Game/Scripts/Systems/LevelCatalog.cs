@@ -30,7 +30,8 @@ namespace BackRooms
         public static readonly LevelInfo[] Levels =
         {
             new LevelInfo(0, "Level 0", "Os corredores amarelos", "Level0_Test"),
-            new LevelInfo(1, "Level 1", "O Mostruário (teste)", "Level1_Test")
+            new LevelInfo(1, "Level 1", "O Mostruário (teste)", "Level1_Test"),
+            new LevelInfo(2, "Level 2", "As Piscinas (teste)", "Level2_Test")
         };
 
         public static int Count => Levels.Length;

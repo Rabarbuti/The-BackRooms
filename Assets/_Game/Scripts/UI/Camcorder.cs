@@ -38,6 +38,8 @@ namespace BackRooms.UI
         public float noSignalHold = 0.35f;
         [Tooltip("A entidade interfere na imagem a partir desta distância, em metros.")]
         public float entityNoiseRange = 16f;
+        [Tooltip("Chuvisco com a cabeça debaixo d'água (0 a 1).")]
+        [Range(0f, 1f)] public float underwaterNoise = 0.45f;
         [Tooltip("Interferência máxima com a entidade colada no jogador (0 a 1).")]
         [Range(0f, 1f)] public float entityNoiseMax = 0.6f;
 
@@ -155,6 +157,9 @@ namespace BackRooms.UI
                 if (near > 0f) Glitch(near * near * entityNoiseMax, 0.5f);
             }
 
+            // Debaixo d'água a fita sofre: chuvisco forte enquanto a cabeça estiver submersa.
+            if (body != null && body.IsUnderwater) Glitch(underwaterNoise, 0.4f);
+
             _glitch = Mathf.MoveTowards(_glitch, 0f, _glitchFade * Time.unscaledDeltaTime);
             Shader.SetGlobalFloat(GlitchId, _glitch);
 
@@ -202,7 +207,11 @@ namespace BackRooms.UI
                 else if (waiting > 0) footer = $"EXIT {waiting}/{total}";
             }
 
-            Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f, tape, prompt, footer, cover);
+            // Água (Piscinas): aviso e barra do fôlego.
+            bool underwater = body != null && body.IsUnderwater;
+            float air = body != null ? body.Air01 : 1f;
+
+            Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f, tape, prompt, footer, cover, underwater, air);
         }
 
         /// <summary>
@@ -213,7 +222,8 @@ namespace BackRooms.UI
         /// quando informado, tapa a imagem com a tela preta e esse texto.
         /// </summary>
         public void Draw(bool recording, float recordSeconds, float clockSeconds, float battery, bool lightOn, string tool = null,
-                         bool noSignal = false, string tape = null, string prompt = null, string footer = null, string cover = null)
+                         bool noSignal = false, string tape = null, string prompt = null, string footer = null, string cover = null,
+                         bool underwater = false, float air = 1f)
         {
             EnsureTexture();
 
@@ -239,12 +249,14 @@ namespace BackRooms.UI
             // duas vezes por segundo, o relógio anda uma vez por segundo.
             bool blink = Mathf.FloorToInt(clockSeconds * 2f) % 2 == 0;
             int bars = battery > 0.66f ? 3 : battery > 0.33f ? 2 : battery > 0.05f ? 1 : 0;
-            string state = $"{recording}|{blink}|{bars}|{battery < 0.15f}|{lightOn}|{tool}|{noSignal}|{tape}|{prompt}|{footer}|{cover}|{time}|{date}";
+            int airStep = air < 0.999f ? Mathf.RoundToInt(Mathf.Clamp01(air) * 40f) : -1;
+            bool airBlink = air < 0.25f && Mathf.FloorToInt(clockSeconds * 4f) % 2 == 0;
+            string state = $"{recording}|{blink}|{bars}|{battery < 0.15f}|{lightOn}|{tool}|{noSignal}|{tape}|{prompt}|{footer}|{cover}|{time}|{date}|{underwater}|{airStep}|{airBlink}";
 
             if (state != _drawn)
             {
                 _drawn = state;
-                DrawPanel(recording, clockSeconds, battery, lightOn, tool, noSignal, tape, prompt, footer, cover, time, date);
+                DrawPanel(recording, clockSeconds, battery, lightOn, tool, noSignal, tape, prompt, footer, cover, time, date, underwater, air, airBlink);
                 _osd.SetPixelData(_pixels, 0);
                 _osd.Apply(false);
             }
@@ -258,7 +270,8 @@ namespace BackRooms.UI
         }
 
         void DrawPanel(bool recording, float clockSeconds, float battery, bool lightOn, string tool, bool noSignal,
-                       string tape, string prompt, string footer, string cover, string time, string date)
+                       string tape, string prompt, string footer, string cover, string time, string date,
+                       bool underwater, float air, bool airBlink)
         {
             // Sem sinal: o painel inteiro fica opaco e tapa a imagem do jogo.
             bool covered = noSignal || !string.IsNullOrEmpty(cover);
@@ -326,6 +339,19 @@ namespace BackRooms.UI
 
             if (!string.IsNullOrEmpty(footer) && !covered)
                 Text((Width - MeasureText(footer, Small)) / 2, Height - Margin - 14, footer, Small, White);
+
+            // Água (Piscinas): WATER no meio de cima e, faltando ar, a barra do fôlego embaixo.
+            if (!covered && (underwater || air < 0.999f))
+            {
+                const int barWidth = 200;
+                int x0 = (Width - barWidth) / 2;
+                if (underwater) Text((Width - MeasureText("WATER", Medium)) / 2, Margin, "WATER", Medium, White);
+
+                byte tone = airBlink ? Red : White;
+                Text(x0 - MeasureText("AIR", Small) - 12, Margin + 40, "AIR", Small, tone);
+                Box(x0, Margin + 40, barWidth, 16, Shadow);
+                Box(x0 + 2, Margin + 42, Mathf.RoundToInt((barWidth - 4) * Mathf.Clamp01(air)), 12, tone);
+            }
         }
 
         void EnsureTexture()

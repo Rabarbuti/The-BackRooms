@@ -66,7 +66,8 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   `personagens/` (`capitao.py`, `entidade.py`, `conferir_modelo.py`, `esqueleto_*.json`).
 - `Docs/` — `plano-coop.md` (estado atual e plano do jogo, arquitetura de rede; ler antes de
   mexer em rede ou em geração de fase), `historico.md` (registro cronológico de cada rodada),
-  `level1-mostruario.md` (projeto do Level 1 e do Capitão), `modelos-blender.md` (modelos do
+  `level1-mostruario.md` (projeto do Level 1 e do Capitão), `level2-piscinas.md` (projeto do Level 2, as
+  Poolrooms, e as texturas a gerar; prompts em `level2-prompts.md`), `modelos-blender.md` (modelos do
   Blender ao Unity e como dividir lotes entre agentes). Os outros são referência de design.
 
 ## Teclas
@@ -94,6 +95,11 @@ A cena `Scenes/Level1_Test.unity` é **gerada** por `Level1Setup` (menu BackRoom
 Tudo em `Art/Personagens` é **gerado**: `<Nome>.bytes`, `_Cor.png` e `_Normal.png` pelos scripts de
 `Tools/Blender/personagens` com `--exportar`, e os materiais por `CharacterModels`. Os
 `esqueleto_*.json` de `Tools/Blender/personagens` são gravados pelo Unity (`CharacterModels`).
+
+A cena `Scenes/Level2_Test.unity` (As Piscinas) e os materiais e texturas de `Art/Level2` são
+**gerados** por `Level2Setup` (menu BackRooms > Montar Level 2 (teste)). As texturas de azulejo,
+pastilha e borda vêm de `Art/Fontes/Level2` (recortadas da Folha A do Higgsfield); a ondulação da
+água e o vidro das claraboias são pintados em código até as folhas B, C e D chegarem.
 
 Os modelos em `Art/Level1/Modelos` (`.fbx` e `materiais_<lote>.json`) e as texturas em
 `Art/Level1/Texturas` são **gerados** pelos lotes de `Tools/Blender`; os materiais em
@@ -217,7 +223,8 @@ e rode `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`.
 ## Como testar
 
 No editor, pelo menu **BackRooms**: Abrir Level 0, Abrir Level 1 (teste), Testar Level 0
-(fumaça), Testar Level 1 (Play), Conferir Level 1, Conferir colisores do Level 0, Gerar mapa 2D,
+(fumaça), Testar Level 1 (Play), Conferir Level 1, Abrir Level 2 (teste), Testar Level 2 (Play),
+Conferir Level 2, Conferir colisores do Level 0, Gerar mapa 2D,
 Capturar prévia, Capturar prévia do Capitão, Móveis do Level 1 > Atualizar e fotografar,
 Exportar sons da entidade (WAV em `Logs/Sons`, para ouvir e ajustar os sons sintetizados sem
 precisar jogar).
@@ -247,8 +254,9 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   "Encostou" se mede pela colisão que o `CharacterController` relata, não por distância: numa
   pilha, a cadeira de cima, inclinada, barra o jogador antes da de baixo.
 - `LevelSelectTest.BatchRun` — seletor de fase em Play: fase bloqueada sem progresso, troca
-  para o Level 1 com uma sessão só, a porta do Level 1 (última fase) zera e devolve ao menu,
-  volta ao Level 0, e a porta do Level 0 leva ao Level 1 já hospedando. Dois editores:
+  para o Level 1 com uma sessão só, a porta do Level 1 zera e leva ao Level 2 já hospedando,
+  nada num poço, a porta do Level 2 (última fase) zera e devolve ao menu, volta ao Level 0 sem
+  restos da água, e a porta do Level 0 leva ao Level 1 já hospedando. Dois editores:
   `LevelSelectTest.BatchHostLevel1` + `BatchJoinFromLevel0` (o cliente tem de ser levado ao
   Level 1 e montar a mesma mobília) e `BatchHostDoor` + `BatchJoinDoor` (o cliente abre a porta
   e espera; quando o host abre, os dois passam para o Level 1 e o cliente reconecta). Restaura o
@@ -257,6 +265,12 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   (`Tools/Blender/personagens/esqueleto_*.json`).
 - `Level0Preview.BatchCaptureHud` — só o painel da filmadora, em 1920 x 1080, de frente para a
   porta de saída (`Logs/Previews/painel_*.png`). Não recria a cena.
+- `Level2Setup.BatchCheck` — recria a cena das Piscinas e confere 5 seeds (saída e sala inicial
+  secas, seco nunca encosta em fundo, poço só encosta em fundo, tudo sem poço alcançável a pé,
+  uma escada por desnível, mesma seed = mesma planta); fotos em `Logs/Previews/level2_*.png`.
+- `Level2PlayTest.BatchRun` — as Piscinas em Play: nasce no seco, anda o caminho a pé até a saída
+  pelas escadas, boia num poço, mergulha até afogar e voltar, e sai nadando para a área funda.
+- `Level0ColliderCheck.BatchRunLevel2` — colisores contra a malha visível na cena das Piscinas.
 - `Level1Models.BatchUpdateAndCapture` — cria os materiais dos lotes, reimporta os modelos,
   escreve as medidas no log e salva fotos em `Logs/Previews/moveis_*.png` (todos, ou só os de
   `-moveis Nome1,Nome2`), além da vitrine de jantar, da loja e da sala dos sofás.
@@ -269,14 +283,25 @@ Não passar `-quit`: os métodos encerram o editor sozinhos. Depois de rodar em 
 pode abrir numa cena vazia; o `Level0AutoUpdate` troca para a cena do jogo.
 
 Mudança em jogador, item, fase ou rede só está pronta depois do teste de fumaça sozinho; mudança
-em rede, depois do teste com dois editores; mudança no Level 1 (ou no `LevelBuilder`, no gerador
+em rede, depois do teste com dois editores; mudança no Level 2 (ou na água, no jogador, no
+`LevelBuilder` ou no gerador), depois de `Level2Setup.BatchCheck`, `Level2PlayTest.BatchRun` e
+`Level0ColliderCheck.BatchRunLevel2`; mudança no Level 1 (ou no `LevelBuilder`, no gerador
 ou nos modelos), depois de `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`. Diga no resumo o
 que foi testado por máquina e o que não foi testado à mão.
 
 ## Git
 
-- Repositório: `Rabarbuti/The-BackRooms`. Trabalho em branch, nunca direto na `main`: o Level 1
-  está na branch `level1` (saiu da `level0-coop`, que é a do Level 0).
+- Repositório: `Rabarbuti/The-BackRooms`. A **`main` é a única branch que dura**: todos os
+  níveis vivem nela (fase incompleta fica escondida do jogador pelo `LevelProgress`).
+- **Branch por tarefa, curta** (horas ou poucos dias: `porta-saida`, `capitao-cerebro`), saindo
+  da `main` atualizada e voltando por PR assim que os testes passam; depois do merge, apaga-se a
+  branch. Nada de branch por fase: ela se afasta da `main` e o conflito cresce.
+- **Puxe a `main` todo dia** (`git pull` na `main`, `git merge main` na sua branch) e avise no grupo
+  antes de mexer em arquivo que todos tocam (`GameSession`, `Camcorder`, `LevelBuilder`, docs).
+- **Conflito em conteúdo gerado** (cenas, prefabs, materiais, `Art/Level*`): não se resolve à mão;
+  fique com qualquer lado e rode o gerador de novo. `Docs/historico.md` junta as duas entradas
+  sozinho (`merge=union` no `.gitattributes`).
+- O PR diz o que passou por máquina e o que não foi testado à mão.
 - **PNG e FBX vão direto no Git** (`binary` no `.gitattributes`): a conta está sem orçamento de
   LFS. Os outros binários continuam em LFS; evite adicionar áudio, `.blend` ou vídeo sem
   combinar antes.

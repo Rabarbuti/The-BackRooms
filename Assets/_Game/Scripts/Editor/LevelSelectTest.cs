@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BackRooms.Net;
+using BackRooms.Player;
 using BackRooms.World;
 using Unity.Netcode;
 using UnityEditor;
@@ -14,10 +15,11 @@ namespace BackRooms.EditorTools
     /// progresso (<see cref="LevelProgress"/>).
     ///
     /// Sozinho (<see cref="BatchRun"/>): sem progresso e fora do modo desenvolvedor o Level 1
-    /// fica bloqueado; no modo desenvolvedor troca para ele, hospeda, leva o jogador até a
-    /// saída e confere que a fase foi zerada; sai, volta para o Level 0 e hospeda de novo. Em
-    /// cada fase confere que só existe uma sessão (um NetworkManager). O progresso salvo nesta
-    /// máquina é restaurado no fim.
+    /// fica bloqueado; no modo desenvolvedor troca para ele, hospeda e abre a porta, que zera
+    /// e leva ao Level 2 já hospedando; nada num poço e abre a porta das Piscinas (a última
+    /// fase), que zera e acaba no menu; volta ao Level 0, confere que nada da água sobrou e
+    /// passa pela porta dele até o Level 1. Em cada fase confere que só existe uma sessão (um
+    /// NetworkManager). O progresso salvo nesta máquina é restaurado no fim.
     ///
     /// Dois editores (o segundo numa cópia do projeto): <see cref="BatchHostLevel1"/> troca para
     /// o Level 1 e hospeda; <see cref="BatchJoinFromLevel0"/> entra a partir do Level 0 e tem de
@@ -166,38 +168,99 @@ namespace BackRooms.EditorTools
                         return;
                     }
                     if (LevelProgress.IsCleared(1)) { Finish(false, "o Level 1 foi zerado só de chegar perto da porta"); return; }
+                    _previous = session;
                     if (!door.Interact()) { Finish(false, "a porta do Level 1 não aceitou a interação"); return; }
                     Next();
                     break;
 
                 case 4:
-                    // É a última fase: a porta zera, a tela escurece e a sessão acaba no menu.
-                    if (!LevelProgress.IsCleared(1) || !InMenu(session, 1))
+                {
+                    // O Level 1 não é mais a última fase: a porta zera e leva às Piscinas, já hospedando.
+                    if (session == _previous || !Playing(session) || session.LevelIndex != 2)
                     {
-                        if (StageTimedOut(15)) Finish(false, $"abriu a porta do Level 1 e não terminou no menu com a fase zerada (zerada={LevelProgress.IsCleared(1)}, fase da sessão={session?.Phase})");
+                        if (StageTimedOut(60)) Finish(false, $"abriu a porta do Level 1 e não começou a partida no Level 2 (zerada={LevelProgress.IsCleared(1)}, fase da sessão={session?.Phase})");
                         return;
                     }
-                    Notes.Add($"a porta zerou o Level 1 e a sessão acabou no menu (níveis zerados: {LevelProgress.ClearedCount})");
+                    if (!LevelProgress.IsCleared(1)) { Finish(false, "passou pela porta do Level 1 e a fase não foi zerada"); return; }
+                    if (!OneSession(out string pools)) { Finish(false, "duas sessões no Level 2: " + pools); return; }
+                    if (PoolWater.Current == null) { Finish(false, "o Level 2 começou sem água"); return; }
+                    Notes.Add("a porta do Level 1 zerou a fase e levou ao Level 2, já hospedando");
+
+                    // Mergulha num poço.
+                    var builder = Object.FindFirstObjectByType<LevelBuilder>();
+                    LevelData d = builder.Data;
+                    bool placed = false;
+                    for (int z = 0; z < d.Height && !placed; z++)
+                        for (int x = 0; x < d.Width && !placed; x++)
+                        {
+                            if (d.Depth[x, z] != PoolDepth.Well) continue;
+                            Vector3 center = builder.CellCenter(x, z);
+                            PlayerNetwork.Local.controller.Teleport(new Vector3(center.x, PoolWater.Current.SurfaceY - 1f, center.z), 0f);
+                            placed = true;
+                        }
+                    if (!placed) { Finish(false, "o Level 2 não tem poço nesta seed"); return; }
+                    Next();
+                    break;
+                }
+
+                case 5:
+                    if (!StageTimedOut(2.5)) return;
+                    if (!PlayerNetwork.Local.controller.IsSwimming) { Finish(false, "no poço do Level 2 o jogador não nadou"); return; }
+                    Notes.Add("nadou num poço do Level 2");
+                    if (!FaceExit()) { Finish(false, "o Level 2 não tem saída"); return; }
+                    Next();
+                    break;
+
+                case 6:
+                    LevelExit poolDoor = LevelExit.Instance;
+                    if (poolDoor == null || !poolDoor.LocalInReach)
+                    {
+                        if (StageTimedOut(10)) Finish(false, "de frente para a porta do Level 2, ela não ficou ao alcance");
+                        return;
+                    }
+                    if (!poolDoor.Interact()) { Finish(false, "a porta do Level 2 não aceitou a interação"); return; }
+                    Next();
+                    break;
+
+                case 7:
+                    // É a última fase: a porta zera, a tela escurece e a sessão acaba no menu.
+                    if (!LevelProgress.IsCleared(2) || !InMenu(session, 2))
+                    {
+                        if (StageTimedOut(15)) Finish(false, $"abriu a porta do Level 2 e não terminou no menu com a fase zerada (zerada={LevelProgress.IsCleared(2)}, fase da sessão={session?.Phase})");
+                        return;
+                    }
+                    Notes.Add($"a porta zerou o Level 2 (última fase) e a sessão acabou no menu (níveis zerados: {LevelProgress.ClearedCount})");
                     LevelProgress.DevModeOverride = false;
-                    bool stillOpen = LevelProgress.IsUnlocked(0) && LevelProgress.IsUnlocked(1);
+                    bool stillOpen = LevelProgress.IsUnlocked(0) && LevelProgress.IsUnlocked(1) && LevelProgress.IsUnlocked(2);
                     LevelProgress.DevModeOverride = null;
-                    if (!stillOpen) { Finish(false, "depois de zerar, o jogador não tem o Level 0 e o Level 1 liberados"); return; }
+                    if (!stillOpen) { Finish(false, "depois de zerar tudo, o jogador não tem as três fases liberadas"); return; }
 
                     if (!session.SwitchLevel(0)) { Finish(false, "não trocou de volta para o Level 0"); return; }
                     _previous = session;
                     Next();
                     break;
 
-                case 5:
+                case 8:
                     if (!Switched(session, 0)) { if (StageTimedOut(30)) Finish(false, "a troca de volta para o Level 0 não terminou"); return; }
                     if (!OneSession(out string again)) { Finish(false, "duas sessões depois de voltar ao Level 0: " + again); return; }
                     session.Host(localOnly: true);
                     Next();
                     break;
 
-                case 6:
+                case 9:
+                {
                     if (!Playing(session)) { if (StageTimedOut(40)) Finish(false, "não começou a partida no Level 0 depois de voltar"); return; }
-                    Notes.Add("voltou ao Level 0 e hospedou de novo");
+                    if (!StageTimedOut(1.5)) return;
+
+                    // A água das Piscinas não pode sobrar no Level 0.
+                    PlayerController controller = PlayerNetwork.Local.controller;
+                    var leftovers = new List<string>();
+                    if (PoolWater.Current != null) leftovers.Add("água");
+                    if (controller.Submersion != 0f || controller.IsSwimming || controller.IsUnderwater) leftovers.Add("jogador ainda na água");
+                    foreach (UnityEngine.Rendering.Volume volume in Object.FindObjectsByType<UnityEngine.Rendering.Volume>(FindObjectsSortMode.None))
+                        if (volume.name == "DebaixoDagua" || volume.name == "LuzRebatida") leftovers.Add("volume " + volume.name);
+                    if (leftovers.Count > 0) { Finish(false, "voltou ao Level 0 com restos das Piscinas: " + string.Join(", ", leftovers)); return; }
+                    Notes.Add("voltou ao Level 0 sem nada das Piscinas (água, nado, volumes)");
 
                     // Agora a porta do Level 0, sozinho: abre na hora e leva para o Level 1.
                     PlayerPrefs.SetInt(LevelProgress.ClearedKey, 0);
@@ -205,8 +268,9 @@ namespace BackRooms.EditorTools
                     _previous = session;
                     Next();
                     break;
+                }
 
-                case 7:
+                case 10:
                     LevelExit exit0 = LevelExit.Instance;
                     if (exit0 == null || !exit0.LocalInReach)
                     {
@@ -217,7 +281,7 @@ namespace BackRooms.EditorTools
                     Next();
                     break;
 
-                case 8:
+                case 11:
                     // Quem hospedava hospeda a fase seguinte sozinho.
                     if (session == _previous || !Playing(session) || session.LevelIndex != 1)
                     {
@@ -392,7 +456,7 @@ namespace BackRooms.EditorTools
             inward.y = 0f;
             inward.Normalize();
 
-            Vector3 spot = new Vector3(foot.x, 0.05f, foot.z) + inward * 1.1f + Vector3.Cross(Vector3.up, inward) * side;
+            Vector3 spot = new Vector3(foot.x, foot.y + 0.05f, foot.z) + inward * 1.1f + Vector3.Cross(Vector3.up, inward) * side;
             PlayerNetwork.Local.controller.Teleport(spot, Quaternion.LookRotation(-inward, Vector3.up).eulerAngles.y);
             return true;
         }

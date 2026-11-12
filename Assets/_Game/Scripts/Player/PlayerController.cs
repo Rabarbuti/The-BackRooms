@@ -1,4 +1,5 @@
 using System;
+using BackRooms.World;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -36,6 +37,22 @@ namespace BackRooms.Player
         public float staminaSeconds = 6f;
         public float staminaRegenDelay = 2f;
         public float staminaRegenSeconds = 4f;
+
+        [Header("Água (Piscinas)")]
+        [Tooltip("Segundos de fôlego com a cabeça debaixo d'água.")]
+        public float airSeconds = 20f;
+        [Tooltip("Segundos para recuperar o fôlego inteiro fora d'água.")]
+        public float airRefillSeconds = 3f;
+        [Tooltip("Velocidade (fração da caminhada) com água na canela e com água no peito.")]
+        public float wadeShallow = 0.85f;
+        public float wadeDeep = 0.55f;
+        [Tooltip("Velocidade nadando, fração da caminhada.")]
+        public float swimSpeed = 0.45f;
+        [Tooltip("Com mais água que isto acima dos pés, o jogador nada em vez de andar (m).")]
+        public float swimDepth = 1.3f;
+        [Tooltip("Boiando, os pés ficam esta distância abaixo da superfície (m).")]
+        public float floatDepth = 1.4f;
+        public float swimVerticalSpeed = 1.6f;
 
         [Header("Corpo (metros)")]
         public float standingHeight = 1.8f;
@@ -125,6 +142,24 @@ namespace BackRooms.Player
             Captures++;
         }
 
+        /// <summary>Água acima dos pés, em metros (0 fora d'água ou em nível sem água).</summary>
+        public float Submersion { get; private set; }
+
+        /// <summary>Verdadeiro nadando: sem chão ao alcance dos pés.</summary>
+        public bool IsSwimming { get; private set; }
+
+        /// <summary>Verdadeiro com a câmera (a cabeça) debaixo d'água.</summary>
+        public bool IsUnderwater { get; private set; }
+
+        /// <summary>Fôlego restante debaixo d'água, de 0 a 1.</summary>
+        public float Air01 => airSeconds <= 0f ? 1f : _air / airSeconds;
+
+        /// <summary>Enche o fôlego (ao trocar <see cref="airSeconds"/>, por exemplo).</summary>
+        public void RefillAir() => _air = airSeconds;
+
+        /// <summary>Quantas vezes este jogador se afogou nesta sessão (também contam em <see cref="Falls"/>).</summary>
+        public int Drownings { get; private set; }
+
         /// <summary>Verdadeiro enquanto o jogador está dentro de um esconderijo.</summary>
         public bool IsHidden => _hidingSpots > 0;
 
@@ -150,6 +185,7 @@ namespace BackRooms.Player
         float _safeTimer;
         float _fallTimer;
         bool _lockedCursor;
+        float _air;
 
         void Awake()
         {
@@ -158,6 +194,7 @@ namespace BackRooms.Player
             // são descartados e o controlador deixa de se reportar como apoiado no chão.
             _controller.minMoveDistance = 0f;
             _stamina = staminaSeconds;
+            _air = airSeconds;
             _eyeHeight = standingEyeHeight;
             _lastSafePosition = transform.position;
             CreateActions();
@@ -173,6 +210,9 @@ namespace BackRooms.Player
         {
             _move.Disable(); _lookMouse.Disable(); _lookStick.Disable();
             _jump.Disable(); _sprint.Disable(); _crouch.Disable();
+
+            // Quem some debaixo d'água não pode deixar a tela verde para trás.
+            if (PoolWater.Current != null) PoolWater.Current.LocalUnderwater = false;
         }
 
         void OnDestroy()
@@ -216,6 +256,7 @@ namespace BackRooms.Player
             UpdateMovement(dt);
             UpdateFall(dt);
             UpdateCamera(dt);
+            UpdateBreath(dt);
             UpdateSafety(dt);
         }
 
@@ -303,14 +344,30 @@ namespace BackRooms.Player
             bool grounded = _controller.isGrounded;
             bool movingForward = input.y > 0.1f;
 
-            IsSprinting = _sprint.IsPressed() && movingForward && !IsCrouching && !_exhausted && _stamina > 0f;
+            // Água (só nas Piscinas): quanto mais funda, mais lento; funda demais, nada.
+            PoolWater water = PoolWater.Current;
+            Submersion = water != null ? Mathf.Max(0f, water.SurfaceY - transform.position.y) : 0f;
+            IsSwimming = water != null && Submersion > swimDepth;
+
+            IsSprinting = _sprint.IsPressed() && movingForward && !IsCrouching && !_exhausted && _stamina > 0f && Submersion < 0.8f;
             UpdateStamina(dt);
 
             float speed = IsCrouching ? crouchSpeed : IsSprinting ? sprintSpeed : walkSpeed;
+            if (IsSwimming) speed = walkSpeed * swimSpeed;
+            else if (Submersion > 0f) speed *= Mathf.Lerp(wadeShallow, wadeDeep, Mathf.InverseLerp(0.4f, 1.2f, Submersion));
+
             Vector3 target = (transform.right * input.x + transform.forward * input.y) * speed;
             _horizontalVelocity = Vector3.MoveTowards(_horizontalVelocity, target, acceleration * dt);
 
-            if (grounded)
+            if (IsSwimming)
+            {
+                // Boia com a cabeça fora; Espaço sobe, agachar mergulha. Sem gravidade.
+                float floatY = water.SurfaceY - floatDepth;
+                if (!IsReturning && _crouch.IsPressed()) _verticalVelocity = -swimVerticalSpeed;
+                else if (!IsReturning && _jump.IsPressed() && transform.position.y < floatY) _verticalVelocity = swimVerticalSpeed;
+                else _verticalVelocity = Mathf.Clamp((floatY - transform.position.y) * 2f, -swimVerticalSpeed, swimVerticalSpeed);
+            }
+            else if (grounded)
             {
                 // Um empurrão constante para baixo mantém o controlador colado ao chão.
                 _verticalVelocity = -2f;
@@ -396,6 +453,38 @@ namespace BackRooms.Player
 
             cameraPivot.localPosition = new Vector3(0f, _eyeHeight + bob, 0f);
             cameraPivot.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
+        }
+
+        // Fôlego: só gasta com a cabeça debaixo d'água; acabou, o jogador se afoga — a mesma
+        // volta à sala inicial da queda no buraco (tela preta, NO SIGNAL).
+        void UpdateBreath(float dt)
+        {
+            PoolWater water = PoolWater.Current;
+            if (water == null)
+            {
+                IsUnderwater = false;
+                _air = airSeconds;
+                return;
+            }
+
+            float eye = cameraPivot != null ? cameraPivot.position.y : transform.position.y + _eyeHeight;
+            IsUnderwater = eye < water.SurfaceY - 0.05f;
+            water.LocalUnderwater = IsUnderwater && enabled;
+
+            if (IsReturning) return;
+
+            if (IsUnderwater)
+            {
+                _air -= dt;
+                if (_air > 0f) return;
+
+                _air = airSeconds;
+                Drownings++;
+                FallIntoPit();
+                return;
+            }
+
+            _air = Mathf.Min(airSeconds, _air + dt * airSeconds / Mathf.Max(0.1f, airRefillSeconds));
         }
 
         // Rede de segurança: quem cair para fora do mapa volta ao último ponto firme.
