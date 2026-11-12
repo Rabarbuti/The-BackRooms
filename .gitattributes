@@ -173,3 +173,6 @@ Packages/packages-lock.json linguist-generated
 
 # Exceptions for .asset files such as lightning pre-baking
 LightingData.asset     binary
+
+# Registro cronológico: cada um escreve no fim; o Git junta as duas entradas sem conflito.
+Docs/historico.md       text merge=union

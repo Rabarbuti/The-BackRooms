@@ -253,8 +253,17 @@ que foi testado por máquina e o que não foi testado à mão.
 
 ## Git
 
-- Repositório: `Rabarbuti/The-BackRooms`. Trabalho em branch, nunca direto na `main`: o Level 1
-  está na branch `level1` (saiu da `level0-coop`, que é a do Level 0).
+- Repositório: `Rabarbuti/The-BackRooms`. A **`main` é a única branch que dura**: todos os
+  níveis vivem nela (fase incompleta fica escondida do jogador pelo `LevelProgress`).
+- **Branch por tarefa, curta** (horas ou poucos dias: `porta-saida`, `capitao-cerebro`), saindo
+  da `main` atualizada e voltando por PR assim que os testes passam; depois do merge, apaga-se a
+  branch. Nada de branch por fase: ela se afasta da `main` e o conflito cresce.
+- **Puxe a `main` todo dia** (`git pull` na `main`, `git merge main` na sua branch) e avise no grupo
+  antes de mexer em arquivo que todos tocam (`GameSession`, `Camcorder`, `LevelBuilder`, docs).
+- **Conflito em conteúdo gerado** (cenas, prefabs, materiais, `Art/Level*`): não se resolve à mão;
+  fique com qualquer lado e rode o gerador de novo. `Docs/historico.md` junta as duas entradas
+  sozinho (`merge=union` no `.gitattributes`).
+- O PR diz o que passou por máquina e o que não foi testado à mão.
 - **PNG e FBX vão direto no Git** (`binary` no `.gitattributes`): a conta está sem orçamento de
   LFS. Os outros binários continuam em LFS; evite adicionar áudio, `.blend` ou vídeo sem
   combinar antes.
