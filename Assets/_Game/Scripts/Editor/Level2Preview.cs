@@ -233,6 +233,20 @@ namespace BackRooms.EditorTools
                         Vector3 end = CellCenter(d, first, z) + Vector3.left * 1.4f;
                         end.y = StandHeight(d, first, z);
                         Shot("teto_full_faixa", end, Vector3.right, -38f);
+
+                        // Aceso, o vidro estoura e não mostra emenda nenhuma: apagado (vidro azul-noite
+                        // com a textura de vidro fosco), uma repetição por célula apareceria.
+                        var lightsOut = Object.FindFirstObjectByType<LightsOut>();
+                        if (lightsOut != null)
+                        {
+                            foreach (CeilingLight lamp in CeilingLight.All) lamp.SetPower(PowerPhase.Dark);
+                            lightsOut.SetDarkness(1f);
+                            if (water != null) water.ForceNight = 1f;
+                            Shot("teto_full_emenda_apagado", foot, Vector3.right, -62f);
+                            if (water != null) water.ForceNight = -1f;
+                            lightsOut.SetDarkness(0f);
+                            foreach (CeilingLight lamp in CeilingLight.All) lamp.SetPower(PowerPhase.Steady);
+                        }
                         roof = true;
                     }
                 if (!roof) missing.Add("teto Full com duas células");
