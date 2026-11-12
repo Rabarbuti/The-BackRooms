@@ -153,8 +153,12 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
   para zerar. A porta não tem som nem animação de abrir, e ainda não existe jogador morto (todos
   os que estão no mapa precisam chegar à porta).
   O terceiro, **As Piscinas** (Poolrooms), está projetado em `level2-piscinas.md` e tem versão de
-  teste jogável (`Scenes/Level2_Test.unity`): profundidades, escadas, água, nado e fôlego; ainda
-  sem maré, ralo, objetivo e som.
+  teste jogável (`Scenes/Level2_Test.unity`), refeita em 12/11/2026: a planta não é mais o labirinto
+  do Level 0, e sim salas sorteadas pelo `PoolGenerator` (salões de pilares, piscina com deque, raia,
+  átrio e fenda altos, túneis em abóbada, salas de poço, cisterna escura) ligadas com laços, em quatro
+  profundidades com escadas e bordas. Luz só por claraboias e janelas, água transparente com
+  refração e cáustica, nado e fôlego. Ainda sem maré, ralo, objetivo (drenar) e som, e sem conferir a
+  planta entre host e cliente.
 
 ---
 

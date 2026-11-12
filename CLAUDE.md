@@ -7,8 +7,10 @@ barulho, e gravação da tela em vídeo (F9). Os dois inimigos (a entidade e o C
 esculpidos no Blender e vestidos sobre juntas montadas em código (seção "Inimigos esculpidos"). A segunda fase, o **Level 1 — O Mostruário**, tem
 projeto, uma versão de teste jogável mobiliada com modelos feitos no Blender e o corpo do
 inimigo dela, o Capitão (seção "Level 1: onde parou e como continuar"). A terceira, o
-**Level 2 — As Piscinas** (as Poolrooms), tem projeto e uma versão de teste jogável feita de
-salas de azulejo com água, sem inimigo ainda (`Docs/level2-piscinas.md`).
+**Level 2 — As Piscinas** (as Poolrooms), tem projeto e uma versão de teste jogável: salas de
+azulejo sorteadas pelo `PoolGenerator` (não o labirinto do Level 0), água em quatro profundidades,
+luz só por claraboias e janelas, nado e fôlego; sem maré, ralo, objetivo nem inimigo ainda
+(`Docs/level2-piscinas.md`, cabeçalho "Já existe / Falta").
 
 Conversa, comentários de código, documentação e mensagens de commit são em **português**.
 
@@ -38,7 +40,7 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   placas de curva no lugar das setas pintadas). As Piscinas têm gerador e construtor próprios:
   `PoolGenerator` (planta por salas, C# puro, com `Validate`), `PoolData` (divisas, claraboias,
   salas, colunas, lâmpadas), `LevelBuilder.Pools.cs` (a geometria, parte do `LevelBuilder`) e
-  `PoolWater` (ondulação, cáustica, debaixo d'água, anoitecer).
+  `PoolWater` (ondulação, cáustica, debaixo d'água, anoitecer, salas escuras).
 - `Scripts/Player` — `PlayerController` (movimento, queda e captura), `Flashlight`, `Footsteps`,
   `PlayerBody` (o traje que os outros veem) e `ItemHand` (a mão em primeira pessoa).
 - `Scripts/Network` — `GameSession` (host, cliente, envio da seed e do relógio da sessão) e
@@ -109,10 +111,13 @@ Tudo em `Art/Personagens` é **gerado**: `<Nome>.bytes`, `_Cor.png` e `_Normal.p
 A cena `Scenes/Level2_Test.unity` (As Piscinas), os materiais e texturas de `Art/Level2` e o perfil
 `Settings/Level2_Volume.asset` são **gerados** por `Level2Setup` (menu BackRooms > Montar Level 2
 (teste)), que regrava tudo a cada montagem. As texturas-fonte ficam em `Art/Fontes/Level2`,
-recortadas das folhas do Higgsfield: A (azulejo, azulejo gasto, pastilha, capa), B (`Water_Height`,
-`Caustics`, `Window_Frosted`, `Glass_Block`) e C (as quatro manchas `Stain_*`, com transparência).
-Onde existe o arquivo-fonte o gerador usa; onde não existe, pinta em código. A planta não fica na
-cena: sai do `PoolGenerator` pela seed, em Play.
+recortadas das folhas do Higgsfield (não são geradas; o que deriva delas vai para `Art/Level2`):
+A (`Tile_White`, `Mosaic_Pool`, `Coping` e `Tile_White_Worn`, este sem uso), B (`Water_Height`,
+`Caustics`, `Window_Frosted`, `Glass_Block`), C (as manchas `Stain_*`) e D (as marcações `Mark_Depth`,
+`Mark_NoDiving`, `Mark_DeepEnd`, `Mark_LaneEnd`); C e D têm transparência e viram decalques
+(`Decal_Stain_*` e `Decal_Mark_*`, postos pela seed em `BuildPoolStains` e `BuildPoolMarks`). Na folha B, onde existe o arquivo-fonte o gerador usa; onde não existe, pinta em
+código. Ainda pintados sempre: a segunda ondulação, a segunda rede da cáustica e o vidro das
+claraboias. A planta não fica na cena: sai do `PoolGenerator` pela seed, em Play.
 
 Os modelos em `Art/Level1/Modelos` (`.fbx` e `materiais_<lote>.json`) e as texturas em
 `Art/Level1/Texturas` são **gerados** pelos lotes de `Tools/Blender`; os materiais em
@@ -180,7 +185,10 @@ velho. Mudança só de código não precisa. A cena do Level 1 não tem versão:
   inclinada, sempre para o mesmo lado, sombra de uma face em cache) e o perfil de Volume é o dela.
   Luz pontual com sombra custa seis faces; não usar lá.
 - **Lista de cenas da build:** o Level 0 fica sempre em primeiro (é a cena que a build abre).
-  `Level0Setup.AddSceneToBuild` garante isso; uma fase nova entra depois dele.
+  `Level0Setup.AddSceneToBuild` garante isso; uma fase nova entra depois dele. Cada montagem tira a
+  cena da lista e a põe no fim, então montar o Level 1 depois do Level 2 (ou o contrário) troca os
+  dois de lugar em `ProjectSettings/EditorBuildSettings.asset`. Não faz mal (as fases abrem pelo nome
+  da cena no `LevelCatalog`, nunca pelo índice), mas não é mudança para commit.
 - **Rede:** host autoritativo por IP direto (porta 7777), movimento com autoridade do dono.
   Estado que quem entra depois precisa ver (riscos, por exemplo) tem de ser reenviado na conexão,
   como faz `DrawingBoard.SendAll`.
@@ -246,7 +254,7 @@ e rode `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`.
 
 No editor, pelo menu **BackRooms**: Abrir Level 0, Abrir Level 1 (teste), Testar Level 0
 (fumaça), Testar Level 1 (Play), Conferir Level 1, Abrir Level 2 (teste), Testar Level 2 (Play),
-Conferir Level 2, Conferir colisores do Level 0, Gerar mapa 2D,
+Conferir Level 2, Fotografar Level 2, Conferir colisores do Level 0, Gerar mapa 2D,
 Capturar prévia, Capturar prévia do Capitão, Móveis do Level 1 > Atualizar e fotografar,
 Exportar sons da entidade (WAV em `Logs/Sons`, para ouvir e ajustar os sons sintetizados sem
 precisar jogar).
@@ -291,8 +299,17 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   (`PoolGenerator.Validate` sem problemas, mesma seed = mesmo `Hash`, perfil de Volume da fase,
   água e cáustica na cena); fotos de cada tipo de sala em `Logs/Previews/level2_look_*.png` (com
   a filmadora) e `level2_limpa_*.png` (sem ela, para medir cor).
-- `Level2Preview.BatchCapture` (`-seed N`) — planta vista de cima, duas fotos por sala e closes de
-  arco, escada, janelão, poço e claraboia. Lento fora do Play (uns 13 minutos).
+- `Level2Preview.BatchCapture` (`-seed N`, padrão 1998) — recria a cena e tira, em
+  `Logs/Previews/level2_*.png`, a planta vista de cima, duas fotos por sala (da porta e do meio) e os
+  closes: arco, arco largo, vigia, vigia acesa, janelão, frestas, tijolo de vidro, escada entrando na
+  água, poço, claraboia, teto luminoso, até três manchas e debaixo d'água. Apaga antes todas as
+  `level2_*.png` (inclusive as do `BatchCheck` e as dos closes). Lento fora do Play (uns 13 minutos).
+- `Level2Preview.BatchCloseups` (`-seed N`, padrão 1998) — também recria a cena, mas tira só os
+  closes do acabamento, em `Logs/Previews/level2_s{seed}_*.png`: tijolo de vidro e janelão (de frente
+  e de lado), poço redondo (de cima e debaixo d'água), emenda do teto de vidro (aceso e apagado), um
+  close de cada tipo de mancha e de marcação, as duas salas com mais decalques e duas vistas longas.
+  Apaga só as fotos da mesma seed, não as outras. Escreve no log quantas manchas e marcações a seed
+  tem e quais das seeds de conferência têm poço redondo, tijolo de vidro e janelão.
 - `Level2PlayTest.BatchRun` (`-seed N`) — as Piscinas em Play: nasce no seco, anda o caminho a pé
   até a saída pelas escadas e arcos, boia num poço, mergulha até afogar e voltar, e sai nadando
   para a área funda.
