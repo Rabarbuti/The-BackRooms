@@ -52,6 +52,39 @@ namespace BackRooms.UI
             }
         }
 
+        /// <summary>
+        /// O mesmo que <see cref="Draw(Color32[],int,int,int,int,string,int,Color32)"/>, numa
+        /// imagem de um byte por ponto (o painel da filmadora guarda um índice de cor).
+        /// </summary>
+        public static void Draw(byte[] pixels, int width, int height, int x, int y, string text, int scale, byte value)
+        {
+            foreach (char raw in text)
+            {
+                if (Glyphs.TryGetValue(char.ToUpperInvariant(raw), out string rows))
+                {
+                    for (int row = 0; row < GlyphHeight; row++)
+                        for (int col = 0; col < GlyphWidth; col++)
+                            if (rows[row * GlyphWidth + col] == '#')
+                                Fill(pixels, width, height, x + col * scale, y + row * scale, scale, scale, value);
+                }
+
+                x += Advance * scale;
+            }
+        }
+
+        /// <summary>Retângulo cheio numa imagem de um byte por ponto, recortado nas bordas.</summary>
+        public static void Fill(byte[] pixels, int width, int height, int x, int y, int w, int h, byte value)
+        {
+            int x0 = Mathf.Max(0, x), x1 = Mathf.Min(width, x + w);
+            int y0 = Mathf.Max(0, y), y1 = Mathf.Min(height, y + h);
+
+            for (int j = y0; j < y1; j++)
+            {
+                int rowStart = (height - 1 - j) * width;
+                for (int i = x0; i < x1; i++) pixels[rowStart + i] = value;
+            }
+        }
+
         // Cada caractere são 7 linhas de 5 pontos, de cima para baixo.
         static readonly Dictionary<char, string> Glyphs = new Dictionary<char, string>
         {

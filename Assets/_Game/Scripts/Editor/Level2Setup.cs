@@ -289,7 +289,7 @@ namespace BackRooms.EditorTools
                     if (d.Depth[x, z] != PoolDepth.Well) continue;
                     var water = builder.GetComponentInChildren<PoolWater>();
                     Vector3 eye = builder.CellCenter(x, z) + Vector3.up * 3.2f; // olhos a ~1,2 m abaixo da superfície
-                    if (camcorder != null) camcorder.Draw(true, 61.4f, 61.4f, 0.95f, false, null, false, null, true, 0.4f);
+                    if (camcorder != null) camcorder.Draw(true, 61.4f, 61.4f, 0.95f, false, underwater: true, air: 0.4f);
                     Shot("level2_debaixo_dagua.png", eye, Vector3.forward, 10f);
                     if (camcorder != null) camcorder.Draw(true, 61.4f, 61.4f, 0.95f, false);
                     break;

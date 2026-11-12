@@ -109,9 +109,16 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
 - **Seletor no menu:** lista as fases do `LevelCatalog` (hoje Level 0 e Level 1 de teste); a
   atual fica em destaque. Escolher outra fecha a sessão e carrega a cena dela
   (`GameSession.SwitchLevel`). Cada fase é uma cena com a própria sessão.
+- **Porta de saída** (`LevelExit`, tecla E): quem chega perto e olha para ela põe a mão na
+  porta e fica esperando (`PlayerNetwork.AtExit`); continua no mapa, desiste com E de novo e
+  desiste sozinho se se afastar 4 m, cair ou for pego. Quando todos os jogadores do mapa estão
+  esperando, o host avisa os clientes, a tela escurece ("LEVEL N CLEAR") e cada máquina carrega
+  a cena seguinte: o host hospeda de novo e os clientes reconectam no mesmo endereço
+  (`GameSession.OpenExit`/`PassRoutine`). Na última fase a sessão acaba no menu. Sozinho, abre
+  na hora. O painel mostra "E - OPEN DOOR", "WAITING 1/2" e, para quem está longe, "EXIT 1/2".
 - **Progresso** (`LevelProgress`, nas preferências desta máquina): uma fase está zerada quando o
-  jogador desta máquina chega à saída dela. Ficam liberadas as zeradas e a próxima. O aviso
-  "LEVEL N ZERADO" aparece no alto da tela.
+  jogador desta máquina passa pela porta de saída dela. Ficam liberadas as zeradas e a próxima.
+  O aviso "LEVEL N ZERADO" aparece no alto da tela.
 - **Modo desenvolvedor:** no editor, em build de desenvolvimento ou com `-brDev`, todas liberadas.
 
 ### Rede
@@ -139,9 +146,10 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
 - **Opções:** gráficos, resolução e pasta da gravação.
 - **Mais níveis.** O segundo está projetado em `level1-mostruario.md`. Existe uma versão de
   teste jogável (`Scenes/Level1_Test.unity`: mapa pequeno mobiliado, sem entidade) e o corpo do
-  inimigo (`CaptainBody`); já dá para escolher a fase no menu, mas sair por uma porta ainda não
-  leva à seguinte, e o objetivo de cada fase (seção 2.3) ainda não existe: hoje chegar à saída
-  basta para zerar.
+  inimigo (`CaptainBody`); já dá para escolher a fase no menu e a porta de saída leva à fase
+  seguinte, mas o objetivo de cada fase (seção 2.3) ainda não existe: hoje abrir a porta basta
+  para zerar. A porta não tem som nem animação de abrir, e ainda não existe jogador morto (todos
+  os que estão no mapa precisam chegar à porta).
   O terceiro, **As Piscinas** (Poolrooms), está projetado em `level2-piscinas.md` e tem versão de
   teste jogável (`Scenes/Level2_Test.unity`): profundidades, escadas, água, nado e fôlego; ainda
   sem maré, ralo, objetivo e som.

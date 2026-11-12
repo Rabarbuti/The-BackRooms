@@ -66,7 +66,8 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
 ## Teclas
 
 WASD anda, Shift corre, Ctrl ou C agacha, Espaço pula, F lanterna, 1 pega e guarda a caneta,
-botão esquerdo risca, R ou 3 passa para a cor seguinte e 2 volta para a anterior, F9 grava a tela, Esc solta o mouse. No menu: H hospeda,
+botão esquerdo risca, R ou 3 passa para a cor seguinte e 2 volta para a anterior, E abre a porta
+de saída (ou solta, se já estava esperando os outros), F9 grava a tela, Esc solta o mouse. No menu: H hospeda,
 J entra; a lista "Fase" troca de nível (no editor todas ficam liberadas).
 
 ## Conteúdo gerado: não editar à mão
@@ -217,10 +218,15 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   "Encostou" se mede pela colisão que o `CharacterController` relata, não por distância: numa
   pilha, a cadeira de cima, inclinada, barra o jogador antes da de baixo.
 - `LevelSelectTest.BatchRun` — seletor de fase em Play: fase bloqueada sem progresso, troca
-  para o Level 1 com uma sessão só, saída zera a fase, volta ao Level 0. Dois editores:
+  para o Level 1 com uma sessão só, a porta do Level 1 zera e leva ao Level 2 já hospedando,
+  nada num poço, a porta do Level 2 (última fase) zera e devolve ao menu, volta ao Level 0 sem
+  restos da água, e a porta do Level 0 leva ao Level 1 já hospedando. Dois editores:
   `LevelSelectTest.BatchHostLevel1` + `BatchJoinFromLevel0` (o cliente tem de ser levado ao
-  Level 1 e montar a mesma mobília). Restaura o progresso salvo; linha `[BackRooms] Teste do
-  seletor de fase`.
+  Level 1 e montar a mesma mobília) e `BatchHostDoor` + `BatchJoinDoor` (o cliente abre a porta
+  e espera; quando o host abre, os dois passam para o Level 1 e o cliente reconecta). Restaura o
+  progresso salvo; linha `[BackRooms] Teste do seletor de fase`.
+- `Level0Preview.BatchCaptureHud` — só o painel da filmadora, em 1920 x 1080, de frente para a
+  porta de saída (`Logs/Previews/painel_*.png`). Não recria a cena.
 - `Level2Setup.BatchCheck` — recria a cena das Piscinas e confere 5 seeds (saída e sala inicial
   secas, seco nunca encosta em fundo, poço só encosta em fundo, tudo sem poço alcançável a pé,
   uma escada por desnível, mesma seed = mesma planta); fotos em `Logs/Previews/level2_*.png`.

@@ -30,6 +30,10 @@ namespace BackRooms.Net
     public sealed class GameSession : MonoBehaviour
     {
         const string SeedMessage = "BackRooms.Seed";
+        const string PassMessage = "BackRooms.Pass";
+
+        /// <summary>Do abrir da porta até a troca de cena, em segundos (a tela fica preta).</summary>
+        public const float PassSeconds = 1.6f;
 
         public static GameSession Instance { get; private set; }
 
@@ -77,6 +81,15 @@ namespace BackRooms.Net
 
         public bool IsHosting => _net != null && _net.IsListening && _net.IsServer;
 
+        /// <summary>
+        /// Verdadeiro desde que a porta de saída abriu até a fase seguinte carregar (ou a sessão
+        /// acabar, na última fase).
+        /// </summary>
+        public bool Passing { get; private set; }
+
+        /// <summary>Fase para onde a porta levou: o índice no catálogo, ou -1 se era a última.</summary>
+        public int PassingTo { get; private set; } = -1;
+
         /// <summary>Número de jogadores conectados. Só o host sabe; nos clientes devolve -1.</summary>
         public int PlayerCount => IsHosting ? _net.ConnectedClientsIds.Count : -1;
 
@@ -87,6 +100,8 @@ namespace BackRooms.Net
         Coroutine _building;
         double _epoch;
         bool _clearedThisSession;
+        bool _localOnly;
+        Coroutine _passRoutine;
         // Fase pedida pelo host a um cliente que está em outra; a troca acontece no Update.
         int _switchTo = -1;
 
@@ -94,6 +109,9 @@ namespace BackRooms.Net
         // marca de que a linha de comando já foi lida (para não hospedar de novo a cada fase).
         static string _pendingJoin;
         static bool _argsHandled;
+        // Quem hospedava e passou de fase hospeda a seguinte sozinho, assim que a cena carrega.
+        static bool _pendingHost;
+        static bool _pendingHostLocalOnly;
 
         void Awake()
         {
@@ -106,19 +124,16 @@ namespace BackRooms.Net
             LevelIndex = Mathf.Max(0, LevelCatalog.IndexOfScene(scene));
         }
 
-        void OnEnable()
-        {
-            LevelExit.Reached += OnExitReached;
-        }
-
-        void OnDisable()
-        {
-            LevelExit.Reached -= OnExitReached;
-        }
-
         void Start()
         {
             ShowBackdrop();
+
+            if (_pendingHost)
+            {
+                _pendingHost = false;
+                Host(_pendingHostLocalOnly);
+                return;
+            }
 
             if (_pendingJoin != null)
             {
@@ -158,6 +173,14 @@ namespace BackRooms.Net
                 string address = Address;
                 EndSession("");
                 LoadLevel(target, address);
+                return;
+            }
+
+            // Porta de saída: o host abre quando todos os jogadores do mapa estão esperando nela.
+            if (IsHosting && Phase == SessionPhase.Playing && !Passing)
+            {
+                PlayerNetwork.CountAtExit(out int waiting, out int total);
+                if (total > 0 && waiting == total) OpenExit();
             }
         }
 
@@ -190,14 +213,67 @@ namespace BackRooms.Net
             SceneManager.LoadScene(info.Scene, LoadSceneMode.Single);
         }
 
-        // Quem chega à saída na própria máquina zera a fase (uma vez por sessão).
-        void OnExitReached(BackRooms.Player.PlayerController player)
-        {
-            if (Phase != SessionPhase.Playing || _clearedThisSession || player == null) return;
-            if (!player.TryGetComponent(out PlayerNetwork network) || !network.IsOwner) return;
+        // ---------------------------------------------------------------- Porta de saída
 
-            _clearedThisSession = true;
-            LevelProgress.MarkCleared(LevelIndex);
+        // Host: avisa os clientes de que a porta abriu e para qual fase ela leva, e passa também.
+        void OpenExit()
+        {
+            int next = LevelCatalog.IsValid(LevelIndex + 1) ? LevelIndex + 1 : -1;
+
+            using (var writer = new FastBufferWriter(sizeof(int), Allocator.Temp))
+            {
+                writer.WriteValueSafe(next);
+                foreach (ulong clientId in _net.ConnectedClientsIds)
+                    if (clientId != _net.LocalClientId)
+                        _net.CustomMessagingManager.SendNamedMessage(PassMessage, clientId, writer);
+            }
+
+            BeginPass(next);
+        }
+
+        void OnPassMessage(ulong senderClientId, FastBufferReader reader)
+        {
+            reader.ReadValueSafe(out int next);
+            if (Phase == SessionPhase.Playing && !Passing) BeginPass(next);
+        }
+
+        // Em toda máquina: a fase está zerada para quem passou pela porta. A tela escurece e,
+        // em seguida, cada um carrega a fase seguinte — o host hospeda, os clientes reconectam.
+        void BeginPass(int next)
+        {
+            Passing = true;
+            PassingTo = next;
+
+            if (!_clearedThisSession)
+            {
+                _clearedThisSession = true;
+                LevelProgress.MarkCleared(LevelIndex);
+            }
+
+            Debug.Log("[BackRooms] Porta de saída aberta: " + (next >= 0 ? "indo para " + LevelCatalog.Get(next).Name : "era a última fase") + ".");
+            _passRoutine = StartCoroutine(PassRoutine(next));
+        }
+
+        IEnumerator PassRoutine(int next)
+        {
+            bool hosting = IsHosting;
+            string address = Address;
+            string cleared = LevelCatalog.Get(LevelIndex).Name;
+
+            yield return new WaitForSecondsRealtime(PassSeconds);
+            _passRoutine = null;
+
+            if (next < 0)
+            {
+                EndSession("Fim da fita. " + cleared + " zerado.");
+                yield break;
+            }
+
+            _pendingHost = hosting;
+            _pendingHostLocalOnly = _localOnly;
+            // O host fecha a sessão antes de o cliente tentar entrar: os dois esperam o mesmo
+            // tempo, e o cliente só começou a contar quando o aviso chegou.
+            LoadLevel(next, hosting ? null : address);
         }
 
         // ---------------------------------------------------------------- Entrar e sair
@@ -211,6 +287,7 @@ namespace BackRooms.Net
             if (Phase != SessionPhase.Menu) return false;
 
             _transport.SetConnectionData("127.0.0.1", port, localOnly ? "127.0.0.1" : "0.0.0.0");
+            _localOnly = localOnly;
             Subscribe();
             LevelReady = false;
             _clearedThisSession = false;
@@ -255,6 +332,8 @@ namespace BackRooms.Net
             _net.CustomMessagingManager.RegisterNamedMessageHandler(SeedMessage, OnSeedMessage);
             // E, em seguida, os rabiscos que já existirem nas paredes.
             _net.CustomMessagingManager.RegisterNamedMessageHandler(DrawingBoard.StrokeMessage, OnStrokeMessage);
+            // E, quando todos chegarem à porta de saída, para qual fase ela leva.
+            _net.CustomMessagingManager.RegisterNamedMessageHandler(PassMessage, OnPassMessage);
             return true;
         }
 
@@ -342,6 +421,10 @@ namespace BackRooms.Net
         {
             if (Phase == SessionPhase.Menu) return;
 
+            // Passando de fase, o host fecha a sessão de propósito: o cliente segue para a
+            // fase seguinte por conta própria e reconecta lá.
+            if (Passing) return;
+
             string reason = _net != null ? _net.DisconnectReason : "";
             if (string.IsNullOrEmpty(reason))
                 reason = Phase == SessionPhase.Connecting ? "Não foi possível conectar a " + Address + "." : "A sessão foi encerrada.";
@@ -363,6 +446,9 @@ namespace BackRooms.Net
 
             if (_building != null) StopCoroutine(_building);
             _building = null;
+            if (_passRoutine != null) StopCoroutine(_passRoutine);
+            _passRoutine = null;
+            Passing = false;
             LevelReady = false;
             ClearDrawings();
 
