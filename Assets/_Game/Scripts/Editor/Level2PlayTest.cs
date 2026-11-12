@@ -24,6 +24,7 @@ namespace BackRooms.EditorTools
         const string ActiveKey = "BackRooms.Level2PlayTest.Active";
         const string BatchKey = "BackRooms.Level2PlayTest.Batch";
         const string ExitCodeKey = "BackRooms.Level2PlayTest.ExitCode";
+        const string SeedKey = "BackRooms.Level2PlayTest.Seed";
         const float WalkSpeed = 3f;
         const float Reach = 0.45f;
         const double Timeout = 240.0;
@@ -53,6 +54,12 @@ namespace BackRooms.EditorTools
             EditorSceneManager.OpenScene(Level2Setup.ScenePath, OpenSceneMode.Single);
             SessionState.SetBool(ActiveKey, true);
             SessionState.SetBool(BatchKey, batch);
+            // Linha de comando: -seed N escolhe a planta (padrão 1998).
+            int seed = 1998;
+            string[] args = System.Environment.GetCommandLineArgs();
+            for (int i = 0; i + 1 < args.Length; i++)
+                if (args[i] == "-seed" && int.TryParse(args[i + 1], out int parsed)) seed = parsed;
+            SessionState.SetInt(SeedKey, seed);
             EditorApplication.EnterPlaymode();
         }
 
@@ -103,7 +110,7 @@ namespace BackRooms.EditorTools
             switch (_stage)
             {
                 case 0:
-                    session.fixedSeed = 1998;
+                    session.fixedSeed = SessionState.GetInt(SeedKey, 1998);
                     session.Host(localOnly: true);
                     Next();
                     break;
@@ -161,7 +168,7 @@ namespace BackRooms.EditorTools
                 return;
             }
 
-            _path = LevelGenerator.FootPath(d);
+            _path = PoolGenerator.FootPath(d);
             if (_path.Count < 2) { Finish(false, "não há caminho a pé até a saída"); return; }
 
             _target = 0;
@@ -236,7 +243,7 @@ namespace BackRooms.EditorTools
                     }
                 }
 
-            if (!found) { Finish(false, "a seed 1998 não tem poço com área funda vizinha"); return; }
+            if (!found) { Finish(false, $"a seed {SessionState.GetInt(SeedKey, 1998)} não tem poço com área funda vizinha"); return; }
 
             Vector3 center = _level.CellCenter(_wellX, _wellZ);
             _controller.Teleport(new Vector3(center.x, PoolWater.Current.SurfaceY - 1f, center.z), 0f);

@@ -5,7 +5,9 @@ jogável por IP, com interface de filmadora VHS, o primeiro item (caneta de risc
 com faixas de travessia, apagões periódicos, a primeira entidade, que caça os jogadores pelo
 barulho, e gravação da tela em vídeo (F9). A segunda fase, o **Level 1 — O Mostruário**, tem
 projeto, uma versão de teste jogável mobiliada com modelos feitos no Blender e o corpo do
-inimigo dela, o Capitão (seção "Level 1: onde parou e como continuar").
+inimigo dela, o Capitão (seção "Level 1: onde parou e como continuar"). A terceira, o
+**Level 2 — As Piscinas** (as Poolrooms), tem projeto e uma versão de teste jogável feita de
+salas de azulejo com água, sem inimigo ainda (`Docs/level2-piscinas.md`).
 
 Conversa, comentários de código, documentação e mensagens de commit são em **português**.
 
@@ -32,7 +34,10 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   desligados) e `LevelBuilder` (malhas e colisores; as setas pintadas podem ser desligadas);
   buracos (`PitFall`, `PitSmoke`); luminárias e apagão (`CeilingLight`, `LightsOut`); esconderijo e
   saída (`HidingSpot`, `LevelExit`); `PropLayer` (os móveis do Level 1 espalhados pela seed e as
-  placas de curva no lugar das setas pintadas).
+  placas de curva no lugar das setas pintadas). As Piscinas têm gerador e construtor próprios:
+  `PoolGenerator` (planta por salas, C# puro, com `Validate`), `PoolData` (divisas, claraboias,
+  salas, colunas, lâmpadas), `LevelBuilder.Pools.cs` (a geometria, parte do `LevelBuilder`) e
+  `PoolWater` (ondulação, cáustica, debaixo d'água, anoitecer).
 - `Scripts/Player` — `PlayerController` (movimento, queda e captura), `Flashlight`, `Footsteps`,
   `PlayerBody` (o traje que os outros veem) e `ItemHand` (a mão em primeira pessoa).
 - `Scripts/Network` — `GameSession` (host, cliente, envio da seed e do relógio da sessão) e
@@ -53,14 +58,19 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
 - `Scripts/Editor` — gerador do Level 0 (`Level0Setup`, que também monta outras fases por
   `SceneOptions`), modelos GLB gerados por IA (`GlbReader`, `ImportedModels`), pintores de textura
   (`ProceduralPaint`, `StainPainter`, `EntityPainter`), o Level 1 (`Level1Setup`, `Level1Models`,
-  `Level1PlayTest`, `CaptainPreview`) e as demais ferramentas de teste e prévia (menu **BackRooms**).
+  `Level1PlayTest`, `CaptainPreview`), o Level 2 (`Level2Setup`: materiais, perfil de Volume e
+  conferência; `Level2Preview`: fotos; `Level2PlayTest`) e as demais ferramentas de teste e prévia
+  (menu **BackRooms**).
+- `Tools/compila.ps1` — compila os scripts sem abrir o Unity (usa o compilador do editor e as
+  referências da última compilação em `Library/Bee`). Serve para conferir erro de compilação em
+  segundos e para vários agentes trabalharem ao mesmo tempo; não substitui os testes.
 - `Tools/Blender` — modelos feitos por script no Blender e exportados em FBX:
   `moveis_base.py` (biblioteca: peças, paleta, UV, exportação, conferência, foto rápida) e um
   script por lote em `lotes/` (`basicos`, `estofados`, `loja`, `detalhes`, `transito`).
 - `Docs/` — `plano-coop.md` (estado atual e plano do jogo, arquitetura de rede; ler antes de
   mexer em rede ou em geração de fase), `historico.md` (registro cronológico de cada rodada),
   `level1-mostruario.md` (projeto do Level 1 e do Capitão), `level2-piscinas.md` (projeto do Level 2, as
-  Poolrooms, e as texturas a gerar; prompts em `level2-prompts.md`), `modelos-blender.md` (modelos do
+  Poolrooms: referências, salas, luz e texturas; prompts em `level2-prompts.md`), `modelos-blender.md` (modelos do
   Blender ao Unity e como dividir lotes entre agentes). Os outros são referência de design.
 
 ## Teclas
@@ -85,10 +95,13 @@ substituem; o `Level0Setup.EnsureTexture` usa o arquivo de lá no lugar da pintu
 A cena `Scenes/Level1_Test.unity` é **gerada** por `Level1Setup` (menu BackRooms > Montar Level 1
 (teste)), com o mesmo montador do Level 0 (`Level0Setup.SceneOptions`).
 
-A cena `Scenes/Level2_Test.unity` (As Piscinas) e os materiais e texturas de `Art/Level2` são
-**gerados** por `Level2Setup` (menu BackRooms > Montar Level 2 (teste)). As texturas de azulejo,
-pastilha e borda vêm de `Art/Fontes/Level2` (recortadas da Folha A do Higgsfield); a ondulação da
-água e o vidro das claraboias são pintados em código até as folhas B, C e D chegarem.
+A cena `Scenes/Level2_Test.unity` (As Piscinas), os materiais e texturas de `Art/Level2` e o perfil
+`Settings/Level2_Volume.asset` são **gerados** por `Level2Setup` (menu BackRooms > Montar Level 2
+(teste)), que regrava tudo a cada montagem. As texturas-fonte ficam em `Art/Fontes/Level2`,
+recortadas das folhas do Higgsfield: A (azulejo, azulejo gasto, pastilha, capa), B (`Water_Height`,
+`Caustics`, `Window_Frosted`, `Glass_Block`) e C (as quatro manchas `Stain_*`, com transparência).
+Onde existe o arquivo-fonte o gerador usa; onde não existe, pinta em código. A planta não fica na
+cena: sai do `PoolGenerator` pela seed, em Play.
 
 Os modelos em `Art/Level1/Modelos` (`.fbx` e `materiais_<lote>.json`) e as texturas em
 `Art/Level1/Texturas` são **gerados** pelos lotes de `Tools/Blender`; os materiais em
@@ -145,7 +158,16 @@ velho. Mudança só de código não precisa. A cena do Level 1 não tem versão:
   da peça (sem isso pega o material 0 da malha); uma cor não pode ter o mesmo nome em dois lotes
   com definições diferentes (o `run_lote` recusa). Detalhes em `Docs/modelos-blender.md`.
 - **Colisor e malha visível nascem juntos** no `LevelBuilder` (`AddWall`, `AlcoveBox`,
-  `AddCollider`) e na `PropLayer` (`Spawn`). Não criar um sem o outro.
+  `AddCollider`) e na `PropLayer` (`Spawn`). Não criar um sem o outro. Nas Piscinas, o que é
+  curvo (arco, coluna, abóbada, poço) usa `MeshCollider` da mesma malha; enfeite sem colisor
+  (sanca, cáustica, corrimão) entra por nome na lista do `Level0ColliderCheck`.
+- **Nas Piscinas, toda célula com piso que não é poço se alcança a pé e de todo poço se sai
+  nadando.** Divisa aberta entre alturas diferentes sem `PoolStair` é borda: desce-se, não se sobe
+  (`LevelData.CanStep`). Regra nova de planta entra no `PoolGenerator.Validate`, que sorteia de novo
+  até passar; coluna nunca fica a menos de (raio + 0,6 m) das linhas de centro das células.
+- **A fase das Piscinas não tem luminária:** a luz vem de claraboias e janelas (luz de caixa
+  inclinada, sempre para o mesmo lado, sombra de uma face em cache) e o perfil de Volume é o dela.
+  Luz pontual com sombra custa seis faces; não usar lá.
 - **Lista de cenas da build:** o Level 0 fica sempre em primeiro (é a cena que a build abre).
   `Level0Setup.AddSceneToBuild` garante isso; uma fase nova entra depois dele.
 - **Rede:** host autoritativo por IP direto (porta 7777), movimento com autoridade do dono.
@@ -227,11 +249,15 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   progresso salvo; linha `[BackRooms] Teste do seletor de fase`.
 - `Level0Preview.BatchCaptureHud` — só o painel da filmadora, em 1920 x 1080, de frente para a
   porta de saída (`Logs/Previews/painel_*.png`). Não recria a cena.
-- `Level2Setup.BatchCheck` — recria a cena das Piscinas e confere 5 seeds (saída e sala inicial
-  secas, seco nunca encosta em fundo, poço só encosta em fundo, tudo sem poço alcançável a pé,
-  uma escada por desnível, mesma seed = mesma planta); fotos em `Logs/Previews/level2_*.png`.
-- `Level2PlayTest.BatchRun` — as Piscinas em Play: nasce no seco, anda o caminho a pé até a saída
-  pelas escadas, boia num poço, mergulha até afogar e voltar, e sai nadando para a área funda.
+- `Level2Setup.BatchCheck` — recria a cena e os materiais das Piscinas e confere 5 seeds
+  (`PoolGenerator.Validate` sem problemas, mesma seed = mesmo `Hash`, perfil de Volume da fase,
+  água e cáustica na cena); fotos de cada tipo de sala em `Logs/Previews/level2_look_*.png` (com
+  a filmadora) e `level2_limpa_*.png` (sem ela, para medir cor).
+- `Level2Preview.BatchCapture` (`-seed N`) — planta vista de cima, duas fotos por sala e closes de
+  arco, escada, janelão, poço e claraboia. Lento fora do Play (uns 13 minutos).
+- `Level2PlayTest.BatchRun` (`-seed N`) — as Piscinas em Play: nasce no seco, anda o caminho a pé
+  até a saída pelas escadas e arcos, boia num poço, mergulha até afogar e voltar, e sai nadando
+  para a área funda.
 - `Level0ColliderCheck.BatchRunLevel2` — colisores contra a malha visível na cena das Piscinas.
 - `Level1Models.BatchUpdateAndCapture` — cria os materiais dos lotes, reimporta os modelos,
   escreve as medidas no log e salva fotos em `Logs/Previews/moveis_*.png` (todos, ou só os de
@@ -246,8 +272,9 @@ pode abrir numa cena vazia; o `Level0AutoUpdate` troca para a cena do jogo.
 
 Mudança em jogador, item, fase ou rede só está pronta depois do teste de fumaça sozinho; mudança
 em rede, depois do teste com dois editores; mudança no Level 2 (ou na água, no jogador, no
-`LevelBuilder` ou no gerador), depois de `Level2Setup.BatchCheck`, `Level2PlayTest.BatchRun` e
-`Level0ColliderCheck.BatchRunLevel2`; mudança no Level 1 (ou no `LevelBuilder`, no gerador
+`LevelBuilder`, no `PoolGenerator` ou no `Level2Setup`), depois de `Level2Setup.BatchCheck`,
+`Level2PlayTest.BatchRun`, `Level0ColliderCheck.BatchRunLevel2` e `LevelSelectTest.BatchRun` (a
+porta do Level 1 leva às Piscinas); mudança no Level 1 (ou no `LevelBuilder`, no gerador
 ou nos modelos), depois de `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`. Diga no resumo o
 que foi testado por máquina e o que não foi testado à mão.
 

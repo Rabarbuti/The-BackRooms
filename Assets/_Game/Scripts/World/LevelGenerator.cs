@@ -107,13 +107,21 @@ namespace BackRooms.World
         Well
     }
 
-    /// <summary>Escada da célula (X, Z), a de baixo, subindo pelo lado <see cref="Side"/> até a vizinha.</summary>
+    /// <summary>
+    /// Escada da célula (X, Z), a de baixo, subindo pelo lado <see cref="Side"/> até a vizinha:
+    /// degraus de 20 cm de altura e 30 cm de piso, encostados na divisa e centrados nela.
+    /// <see cref="Steps"/> é o número de espelhos entre o piso de cima e o pé da escada, que é o
+    /// piso da célula de baixo ou, se ela for poço, <see cref="LevelData.WellStairFoot"/> (a
+    /// escada de sair do poço nadando).
+    /// </summary>
     public struct PoolStair
     {
         public int X;
         public int Z;
         public WallSide Side;
         public int Steps;
+        /// <summary>Largura em metros. 4 = a divisa inteira (degraus de borda a borda); num arco, até o vão dele.</summary>
+        public float Width;
     }
 
     /// <summary>
@@ -224,13 +232,85 @@ namespace BackRooms.World
         /// <summary>Profundidade de cada célula nas Piscinas. Nulo nos outros níveis.</summary>
         public PoolDepth[,] Depth;
 
-        /// <summary>Escadas entre células de alturas diferentes, nas Piscinas.</summary>
+        /// <summary>
+        /// Escadas, nas Piscinas. Uma divisa aberta entre alturas diferentes SEM escada é uma
+        /// borda: desce-se por ela (cai-se na água), mas não se sobe. A pé só contam as divisas
+        /// de mesma altura e as que têm escada (<see cref="CanStep"/>).
+        /// </summary>
         public List<PoolStair> Stairs = new List<PoolStair>();
+
+        /// <summary>Célula maciça (sem piso nem teto, fechada por paredes). Tamanho [Width, Height].</summary>
+        public bool[,] Solid;
+
+        /// <summary>Índice da sala de cada célula em <see cref="Rooms"/>; -1 nas maciças.</summary>
+        public int[,] Room;
+
+        public List<PoolRoom> Rooms = new List<PoolRoom>();
+
+        /// <summary>Altura do teto de cada célula, em metros acima da água (o da sala dela).</summary>
+        public float[,] Ceiling;
+
+        /// <summary>Claraboia de cada célula. Onde há uma, <see cref="Lights"/> está On (ou Dead, quebrada).</summary>
+        public PoolSky[,] Sky;
+
+        /// <summary>
+        /// O que há em cada divisa. Mesmos índices de WallSouth / WallWest, que continuam valendo
+        /// para andar: falso em Open, Arch, WideArch e Doorway; verdadeiro nos outros.
+        /// </summary>
+        public PoolEdge[,] EdgeSouth;
+        public PoolEdge[,] EdgeWest;
+
+        public List<PoolColumn> Columns = new List<PoolColumn>();
+        public List<PoolLamp> Lamps = new List<PoolLamp>();
 
         public bool HasPools => Depth != null;
 
         /// <summary>Altura de um degrau: um azulejo.</summary>
         public const float StepRise = 0.2f;
+
+        /// <summary>Altura do último degrau da escada que entra num poço (abaixo de onde o nadador boia, a -1,4 m).</summary>
+        public const float WellStairFoot = -1.6f;
+
+        public bool IsSolid(int x, int z) => Solid != null && Solid[x, z];
+
+        public PoolEdge EdgeAt(int x, int z, WallSide side)
+        {
+            switch (side)
+            {
+                case WallSide.South: return EdgeSouth[x, z];
+                case WallSide.North: return EdgeSouth[x, z + 1];
+                case WallSide.West: return EdgeWest[x, z];
+                default: return EdgeWest[x + 1, z];
+            }
+        }
+
+        Dictionary<int, PoolStair> _stairLookup;
+
+        /// <summary>A escada da divisa daquele lado da célula, esteja ela nesta célula ou na vizinha.</summary>
+        public bool StairAt(int x, int z, WallSide side, out PoolStair stair)
+        {
+            if (_stairLookup == null || _stairLookup.Count != Stairs.Count)
+            {
+                _stairLookup = new Dictionary<int, PoolStair>();
+                foreach (PoolStair s in Stairs) _stairLookup[(s.X + s.Z * Width) * 4 + (int)s.Side] = s;
+            }
+
+            if (_stairLookup.TryGetValue((x + z * Width) * 4 + (int)side, out stair)) return true;
+            return Neighbor(x, z, side, out int nx, out int nz)
+                   && _stairLookup.TryGetValue((nx + nz * Width) * 4 + (int)Opposite(side), out stair);
+        }
+
+        /// <summary>
+        /// Dá para andar (nos dois sentidos) da célula para a vizinha daquele lado? Divisa aberta,
+        /// nenhuma das duas é poço nem maciça, e mesma altura ou escada.
+        /// </summary>
+        public bool CanStep(int x, int z, WallSide side)
+        {
+            if (!IsOpen(x, z, side) || !Neighbor(x, z, side, out int nx, out int nz)) return false;
+            if (IsSolid(x, z) || IsSolid(nx, nz)) return false;
+            if (Depth[x, z] == PoolDepth.Well || Depth[nx, nz] == PoolDepth.Well) return false;
+            return Depth[x, z] == Depth[nx, nz] || StairAt(x, z, side, out _);
+        }
 
         /// <summary>Altura do piso de cada profundidade, com a água em Y = 0.</summary>
         public static float DepthFloor(PoolDepth depth)
@@ -396,10 +476,12 @@ namespace BackRooms.World
 
         /// <param name="pits">Falso no Level 1: sem buracos (lá o perigo do chão são os móveis).</param>
         /// <param name="alcoves">Falso no Level 1: sem nichos nas paredes (os móveis encostam nelas).</param>
-        /// <param name="pools">Verdadeiro nas Piscinas (Level 2): profundidade por célula e escadas,
-        /// sorteadas na última etapa, depois de tudo (não muda o que vem antes por seed).</param>
+        /// <param name="pools">Verdadeiro nas Piscinas (Level 2): devolve a planta do <see cref="PoolGenerator"/>.</param>
         public static LevelData Generate(int seed, int width, int height, bool pits = true, bool alcoves = true, bool pools = false)
         {
+            // As Piscinas não usam nada deste gerador.
+            if (pools) return PoolGenerator.Generate(seed, width, height);
+
             width = Math.Max(4, width);
             height = Math.Max(4, height);
 
@@ -454,7 +536,6 @@ namespace BackRooms.World
             PlaceGrime(data, rng);
             // Última etapa: sorteia depois de tudo, então não muda nada do que já existia por seed.
             PlaceVents(data, rng, usedFaces);
-            if (pools) PlacePools(data, rng);
 
             return data;
         }
@@ -1368,189 +1449,17 @@ namespace BackRooms.World
 
         // ---------------------------------------------------------------- Piscinas
 
-        /// <summary>Uma área funda a cada tantas células, em média.</summary>
-        public const int CellsPerBasin = 40;
-        /// <summary>No máximo um poço a cada tantas células.</summary>
-        public const int CellsPerWell = 32;
+        // As Piscinas (Level 2) têm gerador próprio, o PoolGenerator: salas, não este labirinto.
+        // Estes atalhos existem para quem já chamava por aqui.
 
-        static readonly WallSide[] EdgeOnce = { WallSide.South, WallSide.West };
+        /// <summary>Verdadeiro se toda célula com piso que não é poço é alcançável a pé a partir da sala inicial.</summary>
+        public static bool AllReachableOnFoot(LevelData d) => PoolGenerator.AllReachableOnFoot(d);
 
-        /// <summary>
-        /// Profundidades das Piscinas. Quase tudo é raso; a sala inicial, a saída e alguns
-        /// patamares são secos; áreas fundas retangulares; e poços dentro delas. Regras:
-        /// seco nunca encosta em fundo por uma passagem (o desnível de 1,4 m não teria
-        /// escada); poço só encosta em fundo ou poço, e só fica se toda célula que não é poço
-        /// continuar alcançável a pé a partir da sala inicial (o mesmo espírito de "buraco nunca
-        /// isola"). Por fim, uma escada em cada passagem entre alturas diferentes que se anda.
-        /// </summary>
-        static void PlacePools(LevelData d, Random rng)
-        {
-            int w = d.Width, h = d.Height;
-            d.Depth = new PoolDepth[w, h];
-            for (int z = 0; z < h; z++)
-                for (int x = 0; x < w; x++)
-                    d.Depth[x, z] = d.InRoom(x, z) ? PoolDepth.Dry : PoolDepth.Shallow;
-            d.Depth[d.ExitX, d.ExitZ] = PoolDepth.Dry;
+        /// <summary>Células alcançáveis a pé (mesma altura ou escada, sem poço) a partir de (x, z).</summary>
+        public static bool[] FootReach(LevelData d, int x0, int z0) => PoolGenerator.FootReach(d, x0, z0);
 
-            // Patamares secos soltos, de uma ou duas células.
-            int patches = Math.Max(1, w * h / 24);
-            for (int i = 0; i < patches; i++)
-            {
-                int x = rng.Next(w), z = rng.Next(h);
-                d.Depth[x, z] = PoolDepth.Dry;
-                WallSide side = Sides[rng.Next(Sides.Length)];
-                if (rng.Next(2) == 0 && d.IsOpen(x, z, side) && d.Neighbor(x, z, side, out int nx, out int nz))
-                    d.Depth[nx, nz] = PoolDepth.Dry;
-            }
-
-            // Áreas fundas: retângulos de 2 x 2 a 4 x 3 que não pegam a sala inicial nem seco.
-            int basins = Math.Max(2, w * h / CellsPerBasin);
-            for (int attempt = 0, placed = 0; attempt < basins * 12 && placed < basins; attempt++)
-            {
-                int bw = 2 + rng.Next(3), bh = 2 + rng.Next(2);
-                int x0 = rng.Next(w - bw + 1), z0 = rng.Next(h - bh + 1);
-                bool free = true;
-                for (int z = z0; z < z0 + bh && free; z++)
-                    for (int x = x0; x < x0 + bw && free; x++)
-                        free = d.Depth[x, z] == PoolDepth.Shallow;
-                if (!free) continue;
-
-                for (int z = z0; z < z0 + bh; z++)
-                    for (int x = x0; x < x0 + bw; x++)
-                        d.Depth[x, z] = PoolDepth.Deep;
-                placed++;
-            }
-
-            // Fundo que encosta em seco por uma passagem vira raso.
-            for (int z = 0; z < h; z++)
-                for (int x = 0; x < w; x++)
-                {
-                    if (d.Depth[x, z] != PoolDepth.Deep) continue;
-                    foreach (WallSide side in Sides)
-                        if (d.IsOpen(x, z, side) && d.Neighbor(x, z, side, out int nx, out int nz) && d.Depth[nx, nz] == PoolDepth.Dry)
-                            d.Depth[x, z] = PoolDepth.Shallow;
-                }
-
-            // Poços: fundo cercado só de fundo (ou parede), um de cada vez, sem isolar ninguém.
-            int wells = Math.Max(1, w * h / CellsPerWell), dug = 0;
-            for (int z = 0; z < h && dug < wells; z++)
-                for (int x = 0; x < w && dug < wells; x++)
-                {
-                    if (d.Depth[x, z] != PoolDepth.Deep || rng.Next(3) != 0) continue;
-
-                    bool enclosed = true, touchesDeep = false;
-                    foreach (WallSide side in Sides)
-                    {
-                        if (!d.IsOpen(x, z, side) || !d.Neighbor(x, z, side, out int nx, out int nz)) continue;
-                        PoolDepth n = d.Depth[nx, nz];
-                        if (n != PoolDepth.Deep && n != PoolDepth.Well) enclosed = false;
-                        if (n == PoolDepth.Deep) touchesDeep = true;
-                    }
-                    if (!enclosed || !touchesDeep) continue;
-
-                    d.Depth[x, z] = PoolDepth.Well;
-                    if (AllReachableOnFoot(d)) dug++;
-                    else d.Depth[x, z] = PoolDepth.Deep;
-                }
-
-            // Mais claraboias que no Level 0: as Piscinas são claras, com cantos escuros só aqui e
-            // ali. Uma a cada três células sem luz ganha uma acesa, até o limite de sombras.
-            int lit = 0;
-            foreach (LightState state in d.Lights)
-                if (state == LightState.On || state == LightState.Flicker) lit++;
-            for (int z = 0; z < h; z++)
-                for (int x = 0; x < w; x++)
-                {
-                    if (lit >= MaxLitLights || d.Lights[x, z] != LightState.None || rng.Next(3) != 0) continue;
-                    d.Lights[x, z] = LightState.On;
-                    lit++;
-                }
-
-            // Escadas: uma por passagem entre alturas diferentes, na célula de baixo.
-            for (int z = 0; z < h; z++)
-                for (int x = 0; x < w; x++)
-                    foreach (WallSide side in EdgeOnce)
-                    {
-                        if (!d.IsOpen(x, z, side) || !d.Neighbor(x, z, side, out int nx, out int nz)) continue;
-                        PoolDepth a = d.Depth[x, z], b = d.Depth[nx, nz];
-                        if (a == b || a == PoolDepth.Well || b == PoolDepth.Well) continue;
-
-                        float ha = LevelData.DepthFloor(a), hb = LevelData.DepthFloor(b);
-                        bool aLower = ha < hb;
-                        d.Stairs.Add(new PoolStair
-                        {
-                            X = aLower ? x : nx,
-                            Z = aLower ? z : nz,
-                            Side = aLower ? side : LevelData.Opposite(side),
-                            Steps = (int)Math.Round(Math.Abs(ha - hb) / LevelData.StepRise)
-                        });
-                    }
-        }
-
-        /// <summary>Verdadeiro se toda célula que não é poço é alcançável a pé a partir da sala inicial.</summary>
-        public static bool AllReachableOnFoot(LevelData d)
-        {
-            bool[] seen = FootReach(d, d.SpawnX, d.SpawnZ);
-            for (int z = 0; z < d.Height; z++)
-                for (int x = 0; x < d.Width; x++)
-                    if (d.Depth[x, z] != PoolDepth.Well && !seen[x + z * d.Width]) return false;
-            return true;
-        }
-
-        /// <summary>Células alcançáveis a pé (sem entrar em poço) a partir de (x, z).</summary>
-        public static bool[] FootReach(LevelData d, int x0, int z0)
-        {
-            var seen = new bool[d.Width * d.Height];
-            var queue = new Queue<int>();
-            seen[x0 + z0 * d.Width] = true;
-            queue.Enqueue(x0 + z0 * d.Width);
-
-            while (queue.Count > 0)
-            {
-                int i = queue.Dequeue(), x = i % d.Width, z = i / d.Width;
-                foreach (WallSide side in Sides)
-                {
-                    if (!d.IsOpen(x, z, side) || !d.Neighbor(x, z, side, out int nx, out int nz)) continue;
-                    int n = nx + nz * d.Width;
-                    if (seen[n] || d.Depth[nx, nz] == PoolDepth.Well) continue;
-                    seen[n] = true;
-                    queue.Enqueue(n);
-                }
-            }
-
-            return seen;
-        }
-
-        /// <summary>Caminho mais curto a pé (sem poço) da sala inicial até a saída, célula por célula.</summary>
-        public static List<int> FootPath(LevelData d)
-        {
-            int total = d.Width * d.Height, start = d.SpawnX + d.SpawnZ * d.Width, goal = d.ExitX + d.ExitZ * d.Width;
-            var previous = new int[total];
-            for (int i = 0; i < total; i++) previous[i] = -2;
-            var queue = new Queue<int>();
-            previous[start] = -1;
-            queue.Enqueue(start);
-
-            while (queue.Count > 0)
-            {
-                int i = queue.Dequeue(), x = i % d.Width, z = i / d.Width;
-                if (i == goal) break;
-                foreach (WallSide side in Sides)
-                {
-                    if (!d.IsOpen(x, z, side) || !d.Neighbor(x, z, side, out int nx, out int nz)) continue;
-                    int n = nx + nz * d.Width;
-                    if (previous[n] != -2 || d.Depth[nx, nz] == PoolDepth.Well) continue;
-                    previous[n] = i;
-                    queue.Enqueue(n);
-                }
-            }
-
-            var path = new List<int>();
-            if (previous[goal] == -2) return path;
-            for (int i = goal; i != -1; i = previous[i]) path.Add(i);
-            path.Reverse();
-            return path;
-        }
+        /// <summary>Caminho mais curto a pé da sala inicial até a saída, célula por célula.</summary>
+        public static List<int> FootPath(LevelData d) => PoolGenerator.FootPath(d);
 
         // Sujeira, umidade e desgaste: muitas manchas discretas em paredes e no carpete.
         // Diferente do sangue e das palavras, podem se sobrepor entre si.
