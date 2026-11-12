@@ -522,6 +522,8 @@ namespace BackRooms.EditorTools
             body.shellMaterial = source.shellMaterial;
             body.boneMaterial = source.boneMaterial;
             body.mawMaterial = source.mawMaterial;
+            body.model = source.model;
+            body.modelMaterials = source.modelMaterials;
             body.Build();
 
             Quaternion level = camera.transform.localRotation;
@@ -590,6 +592,8 @@ namespace BackRooms.EditorTools
             body.shellMaterial = source.shellMaterial;
             body.boneMaterial = source.boneMaterial;
             body.mawMaterial = source.mawMaterial;
+            body.model = source.model;
+            body.modelMaterials = source.modelMaterials;
             body.Build();
             return body;
         }

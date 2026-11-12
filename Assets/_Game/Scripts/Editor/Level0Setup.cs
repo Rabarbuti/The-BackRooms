@@ -46,7 +46,7 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 16;
+        public const int ContentVersion = 17;
 
         [MenuItem("BackRooms/Montar Level 0 (sala de teste)")]
         public static void Build()
@@ -550,6 +550,9 @@ namespace BackRooms.EditorTools
             figure.shellMaterial = shell;
             figure.boneMaterial = bone;
             figure.mawMaterial = maw;
+            // O corpo esculpido no Blender (CharacterModels), se já foi exportado.
+            figure.model = CharacterModels.Model("Entidade");
+            figure.modelMaterials = CharacterModels.Materials("Entidade");
             entity.AddComponent<EntityAudio>();
 
             // Rede: quem manda na posição é o host (o padrão do NetworkTransform).

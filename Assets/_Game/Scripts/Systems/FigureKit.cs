@@ -74,10 +74,18 @@ namespace BackRooms
         /// cápsulas vira umas poucas dezenas de malhas, sem mudar nada na aparência.
         /// <paramref name="live"/> são as juntas que a animação gira: a fusão não entra nelas.
         /// </summary>
-        public static void Bake(Transform joint, HashSet<Transform> live)
+        public static void Bake(Transform joint, HashSet<Transform> live) => Bake(joint, live, true);
+
+        /// <summary>
+        /// Tira da junta todas as peças e juntas de apoio, deixando só o esqueleto que a animação
+        /// gira. Para quando o corpo veste um modelo (<see cref="CharacterModel"/>).
+        /// </summary>
+        public static void Strip(Transform joint, HashSet<Transform> live) => Bake(joint, live, false);
+
+        static void Bake(Transform joint, HashSet<Transform> live, bool combine)
         {
             var groups = new Dictionary<(Material, bool), List<CombineInstance>>();
-            Collect(joint, joint, live, groups);
+            if (combine) Collect(joint, joint, live, groups);
 
             // O que não é junta viva nem leva a uma junta viva já foi copiado: pode sair.
             var leftovers = new List<GameObject>();

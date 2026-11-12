@@ -59,6 +59,8 @@ namespace BackRooms.EditorTools
             var figure = new GameObject("CapitaoDaFoto");
             var body = figure.AddComponent<CaptainBody>();
             AssignMaterials(body);
+            body.model = CharacterModels.Model("Capitao");
+            body.modelMaterials = CharacterModels.Materials("Capitao");
             body.Build();
             return body;
         }

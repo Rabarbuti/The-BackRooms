@@ -79,8 +79,10 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
 
 ### Entidade
 
-- **Aparência:** 3,3 m, corpo de cipós pretos torcidos, cabeça comprida esculpida como malha,
-  sem olhos, de rosto fechado e boca só na frente (`EntityBody`, `EntityHeadMesh`).
+- **Aparência:** 3,3 m, corpo de cipós pretos torcidos, cabeça comprida sem olhos, de boca só
+  na frente, cuja ponta de trás se curva em gomos e afunda nas costas. Esculpida no Blender
+  (`Tools/Blender/personagens/entidade.py`) e vestida sobre as juntas de `EntityBody`, que
+  continua animando em código (`CharacterModel`).
 - **Quando aparece:** não existe no começo. Surge quando alguém chega a 8 células de caminhada
   da sala inicial, com pelo menos 15 s de partida, numa célula entre esse jogador e a sala, a 4
   células ou mais de todos e fora da vista de todos (`EntityDirector`).

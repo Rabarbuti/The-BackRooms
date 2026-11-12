@@ -64,6 +64,18 @@ namespace BackRooms.Entities
         [Tooltip("Metros andados por ciclo completo de passada (dois passos).")]
         public float strideLength = 1.9f;
 
+        [Header("Modelo do Blender")]
+        [Tooltip("Malha esculpida no Blender (Tools/Blender/personagens), vestida sobre as juntas. Vazio: o corpo antigo, montado em código.")]
+        public TextAsset model;
+        [Tooltip("Materiais do modelo, um por parte (o nome termina com o nome da parte).")]
+        public Material[] modelMaterials;
+
+        /// <summary>
+        /// Só para a ferramenta que exporta o esqueleto para o Blender: monta as juntas na pose de
+        /// encaixe e não funde nem tira nenhuma peça.
+        /// </summary>
+        public static bool KeepAllJoints;
+
         // A perna de pau é a esquerda (índice 1; 0 é a direita, em +X).
         const int PegLeg = 1;
 
@@ -149,9 +161,9 @@ namespace BackRooms.Entities
             float lean = 3f + 4f * walk + 18f * rush + breathe * 0.5f;
             _spine.localRotation = Quaternion.Euler(lean, swing * 5f * walk, -pegSide * 3f * pegStance * walk);
 
-            // Cabeça: parado, um pouco para a frente e torta, olhando fixo.
-            _neck.localRotation = Quaternion.Euler(-lean * 0.6f + 8f * still, 0f, 0f);
-            _headJoint.localRotation = Quaternion.Euler(-4f * still - 8f * mouth - 10f * rush, 4f * still, -6f * still);
+            // Cabeça: parado, projetada para a frente e bem torta, olhando fixo para baixo.
+            _neck.localRotation = Quaternion.Euler(-lean * 0.6f + 18f * still, 0f, 0f);
+            _headJoint.localRotation = Quaternion.Euler(-6f * still - 8f * mouth - 10f * rush, 4f * still, -14f * still);
 
             // Boca: já entreaberta; escancara para baixo.
             _mouthJoint.localScale = new Vector3(1f + 0.12f * mouth, 1f + 1.1f * mouth, 1f);
@@ -178,9 +190,9 @@ namespace BackRooms.Entities
                 }
             }
 
-            // Braços: parado, abertos para os lados e um pouco para a frente, cotovelos quase
-            // retos, palmas para trás e dedos esticados. Andando, balançam duros. Correndo,
-            // vão para a frente, para agarrar.
+            // Braços: parado, esticados para a frente e um pouco abertos, cotovelos meio
+            // dobrados, mãos em garra — como quem vai agarrar. Andando, balançam duros.
+            // Correndo, vão mais para a frente.
             float armSwing = Mathf.Lerp(3f, 18f, walk);
             for (int i = 0; i < 2; i++)
             {
@@ -188,9 +200,9 @@ namespace BackRooms.Entities
                 float forward = -swing * side * (1f - still);
                 float drift = Mathf.Sin(time * 0.6f + i * 1.7f) * 2f;
 
-                float shoulder = -lean * 0.5f + forward * armSwing + 10f * still + 40f * rush + drift * still;
-                float spread = Mathf.Lerp(8f, 17f + 3f * i, still) + 6f * rush;
-                float elbow = 8f + 6f * still + 30f * rush + Mathf.Max(0f, forward) * 8f;
+                float shoulder = -lean * 0.5f + forward * armSwing + 32f * still + 40f * rush + drift * still;
+                float spread = Mathf.Lerp(8f, 15f + 3f * i, still) + 6f * rush;
+                float elbow = 8f + 20f * still + 30f * rush + Mathf.Max(0f, forward) * 8f;
 
                 _upperArm[i].localRotation = Quaternion.Euler(-shoulder, -side * 8f * still, side * spread);
                 _forearm[i].localRotation = Quaternion.Euler(-elbow, side * 12f * still, -side * 6f * still);
@@ -288,9 +300,16 @@ namespace BackRooms.Entities
             BuildHead(_headJoint);
 
             // Muitas peças paradas viram uma malha por junta e por material.
-            foreach (Transform joint in new List<Transform>(_live)) FigureKit.Bake(joint, _live);
+            // Com modelo, as peças de código saem e fica só o esqueleto; sem, as peças paradas
+            // viram uma malha por junta e por material.
+            bool dressed = model != null && !KeepAllJoints;
+            if (!KeepAllJoints)
+                foreach (Transform joint in new List<Transform>(_live))
+                    if (dressed) FigureKit.Strip(joint, _live); else FigureKit.Bake(joint, _live);
 
+            // A pose parada é a de encaixe: foi nela que o Blender esculpiu o modelo.
             Pose(0f, 0f, 1f, 0f, 0f);
+            if (dressed) CharacterModel.Attach(transform, model, modelMaterials);
         }
 
         void BuildLegs(Material pants, Material belt, Material boot, Material wood, Material brass)
