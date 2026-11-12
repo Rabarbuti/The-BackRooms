@@ -31,6 +31,8 @@ namespace BackRooms.UI
         public float noSignalHold = 0.35f;
         [Tooltip("A entidade interfere na imagem a partir desta distância, em metros.")]
         public float entityNoiseRange = 16f;
+        [Tooltip("Chuvisco com a cabeça debaixo d'água (0 a 1).")]
+        [Range(0f, 1f)] public float underwaterNoise = 0.45f;
         [Tooltip("Interferência máxima com a entidade colada no jogador (0 a 1).")]
         [Range(0f, 1f)] public float entityNoiseMax = 0.6f;
 
@@ -124,6 +126,9 @@ namespace BackRooms.UI
                 if (near > 0f) Glitch(near * near * entityNoiseMax, 0.5f);
             }
 
+            // Debaixo d'água a fita sofre: chuvisco forte enquanto a cabeça estiver submersa.
+            if (body != null && body.IsUnderwater) Glitch(underwaterNoise, 0.4f);
+
             _glitch = Mathf.MoveTowards(_glitch, 0f, _glitchFade * Time.unscaledDeltaTime);
             Shader.SetGlobalFloat(GlitchId, _glitch);
 
@@ -153,7 +158,9 @@ namespace BackRooms.UI
                 tape = string.IsNullOrEmpty(recorder.LastError) ? "SAVED" : "TAPE ERROR";
             }
 
-            Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f, tape);
+            bool underwater = body != null && body.IsUnderwater;
+            float air = body != null ? body.Air01 : 1f;
+            Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f, tape, underwater, air);
         }
 
         /// <summary>
@@ -161,7 +168,7 @@ namespace BackRooms.UI
         /// de prévia do editor, que roda fora do Play.
         /// </summary>
         public void Draw(bool recording, float recordSeconds, float clockSeconds, float battery, bool lightOn, string tool = null,
-                         bool noSignal = false, string tape = null)
+                         bool noSignal = false, string tape = null, bool underwater = false, float air = 1f)
         {
             EnsureTexture();
 
@@ -224,6 +231,23 @@ namespace BackRooms.UI
                 // Mira: um ponto pequeno no centro, com contorno escuro.
                 Box(Width / 2 - 2, Height / 2 - 2, 4, 4, Shadow);
                 Box(Width / 2 - 1, Height / 2 - 1, 2, 2, White);
+            }
+
+            // Água (Piscinas): aviso no meio de cima e, faltando ar, a barra do fôlego embaixo dele.
+            if (!noSignal && (underwater || air < 0.999f))
+            {
+                int barWidth = 80;
+                int x0 = (Width - barWidth) / 2;
+                if (underwater)
+                {
+                    const string warning = "WATER";
+                    Text((Width - MeasureText(warning, 2)) / 2, Margin + 2, warning, 2, White);
+                }
+
+                bool low = air < 0.25f && Mathf.FloorToInt(clockSeconds * 4f) % 2 == 0;
+                Text(x0 - 22, Margin + 22, "AIR", 1, low ? Red : White);
+                Box(x0, Margin + 22, barWidth, 7, Shadow);
+                Box(x0 + 1, Margin + 23, Mathf.RoundToInt((barWidth - 2) * Mathf.Clamp01(air)), 5, low ? Red : White);
             }
 
             _osd.SetPixels32(_pixels);

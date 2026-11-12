@@ -59,7 +59,8 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   script por lote em `lotes/` (`basicos`, `estofados`, `loja`, `detalhes`, `transito`).
 - `Docs/` — `plano-coop.md` (estado atual e plano do jogo, arquitetura de rede; ler antes de
   mexer em rede ou em geração de fase), `historico.md` (registro cronológico de cada rodada),
-  `level1-mostruario.md` (projeto do Level 1 e do Capitão), `modelos-blender.md` (modelos do
+  `level1-mostruario.md` (projeto do Level 1 e do Capitão), `level2-piscinas.md` (projeto do Level 2, as
+  Poolrooms, e as texturas a gerar; prompts em `level2-prompts.md`), `modelos-blender.md` (modelos do
   Blender ao Unity e como dividir lotes entre agentes). Os outros são referência de design.
 
 ## Teclas
@@ -82,6 +83,11 @@ substituem; o `Level0Setup.EnsureTexture` usa o arquivo de lá no lugar da pintu
 
 A cena `Scenes/Level1_Test.unity` é **gerada** por `Level1Setup` (menu BackRooms > Montar Level 1
 (teste)), com o mesmo montador do Level 0 (`Level0Setup.SceneOptions`).
+
+A cena `Scenes/Level2_Test.unity` (As Piscinas) e os materiais e texturas de `Art/Level2` são
+**gerados** por `Level2Setup` (menu BackRooms > Montar Level 2 (teste)). As texturas de azulejo,
+pastilha e borda vêm de `Art/Fontes/Level2` (recortadas da Folha A do Higgsfield); a ondulação da
+água e o vidro das claraboias são pintados em código até as folhas B, C e D chegarem.
 
 Os modelos em `Art/Level1/Modelos` (`.fbx` e `materiais_<lote>.json`) e as texturas em
 `Art/Level1/Texturas` são **gerados** pelos lotes de `Tools/Blender`; os materiais em
@@ -180,7 +186,8 @@ e rode `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`.
 ## Como testar
 
 No editor, pelo menu **BackRooms**: Abrir Level 0, Abrir Level 1 (teste), Testar Level 0
-(fumaça), Testar Level 1 (Play), Conferir Level 1, Conferir colisores do Level 0, Gerar mapa 2D,
+(fumaça), Testar Level 1 (Play), Conferir Level 1, Abrir Level 2 (teste), Testar Level 2 (Play),
+Conferir Level 2, Conferir colisores do Level 0, Gerar mapa 2D,
 Capturar prévia, Capturar prévia do Capitão, Móveis do Level 1 > Atualizar e fotografar,
 Exportar sons da entidade (WAV em `Logs/Sons`, para ouvir e ajustar os sons sintetizados sem
 precisar jogar).
@@ -214,6 +221,12 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   `LevelSelectTest.BatchHostLevel1` + `BatchJoinFromLevel0` (o cliente tem de ser levado ao
   Level 1 e montar a mesma mobília). Restaura o progresso salvo; linha `[BackRooms] Teste do
   seletor de fase`.
+- `Level2Setup.BatchCheck` — recria a cena das Piscinas e confere 5 seeds (saída e sala inicial
+  secas, seco nunca encosta em fundo, poço só encosta em fundo, tudo sem poço alcançável a pé,
+  uma escada por desnível, mesma seed = mesma planta); fotos em `Logs/Previews/level2_*.png`.
+- `Level2PlayTest.BatchRun` — as Piscinas em Play: nasce no seco, anda o caminho a pé até a saída
+  pelas escadas, boia num poço, mergulha até afogar e voltar, e sai nadando para a área funda.
+- `Level0ColliderCheck.BatchRunLevel2` — colisores contra a malha visível na cena das Piscinas.
 - `Level1Models.BatchUpdateAndCapture` — cria os materiais dos lotes, reimporta os modelos,
   escreve as medidas no log e salva fotos em `Logs/Previews/moveis_*.png` (todos, ou só os de
   `-moveis Nome1,Nome2`), além da vitrine de jantar, da loja e da sala dos sofás.
@@ -226,7 +239,9 @@ Não passar `-quit`: os métodos encerram o editor sozinhos. Depois de rodar em 
 pode abrir numa cena vazia; o `Level0AutoUpdate` troca para a cena do jogo.
 
 Mudança em jogador, item, fase ou rede só está pronta depois do teste de fumaça sozinho; mudança
-em rede, depois do teste com dois editores; mudança no Level 1 (ou no `LevelBuilder`, no gerador
+em rede, depois do teste com dois editores; mudança no Level 2 (ou na água, no jogador, no
+`LevelBuilder` ou no gerador), depois de `Level2Setup.BatchCheck`, `Level2PlayTest.BatchRun` e
+`Level0ColliderCheck.BatchRunLevel2`; mudança no Level 1 (ou no `LevelBuilder`, no gerador
 ou nos modelos), depois de `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`. Diga no resumo o
 que foi testado por máquina e o que não foi testado à mão.
 

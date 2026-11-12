@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BackRooms.Net;
+using BackRooms.Player;
 using BackRooms.World;
 using Unity.Netcode;
 using UnityEditor;
@@ -177,9 +178,86 @@ namespace BackRooms.EditorTools
 
                 case 6:
                     if (!Playing(session)) { if (StageTimedOut(40)) Finish(false, "não começou a partida no Level 0 depois de voltar"); return; }
+                    if (PoolWater.Current != null) { Finish(false, "o Level 0 tem água"); return; }
                     Notes.Add("voltou ao Level 0 e hospedou de novo");
+                    session.Leave();
+                    Next();
+                    break;
+
+                // Ida e volta às Piscinas: a água não pode sobrar no Level 0.
+                case 7:
+                    if (!InMenu(session, 0)) { if (StageTimedOut(15)) Finish(false, "não voltou ao menu no Level 0"); return; }
+                    if (!session.SwitchLevel(2)) { Finish(false, "não trocou para o Level 2"); return; }
+                    _previous = session;
+                    Next();
+                    break;
+
+                case 8:
+                    if (!Switched(session, 2)) { if (StageTimedOut(30)) Finish(false, "a troca para o Level 2 não terminou"); return; }
+                    if (!OneSession(out string pools)) { Finish(false, "duas sessões no Level 2: " + pools); return; }
+                    session.Host(localOnly: true);
+                    Next();
+                    break;
+
+                case 9:
+                {
+                    if (!Playing(session)) { if (StageTimedOut(40)) Finish(false, "não começou a partida no Level 2"); return; }
+                    if (PoolWater.Current == null) { Finish(false, "o Level 2 começou sem água"); return; }
+
+                    var builder = Object.FindFirstObjectByType<LevelBuilder>();
+                    LevelData d = builder.Data;
+                    bool placed = false;
+                    for (int z = 0; z < d.Height && !placed; z++)
+                        for (int x = 0; x < d.Width && !placed; x++)
+                        {
+                            if (d.Depth[x, z] != PoolDepth.Well) continue;
+                            Vector3 center = builder.CellCenter(x, z);
+                            PlayerNetwork.Local.controller.Teleport(new Vector3(center.x, PoolWater.Current.SurfaceY - 1f, center.z), 0f);
+                            placed = true;
+                        }
+                    if (!placed) { Finish(false, "o Level 2 não tem poço nesta seed"); return; }
+                    Next();
+                    break;
+                }
+
+                case 10:
+                    if (!StageTimedOut(2.5)) return;
+                    if (!PlayerNetwork.Local.controller.IsSwimming) { Finish(false, "no poço do Level 2 o jogador não nadou"); return; }
+                    Notes.Add("foi ao Level 2 e nadou num poço");
+                    session.Leave();
+                    Next();
+                    break;
+
+                case 11:
+                    if (!InMenu(session, 2)) { if (StageTimedOut(15)) Finish(false, "não voltou ao menu no Level 2"); return; }
+                    if (!session.SwitchLevel(0)) { Finish(false, "não trocou do Level 2 para o Level 0"); return; }
+                    _previous = session;
+                    Next();
+                    break;
+
+                case 12:
+                    if (!Switched(session, 0)) { if (StageTimedOut(30)) Finish(false, "a volta do Level 2 para o Level 0 não terminou"); return; }
+                    session.Host(localOnly: true);
+                    Next();
+                    break;
+
+                case 13:
+                {
+                    if (!Playing(session)) { if (StageTimedOut(40)) Finish(false, "não começou a partida no Level 0 depois das Piscinas"); return; }
+                    if (!StageTimedOut(1.5)) return;
+
+                    PlayerController controller = PlayerNetwork.Local.controller;
+                    var leftovers = new List<string>();
+                    if (PoolWater.Current != null) leftovers.Add("água");
+                    if (controller.Submersion != 0f || controller.IsSwimming || controller.IsUnderwater) leftovers.Add("jogador ainda na água");
+                    foreach (UnityEngine.Rendering.Volume volume in Object.FindObjectsByType<UnityEngine.Rendering.Volume>(FindObjectsSortMode.None))
+                        if (volume.name == "DebaixoDagua" || volume.name == "LuzRebatida") leftovers.Add("volume " + volume.name);
+                    if (leftovers.Count > 0) { Finish(false, "voltou ao Level 0 com restos das Piscinas: " + string.Join(", ", leftovers)); return; }
+
+                    Notes.Add("voltou ao Level 0 sem nada das Piscinas (água, nado, volumes)");
                     Finish(true, string.Join("; ", Notes));
                     break;
+                }
             }
         }
 

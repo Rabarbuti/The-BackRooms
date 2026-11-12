@@ -142,6 +142,9 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
   inimigo (`CaptainBody`); já dá para escolher a fase no menu, mas sair por uma porta ainda não
   leva à seguinte, e o objetivo de cada fase (seção 2.3) ainda não existe: hoje chegar à saída
   basta para zerar.
+  O terceiro, **As Piscinas** (Poolrooms), está projetado em `level2-piscinas.md` e tem versão de
+  teste jogável (`Scenes/Level2_Test.unity`): profundidades, escadas, água, nado e fôlego; ainda
+  sem maré, ralo, objetivo e som.
 
 ---
 

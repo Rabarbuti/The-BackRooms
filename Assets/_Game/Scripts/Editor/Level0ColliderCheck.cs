@@ -25,27 +25,38 @@ namespace BackRooms.EditorTools
         public static void RunFromMenu()
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
-            int bad = Run(new[] { 1998, 7, 21, 404 }, 4000);
+            int bad = Run(ScenePath, new[] { 1998, 7, 21, 404 }, 4000);
             EditorUtility.DisplayDialog("Level 0", bad == 0 ? "Colisores e malha batem em todos os raios testados." : $"{bad} raios bateram em lugares diferentes. Veja o Console.", "OK");
         }
 
         public static void BatchRun()
         {
+            BatchRunScene(ScenePath);
+        }
+
+        /// <summary>O mesmo para o Level 2 de teste (As Piscinas): pisos em várias alturas, escadas, bordas.</summary>
+        public static void BatchRunLevel2()
+        {
+            BatchRunScene(Level2Setup.ScenePath);
+        }
+
+        static void BatchRunScene(string scenePath)
+        {
             try
             {
-                int bad = Run(new[] { 1998, 7, 21, 404, 1337, 90210, 5, 77777 }, 6000);
-                EditorApplication.Exit(bad == 0 ? 0 : 3);
+                int bad = Run(scenePath, new[] { 1998, 7, 21, 404, 1337, 90210, 5, 77777 }, 6000);
+                Level1Setup.ExitWithLevel0Open(bad == 0 ? 0 : 3);
             }
             catch (Exception e)
             {
                 Debug.LogException(e);
-                EditorApplication.Exit(1);
+                Level1Setup.ExitWithLevel0Open(1);
             }
         }
 
-        static int Run(int[] seeds, int raysPerSeed)
+        static int Run(string scenePath, int[] seeds, int raysPerSeed)
         {
-            EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
             var builder = UnityEngine.Object.FindFirstObjectByType<LevelBuilder>();
             if (builder == null)
             {
@@ -71,6 +82,8 @@ namespace BackRooms.EditorTools
                     if (filter.name == "Rodapes" || filter.name == "Porta" || filter.name == "Placa") continue;
                     // A fumaca dos buracos aparece mas nao e solida, tambem por projeto.
                     if (filter.GetComponentInParent<PitSmoke>() != null) continue;
+                    // A água das Piscinas também: o jogador entra nela.
+                    if (filter.GetComponent<PoolWater>() != null) continue;
 
                     var go = new GameObject("Visual_" + filter.name) { layer = VisualLayer };
                     go.transform.SetPositionAndRotation(filter.transform.position, filter.transform.rotation);
@@ -133,7 +146,7 @@ namespace BackRooms.EditorTools
             }
 
             builder.Clear();
-            EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
             return total;
         }
 

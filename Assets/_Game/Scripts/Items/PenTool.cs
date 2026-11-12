@@ -154,6 +154,9 @@ namespace BackRooms.Items
 
             // Só se risca em coisa parada: outro jogador (ou qualquer corpo móvel) na frente
             // interrompe o traço em vez de receber tinta.
+            // Nas Piscinas, a tinta não pega debaixo d'água.
+            if (found && BackRooms.World.PoolWater.Current != null && hit.point.y < BackRooms.World.PoolWater.Current.SurfaceY) return false;
+
             return found && !(hit.collider is CharacterController) && hit.collider.attachedRigidbody == null;
         }
 

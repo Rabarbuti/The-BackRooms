@@ -33,7 +33,9 @@ namespace BackRooms.EditorTools
     /// A primeira passada é medida à parte: é nela que cada luminária calcula a própria sombra,
     /// ao entrar no alcance pela primeira vez. As outras já encontram as sombras prontas.
     ///
-    /// Menu BackRooms > Medir desempenho do Level 0. Resultado em Logs/Desempenho.
+    /// Menu BackRooms > Medir desempenho do Level 0 (ou do Level 2). Resultado em Logs/Desempenho.
+    /// Linha de comando: -benchScene &lt;caminho da cena&gt; mede outra fase; nas Piscinas a
+    /// caminhada segue o caminho a pé e as configurações testam o que é próprio delas.
     /// </summary>
     public static class Level0Benchmark
     {
@@ -41,6 +43,7 @@ namespace BackRooms.EditorTools
         const string RunKey = "BackRooms.Benchmark.Run";
         const string BatchKey = "BackRooms.Benchmark.Batch";
         const string FolderKey = "BackRooms.Benchmark.Folder";
+        const string SceneKey = "BackRooms.Benchmark.Scene";
 
         const int Width = 1920;
         const int Height = 1080;
@@ -100,18 +103,29 @@ namespace BackRooms.EditorTools
         public static void RunFromMenu()
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
-            Start(DefaultFolder(), false);
+            Start(DefaultFolder(), false, ScenePath);
         }
 
-        /// <summary>Uso em linha de comando. Aceita -benchOut &lt;pasta&gt;.</summary>
+        [MenuItem("BackRooms/Medir desempenho do Level 2")]
+        public static void RunLevel2FromMenu()
+        {
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            Start(DefaultFolder(), false, Level2Setup.ScenePath);
+        }
+
+        /// <summary>Uso em linha de comando. Aceita -benchOut &lt;pasta&gt; e -benchScene &lt;cena&gt;.</summary>
         public static void BatchRun()
         {
             string folder = DefaultFolder();
+            string scene = ScenePath;
             string[] args = Environment.GetCommandLineArgs();
             for (int i = 0; i < args.Length - 1; i++)
+            {
                 if (args[i] == "-benchOut") folder = args[i + 1];
+                if (args[i] == "-benchScene") scene = args[i + 1];
+            }
 
-            Start(folder, true);
+            Start(folder, true, scene);
         }
 
         static string DefaultFolder()
@@ -119,9 +133,10 @@ namespace BackRooms.EditorTools
             return Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Logs", "Desempenho"));
         }
 
-        static void Start(string folder, bool batch)
+        static void Start(string folder, bool batch, string scene)
         {
-            EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            EditorSceneManager.OpenScene(scene, OpenSceneMode.Single);
+            SessionState.SetString(SceneKey, scene);
             SessionState.SetBool(RunKey, true);
             SessionState.SetBool(BatchKey, batch);
             SessionState.SetString(FolderKey, folder);
@@ -237,7 +252,7 @@ namespace BackRooms.EditorTools
 
             _decals = level.GetComponentsInChildren<DecalProjector>();
             _walk = Walk(level);
-            _setups = Setups();
+            _setups = level.Data.HasPools ? PoolSetups(level) : Setups();
         }
 
         // Um punhado de quadros por passada do editor, até acabar a configuração da vez.
@@ -423,6 +438,96 @@ namespace BackRooms.EditorTools
             return setups;
         }
 
+        // As Piscinas (Level 2): o que é próprio delas — a lâmina d'água, mais claraboias com
+        // alcance e força maiores que no Level 0, a luz rebatida — e as mesmas bases do Level 0.
+        static List<Setup> PoolSetups(LevelBuilder level)
+        {
+            var setups = new List<Setup>
+            {
+                new Setup { Name = "0 Primeira passada (sombras sendo calculadas)", Note = "Cada claraboia calcula a sombra ao entrar no alcance. Mede os engasgos, não entra na comparação." },
+                new Setup { Name = "1 Atual, sem lanterna", Note = "Como o Level 2 está hoje, com as sombras já prontas." },
+                new Setup { Name = "2 Atual, com lanterna", Torch = true, Note = "Base de comparação." }
+            };
+
+            Transform water = level.transform.Find("Agua");
+            setups.Add(new Setup
+            {
+                Name = "3 Sem a lamina d'agua",
+                Torch = true,
+                Note = "A lâmina transparente do mapa inteiro escondida.",
+                Apply = () =>
+                {
+                    if (water != null) water.gameObject.SetActive(false);
+                    return () => { if (water != null) water.gameObject.SetActive(true); };
+                }
+            });
+
+            setups.Add(new Setup
+            {
+                Name = "4 Claraboias com alcance e forca do Level 0",
+                Torch = true,
+                Note = "15 m e 2300 cd em vez de 18 m e 3200 cd: cada pixel recebe menos luzes.",
+                Apply = () =>
+                {
+                    var range = new float[Lamps.Count];
+                    var intensity = new float[Lamps.Count];
+                    for (int i = 0; i < Lamps.Count; i++)
+                    {
+                        range[i] = Lamps[i].range; intensity[i] = Lamps[i].intensity;
+                        Lamps[i].range = 15f; Lamps[i].intensity = 2300f;
+                    }
+                    return () => { for (int i = 0; i < Lamps.Count; i++) { Lamps[i].range = range[i]; Lamps[i].intensity = intensity[i]; } };
+                }
+            });
+
+            setups.Add(new Setup
+            {
+                Name = "5 Claraboias sem sombra",
+                Torch = true,
+                Note = "Mede o custo das sombras das claraboias (a luz vaza pelas paredes).",
+                Apply = () =>
+                {
+                    var shadows = new LightShadows[Lamps.Count];
+                    for (int i = 0; i < Lamps.Count; i++) { shadows[i] = Lamps[i].shadows; Lamps[i].shadows = LightShadows.None; }
+                    return () => { for (int i = 0; i < Lamps.Count; i++) Lamps[i].shadows = shadows[i]; };
+                }
+            });
+
+            setups.Add(new Setup
+            {
+                Name = "6 Claraboias ate 20 m (corte do HDRP)",
+                Torch = true,
+                Note = "O HDRP deixa de contar as que passam de 20 m.",
+                Apply = () => Fade(NearRadius, null, null)
+            });
+
+            setups.Add(new Setup
+            {
+                Name = "7 Metade das claraboias",
+                Torch = true,
+                Note = "Uma sim, uma não: perto do que o Level 0 tem por área.",
+                Apply = () =>
+                {
+                    for (int i = 1; i < Lamps.Count; i += 2) Lamps[i].enabled = false;
+                    return () => { foreach (Light lamp in Lamps) lamp.enabled = true; };
+                }
+            });
+
+            setups.Add(new Setup
+            {
+                Name = "8 So a lanterna",
+                Torch = true,
+                Note = "Nenhuma claraboia acesa.",
+                Apply = () =>
+                {
+                    foreach (Light lamp in Lamps) lamp.enabled = false;
+                    return () => { foreach (Light lamp in Lamps) lamp.enabled = true; };
+                }
+            });
+
+            return setups;
+        }
+
         // Muda o alcance, a participação na névoa e o alcance das marcas; devolve o que desfaz.
         static Action Fade(float? distance, bool? volumetric, float? decalDistance)
         {
@@ -477,9 +582,11 @@ namespace BackRooms.EditorTools
             bool first = true;
             int frame = 0;
 
-            for (int i = 0; i + 1 < data.SafePathCells.Count; i++)
+            // Nas Piscinas, o caminho a pé (sem entrar em poço).
+            List<int> path = data.HasPools ? LevelGenerator.FootPath(data) : data.SafePathCells;
+            for (int i = 0; i + 1 < path.Count; i++)
             {
-                int a = data.SafePathCells[i], b = data.SafePathCells[i + 1];
+                int a = path[i], b = path[i + 1];
                 Vector3 from = builder.CellCenter(a % data.Width, a / data.Width);
                 Vector3 to = builder.CellCenter(b % data.Width, b / data.Width);
                 Vector3 direction = (to - from).normalized;
@@ -539,7 +646,7 @@ namespace BackRooms.EditorTools
             double baseMean = Mean(baseline.Frames);
             var text = new StringBuilder();
 
-            text.AppendLine("Level 0 - custo de desenhar um quadro, por configuracao (medido dentro do Play)");
+            text.AppendLine(System.IO.Path.GetFileNameWithoutExtension(SessionState.GetString(SceneKey, ScenePath)) + " - custo de desenhar um quadro, por configuracao (medido dentro do Play)");
             text.AppendLine($"Placa: {SystemInfo.graphicsDeviceName} ({SystemInfo.graphicsMemorySize} MB) | Processador: {SystemInfo.processorType}");
             text.AppendLine($"Perfil grafico: {QualitySettings.names[QualitySettings.GetQualityLevel()]} | {Width} x {Height} | caminhada de {_walk.Count} quadros, {StepMeters} m por quadro");
             text.AppendLine($"Na fase: {Lamps.Count} luminarias acesas, {_decals.Length} marcas");
@@ -583,8 +690,35 @@ namespace BackRooms.EditorTools
             if (_pixel != null) UnityEngine.Object.Destroy(_pixel);
             if (_photo != null) UnityEngine.Object.Destroy(_photo);
 
-            if (SessionState.GetBool(BatchKey, false)) EditorApplication.Exit(code);
-            else EditorApplication.ExitPlaymode();
+            // Em Play o editor guarda a cena aberta antes do Play: quem mediu o Level 2 deixaria
+            // o editor nele. Sai do Play e fecha com o Level 0 aberto.
+            if (SessionState.GetBool(BatchKey, false))
+            {
+                SessionState.SetInt(ExitCodeKey, code);
+                EditorApplication.playModeStateChanged -= ExitAfterPlay;
+                EditorApplication.playModeStateChanged += ExitAfterPlay;
+            }
+            EditorApplication.ExitPlaymode();
+        }
+
+        const string ExitCodeKey = "BackRooms.Benchmark.ExitCode";
+
+        [InitializeOnLoadMethod]
+        static void HookExit()
+        {
+            if (SessionState.GetInt(ExitCodeKey, -1) < 0) return;
+            EditorApplication.playModeStateChanged -= ExitAfterPlay;
+            EditorApplication.playModeStateChanged += ExitAfterPlay;
+            if (!EditorApplication.isPlayingOrWillChangePlaymode) ExitAfterPlay(PlayModeStateChange.EnteredEditMode);
+        }
+
+        static void ExitAfterPlay(PlayModeStateChange change)
+        {
+            if (change != PlayModeStateChange.EnteredEditMode) return;
+            EditorApplication.playModeStateChanged -= ExitAfterPlay;
+            int code = SessionState.GetInt(ExitCodeKey, 1);
+            SessionState.EraseInt(ExitCodeKey);
+            Level1Setup.ExitWithLevel0Open(code);
         }
 
         static double Mean(List<double> values)

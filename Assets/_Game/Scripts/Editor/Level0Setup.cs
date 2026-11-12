@@ -85,6 +85,8 @@ namespace BackRooms.EditorTools
             public bool alcoves = true;
             public bool entity = true;
             public bool paintedArrows = true;
+            /// <summary>Piscinas (Level 2): profundidades, escadas e água.</summary>
+            public bool pools;
             /// <summary>Chamado com o objeto do nível antes de salvar (o Level 1 põe a camada de móveis).</summary>
             public Action<GameObject> decorate;
         }
@@ -258,6 +260,7 @@ namespace BackRooms.EditorTools
             builder.pitsEnabled = options.pits;
             builder.alcovesEnabled = options.alcoves;
             builder.paintedArrows = options.paintedArrows;
+            builder.poolsEnabled = options.pools;
             builder.wallMaterial = wall;
             builder.floorMaterial = floor;
             builder.ceilingMaterial = ceiling;
