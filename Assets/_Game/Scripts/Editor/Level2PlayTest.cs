@@ -5,6 +5,8 @@ using BackRooms.World;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.Rendering.HighDefinition;
 
 namespace BackRooms.EditorTools
@@ -12,11 +14,13 @@ namespace BackRooms.EditorTools
     /// <summary>
     /// Teste em Play do Level 2 de teste (Scenes/Level2_Test.unity, As Piscinas): hospeda,
     /// confere que o jogador nasce no seco da sala inicial, anda o caminho a pé até a saída
-    /// (descendo e subindo escadas, passando pela água), depois cai num poço e confere que boia
-    /// com a cabeça fora, mergulha até acabar o fôlego (afoga e volta à sala inicial), nada para
-    /// fora do poço até uma área funda vizinha e fica de pé nela e, por fim, passa por um
-    /// anoitecer encurtado: a luz das claraboias e janelas desce sem voltar a subir até zero, as
-    /// lâmpadas submersas continuam acesas e a luz volta ao valor do dia.
+    /// (descendo e subindo escadas, passando pela água), depois entra num poço: segurando Espaço
+    /// (teclado virtual), fica com a cabeça fora d'água sem perder fôlego; soltando, afunda sozinho
+    /// até acabar o fôlego (encurtado), afoga e volta à sala inicial; de volta ao poço, debaixo
+    /// d'água, sobe segurando Espaço e nada até uma área funda vizinha e fica de pé nela; ali,
+    /// agachado, põe a cabeça debaixo d'água e o fôlego corre. Por fim, passa por um anoitecer
+    /// encurtado: a luz das claraboias e janelas desce sem voltar a subir até zero, as lâmpadas
+    /// submersas continuam acesas e a luz volta ao valor do dia.
     ///
     /// Linha de comando: -executeMethod BackRooms.EditorTools.Level2PlayTest.BatchRun (sai com 0
     /// se passou, 3 se falhou; o editor fecha com o Level 0 aberto). Menu: BackRooms > Testar
@@ -46,6 +50,13 @@ namespace BackRooms.EditorTools
         static Vector3 _lastPosition;
         static int _wellX, _wellZ, _deepX, _deepZ;
         static int _drownedBefore;
+        static Keyboard _keyboard;
+        static InputSettings.BackgroundBehavior _backgroundBefore;
+        static InputSettings.EditorInputBehaviorInPlayMode _editorInputBefore;
+        static float _sinkStart, _sinkLowest;
+        static bool _wentUnder;
+        static int _crouchStep;
+        const float HoldSeconds = 4f;
 
         [MenuItem("BackRooms/Testar Level 2 (Play)")]
         public static void RunFromMenu() { Run(false); }
@@ -131,11 +142,11 @@ namespace BackRooms.EditorTools
                     break;
 
                 case 4:
-                    Float();
+                    HoldSurface();
                     break;
 
                 case 5:
-                    Dive(dt);
+                    Sink();
                     break;
 
                 case 6:
@@ -147,6 +158,10 @@ namespace BackRooms.EditorTools
                     break;
 
                 case 8:
+                    CrouchInDeep();
+                    break;
+
+                case 9:
                     Dusk(session);
                     break;
             }
@@ -252,49 +267,91 @@ namespace BackRooms.EditorTools
 
             if (!found) { Finish(false, $"a seed {SessionState.GetInt(SeedKey, 1998)} não tem poço com área funda vizinha"); return; }
 
+            // Teclado virtual (como no teste de fumaça): Espaço segurado de verdade, pela ação do jogo.
+            // Sem as duas configurações o Input System descarta os eventos quando a janela não tem foco.
+            _backgroundBefore = InputSystem.settings.backgroundBehavior;
+            _editorInputBefore = InputSystem.settings.editorInputBehaviorInPlayMode;
+            InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            _keyboard = InputSystem.AddDevice<Keyboard>();
+            Press(Key.Space);
+            _controller.airSeconds = 3f;
+            _controller.RefillAir();
             Vector3 center = _level.CellCenter(_wellX, _wellZ);
-            _controller.Teleport(new Vector3(center.x, PoolWater.Current.SurfaceY - 1f, center.z), 0f);
+            _controller.Teleport(new Vector3(center.x, PoolWater.Current.SurfaceY - _controller.floatDepth, center.z), 0f);
+            _wentUnder = false;
             Next();
         }
 
-        // Boiando: sem chão, os pés uns 1,4 m abaixo da superfície e a cabeça fora d'água.
-        static void Float()
+        static void Press(params Key[] keys)
         {
-            if (InStage < 2.5) return;
+            if (_keyboard != null) InputSystem.QueueStateEvent(_keyboard, new KeyboardState(keys));
+        }
+
+        static void ReleaseKeyboard()
+        {
+            if (_keyboard == null) return;
+            InputSystem.RemoveDevice(_keyboard);
+            _keyboard = null;
+            InputSystem.settings.backgroundBehavior = _backgroundBefore;
+            InputSystem.settings.editorInputBehaviorInPlayMode = _editorInputBefore;
+        }
+
+        // Segurando Espaço: nada, os pés uns 1,4 m abaixo da superfície, a cabeça fora d'água e o
+        // fôlego (encurtado para 3 s) cheio por HoldSeconds (depois de 1 s para subir à tona).
+        static void HoldSurface()
+        {
+            if (InStage < 1.0) return;
 
             float surface = PoolWater.Current.SurfaceY;
             float feet = _local.transform.position.y;
-            bool floating = _controller.IsSwimming && Mathf.Abs(feet - (surface - _controller.floatDepth)) < 0.3f && !_controller.IsUnderwater;
-            if (!floating)
+            if (!_controller.IsSwimming || _controller.IsUnderwater || _controller.Air01 < 0.999f)
             {
-                Finish(false, $"no poço não boiou: nadando={_controller.IsSwimming}, pés a {feet:F2} m, cabeça debaixo d'água={_controller.IsUnderwater}");
+                Finish(false, $"no poço, segurando Espaço, não ficou com a cabeça fora: nadando={_controller.IsSwimming}, pés a {feet - surface:F2} m da superfície, " +
+                              $"cabeça debaixo d'água={_controller.IsUnderwater}, fôlego={_controller.Air01:F2} ({InStage:F1} s)");
+                return;
+            }
+            if (InStage < 1.0 + HoldSeconds) return;
+
+            if (Mathf.Abs(feet - (surface - _controller.floatDepth)) > 0.3f)
+            {
+                Finish(false, $"segurando Espaço no poço os pés ficaram a {feet - surface:F2} m da superfície (esperado {-_controller.floatDepth:F2})");
                 return;
             }
 
-            Notes.Add($"boiou no poço com os pés a {feet - surface:F2} m e a cabeça fora d'água");
+            Notes.Add($"segurando Espaço, ficou {HoldSeconds:F0} s à tona no poço (pés a {feet - surface:F2} m, cabeça fora, fôlego cheio)");
+            Press();
             _drownedBefore = _controller.Drownings;
-            _controller.airSeconds = 3f;
-            _controller.RefillAir();
+            _sinkStart = _sinkLowest = feet;
             Next();
         }
 
-        // Mergulha (empurrando para baixo) até o fôlego acabar e ele se afogar.
-        static void Dive(float dt)
+        // Sem tecla: afunda sozinho, põe a cabeça debaixo d'água e se afoga quando o fôlego acaba.
+        static void Sink()
         {
             if (_controller.Drownings > _drownedBefore)
             {
-                Notes.Add($"afogou com {InStage:F1} s de mergulho (fôlego de {_controller.airSeconds:F0} s)");
+                float sank = _sinkStart - _sinkLowest;
+                if (!_wentUnder || sank < 1f)
+                {
+                    Finish(false, $"afogou sem ter afundado: desceu {sank:F2} m, cabeça debaixo d'água antes={_wentUnder}");
+                    return;
+                }
+                Notes.Add($"sem tecla afundou sozinho ({sank:F1} m em {InStage:F1} s, {sank / Mathf.Max(0.1f, (float)InStage):F2} m/s) e afogou (fôlego de {_controller.airSeconds:F0} s)");
                 Next();
                 return;
             }
 
-            if (InStage > 12.0)
+            if (!_controller.IsReturning)
             {
-                Finish(false, $"mergulhou 12 s e não se afogou: debaixo d'água={_controller.IsUnderwater}, fôlego={_controller.Air01:F2}, pés a {_local.transform.position.y:F2} m");
-                return;
+                _sinkLowest = Mathf.Min(_sinkLowest, _local.transform.position.y);
+                if (_controller.IsUnderwater) _wentUnder = true;
             }
 
-            _body.Move(Vector3.down * 3f * dt);
+            if (InStage > 15.0)
+            {
+                Finish(false, $"sem tecla, 15 s no poço e não se afogou: desceu {_sinkStart - _sinkLowest:F2} m, debaixo d'água={_controller.IsUnderwater}, fôlego={_controller.Air01:F2}");
+            }
         }
 
         static void BackToStart()
@@ -313,13 +370,15 @@ namespace BackRooms.EditorTools
             _controller.airSeconds = 20f;
             _controller.RefillAir();
 
+            // De volta ao poço, 2 m abaixo da superfície: segurando Espaço, sobe e nada para fora.
             Vector3 center = _level.CellCenter(_wellX, _wellZ);
-            _controller.Teleport(new Vector3(center.x, PoolWater.Current.SurfaceY - _controller.floatDepth, center.z), 0f);
+            _controller.Teleport(new Vector3(center.x, PoolWater.Current.SurfaceY - _controller.floatDepth - 2f, center.z), 0f);
+            Press(Key.Space);
             _lastProgress = Now;
             Next();
         }
 
-        // Nada do poço para a área funda vizinha e tem de ficar de pé nela, fora do nado.
+        // Segurando Espaço, nada do poço para a área funda vizinha e tem de ficar de pé nela, fora do nado.
         static void SwimOut(float dt)
         {
             Vector3 position = _local.transform.position;
@@ -328,7 +387,9 @@ namespace BackRooms.EditorTools
 
             if (cell.x == _deepX && cell.y == _deepZ && !_controller.IsSwimming && _body.isGrounded && Mathf.Abs(position.y - goal.y) < 0.15f)
             {
-                Notes.Add($"saiu do poço nadando e ficou de pé na área funda (piso a {goal.y:F1} m, água no peito)");
+                Notes.Add($"debaixo d'água no poço, subiu segurando Espaço, saiu nadando e ficou de pé na área funda (piso a {goal.y:F1} m, água no peito) em {InStage:F1} s");
+                Press();
+                _crouchStep = 0;
                 Next();
                 return;
             }
@@ -339,8 +400,52 @@ namespace BackRooms.EditorTools
                 return;
             }
 
+            // Primeiro sobe (até a cabeça sair da água); depois anda para a funda, ainda com Espaço.
+            if (InStage < 1.0 || _controller.IsUnderwater && cell.x == _wellX && cell.y == _wellZ) return;
             Vector3 toGoal = Flat(goal - position);
             if (toGoal.magnitude > 0.2f) _body.Move(toGoal.normalized * 1.5f * dt);
+        }
+
+        // Na área funda (dá pé), agachar põe a cabeça debaixo d'água e o fôlego corre; de pé, volta.
+        static void CrouchInDeep()
+        {
+            switch (_crouchStep)
+            {
+                case 0:
+                    // De pé: a cabeça fora d'água. Agacha.
+                    if (InStage < 0.5) return;
+                    if (_controller.IsUnderwater) { Finish(false, "de pé na área funda a cabeça ficou debaixo d'água"); return; }
+                    _controller.RefillAir();
+                    Press(Key.LeftCtrl);
+                    _crouchStep = 1;
+                    _stageStart = Now;
+                    return;
+
+                case 1:
+                    // Agachado 2 s: cabeça debaixo d'água, sem nadar, fôlego descendo. Levanta.
+                    if (InStage < 2.0) return;
+                    if (!_controller.IsUnderwater || _controller.Air01 > 0.95f || _controller.IsSwimming)
+                    {
+                        Finish(false, $"agachado na área funda: cabeça debaixo d'água={_controller.IsUnderwater}, fôlego={_controller.Air01:F2}, nadando={_controller.IsSwimming}");
+                        return;
+                    }
+                    Notes.Add($"agachado na área funda a cabeça foi para debaixo d'água e o fôlego desceu a {_controller.Air01:P0} em {InStage:F1} s");
+                    Press();
+                    _crouchStep = 2;
+                    _stageStart = Now;
+                    return;
+
+                default:
+                    // De pé de novo: a cabeça sai da água.
+                    if (_controller.IsUnderwater)
+                    {
+                        if (InStage > 2.0) Finish(false, "levantou na área funda e a cabeça continuou debaixo d'água");
+                        return;
+                    }
+                    ReleaseKeyboard();
+                    Next();
+                    return;
+            }
         }
 
         // ---------------------------------------------------------------- Anoitecer
@@ -471,6 +576,7 @@ namespace BackRooms.EditorTools
             EditorApplication.update -= Tick;
             Application.logMessageReceived -= OnLog;
             SessionState.SetBool(ActiveKey, false);
+            ReleaseKeyboard();
 
             if (Errors.Count > 0)
             {

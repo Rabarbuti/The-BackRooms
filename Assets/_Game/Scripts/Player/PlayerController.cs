@@ -50,9 +50,14 @@ namespace BackRooms.Player
         public float swimSpeed = 0.45f;
         [Tooltip("Com mais água que isto acima dos pés, o jogador nada em vez de andar (m).")]
         public float swimDepth = 1.3f;
-        [Tooltip("Boiando, os pés ficam esta distância abaixo da superfície (m).")]
+        [Tooltip("Segurando Espaço, os pés ficam esta distância abaixo da superfície, com a cabeça fora d'água (m).")]
         public float floatDepth = 1.4f;
+        [Tooltip("Subindo com Espaço ou mergulhando com Ctrl/C (m/s).")]
         public float swimVerticalSpeed = 1.6f;
+        [Tooltip("Sem tecla, onde não dá pé o jogador afunda a esta velocidade (m/s).")]
+        public float sinkSpeed = 0.5f;
+        [Tooltip("Quanto a velocidade vertical na água muda por segundo (m/s²): a inércia do nado. Uma queda rápida a água freia três vezes mais forte.")]
+        public float swimAcceleration = 3f;
 
         [Header("Corpo (metros)")]
         public float standingHeight = 1.8f;
@@ -150,6 +155,9 @@ namespace BackRooms.Player
 
         /// <summary>Verdadeiro com a câmera (a cabeça) debaixo d'água.</summary>
         public bool IsUnderwater { get; private set; }
+
+        /// <summary>Há quanto tempo a cabeça está debaixo d'água sem voltar à tona (0 fora d'água).</summary>
+        public float UnderwaterSeconds { get; private set; }
 
         /// <summary>Fôlego restante debaixo d'água, de 0 a 1.</summary>
         public float Air01 => airSeconds <= 0f ? 1f : _air / airSeconds;
@@ -361,11 +369,16 @@ namespace BackRooms.Player
 
             if (IsSwimming)
             {
-                // Boia com a cabeça fora; Espaço sobe, agachar mergulha. Sem gravidade.
+                // Onde não dá pé: sem tecla, afunda devagar; segurando Espaço, sobe e fica com a
+                // cabeça fora d'água (os pés a floatDepth da superfície); agachar mergulha mais
+                // rápido. Quem está voltando ao início (afogado) só afunda. A velocidade muda aos
+                // poucos (inércia); uma queda rápida a água freia mais forte.
                 float floatY = water.SurfaceY - floatDepth;
-                if (!IsReturning && _crouch.IsPressed()) _verticalVelocity = -swimVerticalSpeed;
-                else if (!IsReturning && _jump.IsPressed() && transform.position.y < floatY) _verticalVelocity = swimVerticalSpeed;
-                else _verticalVelocity = Mathf.Clamp((floatY - transform.position.y) * 2f, -swimVerticalSpeed, swimVerticalSpeed);
+                float vertical = -sinkSpeed;
+                if (!IsReturning && _crouch.IsPressed()) vertical = -swimVerticalSpeed;
+                else if (!IsReturning && _jump.IsPressed()) vertical = Mathf.Clamp((floatY - transform.position.y) * 3f, -swimVerticalSpeed, swimVerticalSpeed);
+                float rate = Mathf.Abs(_verticalVelocity) > swimVerticalSpeed ? swimAcceleration * 3f : swimAcceleration;
+                _verticalVelocity = Mathf.MoveTowards(_verticalVelocity, vertical, rate * dt);
             }
             else if (grounded)
             {
@@ -463,12 +476,14 @@ namespace BackRooms.Player
             if (water == null)
             {
                 IsUnderwater = false;
+                UnderwaterSeconds = 0f;
                 _air = airSeconds;
                 return;
             }
 
             float eye = cameraPivot != null ? cameraPivot.position.y : transform.position.y + _eyeHeight;
             IsUnderwater = eye < water.SurfaceY - 0.05f;
+            UnderwaterSeconds = IsUnderwater ? UnderwaterSeconds + dt : 0f;
             water.LocalUnderwater = IsUnderwater && enabled;
 
             if (IsReturning) return;

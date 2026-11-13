@@ -45,6 +45,8 @@ namespace BackRooms.UI
 
         const int Width = 1280;
         const int Height = 720;
+        // A dica HOLD SPACE aparece nestes primeiros segundos de cada mergulho onde não dá pé.
+        const float SwimHintSeconds = 4f;
         const int Margin = 54;
 
         // Tamanhos de letra, em pontos da grade por ponto da fonte 5x7. Numa tela de 1080
@@ -211,7 +213,13 @@ namespace BackRooms.UI
             bool underwater = body != null && body.IsUnderwater;
             float air = body != null ? body.Air01 : 1f;
 
-            Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f, tape, prompt, footer, cover, underwater, air);
+            // Onde não dá pé (poço) e com a cabeça debaixo d'água: a tecla para subir, piscando,
+            // nos primeiros segundos de cada mergulho e de novo quando o fôlego está acabando.
+            string swimHint = null;
+            if (body != null && body.IsSwimming && underwater && !body.IsReturning && (body.UnderwaterSeconds < SwimHintSeconds || air < 0.35f))
+                swimHint = "HOLD SPACE";
+
+            Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f, tape, prompt, footer, cover, underwater, air, swimHint);
         }
 
         /// <summary>
@@ -219,11 +227,12 @@ namespace BackRooms.UI
         /// de prévia do editor, que roda fora do Play.
         /// <paramref name="prompt"/> é o aviso no meio da tela (até duas linhas, separadas por
         /// quebra de linha), <paramref name="footer"/> o do pé, e <paramref name="cover"/>,
-        /// quando informado, tapa a imagem com a tela preta e esse texto.
+        /// quando informado, tapa a imagem com a tela preta e esse texto. <paramref name="swimHint"/>
+        /// é a dica de tecla do nado, piscando abaixo da barra do fôlego.
         /// </summary>
         public void Draw(bool recording, float recordSeconds, float clockSeconds, float battery, bool lightOn, string tool = null,
                          bool noSignal = false, string tape = null, string prompt = null, string footer = null, string cover = null,
-                         bool underwater = false, float air = 1f)
+                         bool underwater = false, float air = 1f, string swimHint = null)
         {
             EnsureTexture();
 
@@ -251,12 +260,13 @@ namespace BackRooms.UI
             int bars = battery > 0.66f ? 3 : battery > 0.33f ? 2 : battery > 0.05f ? 1 : 0;
             int airStep = air < 0.999f ? Mathf.RoundToInt(Mathf.Clamp01(air) * 40f) : -1;
             bool airBlink = air < 0.25f && Mathf.FloorToInt(clockSeconds * 4f) % 2 == 0;
-            string state = $"{recording}|{blink}|{bars}|{battery < 0.15f}|{lightOn}|{tool}|{noSignal}|{tape}|{prompt}|{footer}|{cover}|{time}|{date}|{underwater}|{airStep}|{airBlink}";
+            string state = $"{recording}|{blink}|{bars}|{battery < 0.15f}|{lightOn}|{tool}|{noSignal}|{tape}|{prompt}|{footer}|{cover}|{time}|{date}|{underwater}|{airStep}|{airBlink}|{swimHint}";
 
             if (state != _drawn)
             {
                 _drawn = state;
-                DrawPanel(recording, clockSeconds, battery, lightOn, tool, noSignal, tape, prompt, footer, cover, time, date, underwater, air, airBlink);
+                DrawPanel(recording, clockSeconds, battery, lightOn, tool, noSignal, tape, prompt, footer, cover, time, date, underwater, air, airBlink,
+                          blink ? swimHint : null);
                 _osd.SetPixelData(_pixels, 0);
                 _osd.Apply(false);
             }
@@ -271,7 +281,7 @@ namespace BackRooms.UI
 
         void DrawPanel(bool recording, float clockSeconds, float battery, bool lightOn, string tool, bool noSignal,
                        string tape, string prompt, string footer, string cover, string time, string date,
-                       bool underwater, float air, bool airBlink)
+                       bool underwater, float air, bool airBlink, string swimHint)
         {
             // Sem sinal: o painel inteiro fica opaco e tapa a imagem do jogo.
             bool covered = noSignal || !string.IsNullOrEmpty(cover);
@@ -351,6 +361,10 @@ namespace BackRooms.UI
                 Text(x0 - MeasureText("AIR", Small) - 12, Margin + 40, "AIR", Small, tone);
                 Box(x0, Margin + 40, barWidth, 16, Shadow);
                 Box(x0 + 2, Margin + 42, Mathf.RoundToInt((barWidth - 4) * Mathf.Clamp01(air)), 12, tone);
+
+                // Logo abaixo, onde não dá pé: a tecla para subir (já chega piscando, 2 vezes por segundo).
+                if (!string.IsNullOrEmpty(swimHint))
+                    Text((Width - MeasureText(swimHint, Small)) / 2, Margin + 66, swimHint, Small, White);
             }
         }
 

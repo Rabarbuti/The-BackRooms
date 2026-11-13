@@ -24,10 +24,12 @@ Level 2 (teste)) com as etapas 1 a 7 da seção 8.1:
 - **Visual:** perfil de Volume próprio (`Settings/Level2_Volume.asset`); água `HDRP/Lit` transparente
   com refração e cáustica animada (`PoolWater`); texturas das folhas A, B, C e D (seção 10), com
   poucas manchas e marcações pintadas postas pela seed como decalques.
-- **Jogador:** anda mais devagar na água (85% na canela, 55% no peito, sem correr), nada no poço
-  (Espaço sobe, Ctrl/C mergulha), tem 20 s de fôlego submerso e, quando o fôlego acaba, se afoga e
-  volta ao início, como na queda no buraco. Debaixo d'água a imagem fica ciano.
-- **Filmadora:** `WATER` e a barra `AIR` com a cabeça debaixo d'água.
+- **Jogador:** anda mais devagar na água (85% na canela, 55% no peito, sem correr; agachado na
+  funda, a cabeça fica debaixo d'água); no poço, onde não dá pé, **afunda devagar sem tecla**, sobe e
+  fica à tona segurando Espaço e mergulha com Ctrl/C; tem 20 s de fôlego submerso e, quando o fôlego
+  acaba, se afoga e volta ao início, como na queda no buraco. Debaixo d'água a imagem fica ciano.
+- **Filmadora:** `WATER` e a barra `AIR` com a cabeça debaixo d'água; no poço, `HOLD SPACE` piscando
+  nos primeiros segundos de cada mergulho e com o fôlego no fim.
 - **Caneta:** não risca debaixo d'água.
 - **Desempenho** (seed 1998, 1920 x 1080, Quadro T2000): mediana de 37 ms por quadro sem lanterna e
   40 ms com, contra ~106 ms da primeira versão; 45 luzes com sombra de uma face em cache.
@@ -205,7 +207,7 @@ piscava.
 | **Seco** | +0,2 m | normal | patamares, deques, ilhas |
 | **Rasa** (canela) | −0,4 m | 85% | a maior parte da área molhada |
 | **Funda** (peito) | −1,2 m | 55%, não corre | raias, piscinas, canais |
-| **Poço** | −6 m | **nada**, cai devagar | fôlego (seção 4.2), escuro, o ralo |
+| **Poço** | −6 m | **nada**; sem tecla afunda devagar (0,5 m/s), segurando Espaço fica à tona | fôlego (seção 4.2), escuro, o ralo |
 
 **Escada ou borda.** Numa divisa aberta entre duas alturas, ou há escada (degraus de 20 x 30 cm, da
 largura do vão, e aí se anda nos dois sentidos) ou é uma **borda**: cai-se na água por ela, mas não
@@ -335,11 +337,21 @@ principal, sem uso, então salas, água, escadas, colunas e lâmpadas de cada se
 ### 4.2 Como se joga
 
 - **Lentidão e barulho** pela profundidade (seção 3.1). Nada quem tem mais de 1,3 m de água acima dos
-  pés (`swimDepth`; na área funda são 1,25 m, então lá se anda) e boia com os pés 1,4 m abaixo da
-  superfície (`floatDepth`), com os olhos 25 cm acima dela.
-- **Fôlego:** com a cabeça debaixo d'água o jogador tem 20 s. O painel da filmadora mostra
-  `AIR` e uma barra; nos últimos 5 s a imagem escurece. Acabou o fôlego = **afogado**, a mesma
-  regra da queda no buraco e da captura: NO SIGNAL e volta ao patamar inicial. Não há morte.
+  pés (`swimDepth`; na área funda são 1,25 m, então lá se anda; agachado ali, os olhos ficam 25 cm
+  debaixo d'água e o fôlego corre).
+- **Nado** (só no poço): a água não segura ninguém. Sem tecla, o jogador **afunda devagar**
+  (`sinkSpeed`, 0,5 m/s) até o fundo; **segurando Espaço** sobe (`swimVerticalSpeed`, 1,6 m/s) e fica
+  à tona com os pés 1,4 m abaixo da superfície (`floatDepth`) e os olhos 25 cm acima dela; Ctrl/C
+  mergulha a 1,6 m/s. A velocidade vertical muda aos poucos (`swimAcceleration`, 3 m/s²; uma queda
+  rápida a água freia três vezes mais forte). WASD nada na horizontal a 45% da caminhada. Sai-se
+  do poço segurando Espaço e nadando para uma célula funda vizinha (o piso dela fica 15 cm acima
+  dos pés de quem está à tona) ou pela escada do poço. Quem está se afogando só afunda. Nada disso
+  vai pela rede: o movimento é do dono e os outros veem o corpo subir e descer pela posição.
+- **Fôlego:** com a cabeça debaixo d'água o jogador tem 20 s; fora d'água volta inteiro em 3 s
+  (`airRefillSeconds`). O painel da filmadora mostra `AIR` e uma barra (vermelha piscando no último
+  quarto) e, onde não dá pé, `HOLD SPACE` piscando abaixo dela nos primeiros 4 s de cada mergulho e
+  de novo com o fôlego abaixo de 35%. Acabou o fôlego = **afogado**, a mesma regra da queda no buraco
+  e da captura: NO SIGNAL e volta ao patamar inicial. Não há morte.
 - **Filmadora molhada:** debaixo d'água a fita sofre — chuvisco forte, cor lavada, som abafado
   e o aviso `WATER`. Ao sair, a imagem demora uns segundos para limpar.
 - **A caneta não risca debaixo d'água.** Risca azulejo seco e molhado acima da linha d'água.
@@ -459,7 +471,9 @@ início). Até lá, a saída é a sala seca da seção 3.2.
 - **Montagem da cena** pelo `Level0Setup.SceneOptions`, com perfil de Volume próprio
   (`Level2Setup`), mais `LevelCatalog` (índice 2) e a lista de cenas da build.
 - **Conferência e fotos:** `Level2Setup.BatchCheck` (5 seeds), `Level2PlayTest.BatchRun` (em Play; no
-  fim, um anoitecer encurtado: a luz das claraboias e janelas desce sem voltar a subir até zero, as
+  poço, com um teclado virtual: segurando Espaço fica à tona sem perder fôlego, sem tecla afunda e se
+  afoga sozinho, debaixo d'água sobe e sai nadando para a funda; agachado na funda, a cabeça vai para
+  debaixo d'água e o fôlego corre; no fim, um anoitecer encurtado: a luz das claraboias e janelas desce sem voltar a subir até zero, as
   lâmpadas submersas ficam acesas e a luz volta à do dia), `Level2Preview.BatchCapture` (planta, salas e
   closes, `Logs/Previews/level2_*.png`) e `Level2Preview.BatchCloseups` (`-seed N`: só os closes do
   acabamento, como tijolo de vidro, janelão, poço redondo, teto de vidro, degrau na linha d'água,

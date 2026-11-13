@@ -276,7 +276,9 @@ namespace BackRooms.EditorTools
                     look.y = 0f;
                     if (look.sqrMagnitude < 1e-6f) look = Vector3.forward;
                     if (under != null) under.weight = underwater ? 1f : underBefore;
-                    if (camcorder != null) camcorder.Draw(true, 61.4f, 61.4f, 0.95f, false, underwater: underwater, air: underwater ? 0.6f : 1f);
+                    // Debaixo d'água, o painel como num mergulho no poço: WATER, a barra AIR e a dica de tecla.
+                    if (camcorder != null) camcorder.Draw(true, 61.4f, 61.4f, 0.95f, false, underwater: underwater, air: underwater ? 0.6f : 1f,
+                                                          swimHint: underwater ? "HOLD SPACE" : null);
                     rig.transform.SetPositionAndRotation(builder.transform.TransformPoint(foot), Quaternion.LookRotation(look.normalized, Vector3.up));
                     camera.transform.localRotation = Quaternion.Euler(pitch, 0f, 0f);
                     string file = $"level2_s{seed}_{name}.png";
