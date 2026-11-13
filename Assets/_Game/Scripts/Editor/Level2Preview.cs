@@ -205,7 +205,7 @@ namespace BackRooms.EditorTools
             {
                 LevelData plan = LevelGenerator.Generate(s, 16, 16, false, false, true);
                 var wells = new List<string>();
-                int glass = 0, window = 0, full = 0;
+                int glass = 0, window = 0, full = 0, archEdges = 0;
                 for (int z = 0; z < plan.Height; z++)
                     for (int x = 0; x < plan.Width; x++)
                     {
@@ -214,11 +214,16 @@ namespace BackRooms.EditorTools
                         if (plan.Sky[x, z] == PoolSky.Full) full++;
                         foreach (WallSide side in sides)
                         {
-                            if (plan.EdgeAt(x, z, side) == PoolEdge.GlassBlock) glass++;
-                            if (plan.EdgeAt(x, z, side) == PoolEdge.Window) window++;
+                            PoolEdge edge = plan.EdgeAt(x, z, side);
+                            if (edge == PoolEdge.GlassBlock) glass++;
+                            if (edge == PoolEdge.Window) window++;
+                            // Borda seca sem escada por baixo de arco ou vão (a capa não entra lá).
+                            if ((edge == PoolEdge.Arch || edge == PoolEdge.WideArch || edge == PoolEdge.Doorway) && plan.Depth[x, z] == PoolDepth.Dry &&
+                                !plan.StairAt(x, z, side, out _) && plan.Neighbor(x, z, side, out int nx, out int nz) && OpenCell(plan, nx, nz) &&
+                                plan.FloorHeight(nx, nz) < plan.FloorHeight(x, z) - 1e-3f) archEdges++;
                         }
                     }
-                scan.Add($"seed {s}: poço redondo {(wells.Count > 0 ? string.Join(" ", wells) : "nenhum")}, tijolo de vidro {glass}, janelão {window}, células Full {full}");
+                scan.Add($"seed {s}: poço redondo {(wells.Count > 0 ? string.Join(" ", wells) : "nenhum")}, tijolo de vidro {glass}, janelão {window}, células Full {full}, borda sob arco {archEdges}");
             }
             Debug.Log("[BackRooms] Procura nas seeds:\n" + string.Join("\n", scan));
 
@@ -239,9 +244,11 @@ namespace BackRooms.EditorTools
             string ascii = PlanText(d);
             if (!string.IsNullOrEmpty(ascii)) Debug.Log($"[BackRooms] Planta das Piscinas, seed {seed}:\n{ascii}");
 
+            // -so borda: só os closes da capa da borda (e só essas fotos são apagadas antes).
+            bool edgesOnly = ArgumentAfter("-so") == "borda";
             string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Logs", "Previews"));
             Directory.CreateDirectory(folder);
-            foreach (string old in Directory.GetFiles(folder, $"level2_s{seed}_*.png")) File.Delete(old);
+            foreach (string old in Directory.GetFiles(folder, edgesOnly ? $"level2_s{seed}_borda_*.png" : $"level2_s{seed}_*.png")) File.Delete(old);
 
             GameObject rig = Level0Preview.CreateCameraRig(prefab, out Camera camera);
             bool asyncBefore = ShaderUtil.allowAsyncCompilation;
@@ -287,6 +294,25 @@ namespace BackRooms.EditorTools
 
                 (int x, int z) CellOf(Vector3 p) => (Mathf.Clamp(Mathf.FloorToInt(p.x / LevelBuilder.Cell), 0, d.Width - 1),
                                                      Mathf.Clamp(Mathf.FloorToInt(p.z / LevelBuilder.Cell), 0, d.Height - 1));
+
+                // Sem a filmadora: o chuvisco esconderia duas faces piscando no mesmo plano.
+                CustomPassVolume[] camcorderPasses = Object.FindObjectsByType<CustomPassVolume>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+                void CleanShot(string name, Vector3 foot, Vector3 look, float pitch)
+                {
+                    foreach (CustomPassVolume pass in camcorderPasses) pass.enabled = false;
+                    try { Shot(name, foot, look, pitch); }
+                    finally { foreach (CustomPassVolume pass in camcorderPasses) pass.enabled = true; }
+                }
+
+                // Capa da borda: as quatro orientações, os dois cantos, o encontro com a escada e a
+                // volta de uma piscina e de um canal.
+                ShootEdges(d, (name, foot, look, pitch) => CleanShot("borda_" + name, foot, look, pitch), PitchTo, missing);
+                if (edgesOnly)
+                {
+                    ok = names.Count > 0;
+                    return $"seed {seed}, só a borda: {names.Count} fotos em {folder}: {string.Join(", ", names)}" +
+                           (missing.Count > 0 ? $"; não há nesta seed: {string.Join(", ", missing)}" : "");
+                }
 
                 // Tijolo de vidro e janelão, de frente, a 3 m.
                 foreach (PoolEdge kind in new[] { PoolEdge.GlassBlock, PoolEdge.Window })
@@ -337,15 +363,7 @@ namespace BackRooms.EditorTools
                 if (!well) missing.Add("poço redondo");
 
                 // Degrau na linha d'água: o primeiro degrau de uma escada que desce do seco para a
-                // água, de frente (rente à água, de dentro dela) e de cima (do seco). Sem a filmadora:
-                // o chuvisco esconderia duas faces piscando no mesmo plano.
-                CustomPassVolume[] camcorderPasses = Object.FindObjectsByType<CustomPassVolume>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
-                void CleanShot(string name, Vector3 foot, Vector3 look, float pitch)
-                {
-                    foreach (CustomPassVolume pass in camcorderPasses) pass.enabled = false;
-                    try { Shot(name, foot, look, pitch); }
-                    finally { foreach (CustomPassVolume pass in camcorderPasses) pass.enabled = true; }
-                }
+                // água, de frente (rente à água, de dentro dela) e de cima (do seco), sem a filmadora.
                 bool waterStep = false;
                 float surface = water != null ? water.SurfaceY : 0f;
                 foreach (PoolStair stair in d.Stairs)
@@ -578,6 +596,213 @@ namespace BackRooms.EditorTools
             for (int i = 0; i + 1 < args.Length; i++)
                 if (args[i] == "-seed" && int.TryParse(args[i + 1], out int seed)) return seed;
             return fallback;
+        }
+
+        static string ArgumentAfter(string flag)
+        {
+            string[] args = Environment.GetCommandLineArgs();
+            for (int i = 0; i + 1 < args.Length; i++)
+                if (args[i] == flag) return args[i + 1];
+            return null;
+        }
+
+        // ---------------------------------------------------------------- Capa da borda
+
+        static bool OpenCell(LevelData d, int x, int z) => x >= 0 && z >= 0 && x < d.Width && z < d.Height && !d.IsSolid(x, z) && d.Room[x, z] >= 0;
+
+        /// <summary>
+        /// Aquele lado da célula leva capa? Piso seco que dá, sem parede, para um piso aberto mais
+        /// baixo (a mesma regra do LevelBuilder; a escada corta a capa só no meio do lado).
+        /// </summary>
+        static bool CopingSide(LevelData d, int x, int z, WallSide side)
+        {
+            if (!OpenCell(d, x, z) || d.Depth[x, z] != PoolDepth.Dry || d.EdgeAt(x, z, side) != PoolEdge.Open) return false;
+            if (!d.Neighbor(x, z, side, out int nx, out int nz) || !OpenCell(d, nx, nz)) return false;
+            return d.FloorHeight(nx, nz) < d.FloorHeight(x, z) - 1e-3f;
+        }
+
+        static Vector3 Along(WallSide side) => side == WallSide.South || side == WallSide.North ? Vector3.right : Vector3.forward;
+
+        /// <summary>
+        /// Closes da capa da borda (piso seco contra água mais baixa): uma reta de cada orientação,
+        /// um canto em ponta do seco (capa em dois lados da célula), um canto da piscina (a água faz
+        /// a ponta e o seco a contorna), o encontro com uma escada e a volta de uma piscina (Basin) e
+        /// de um canal. Fotos de cima, a 1,3 a 1,8 m da aresta.
+        /// </summary>
+        static void ShootEdges(LevelData d, Action<string, Vector3, Vector3, float> shot, Func<Vector3, Vector3, float> pitchTo, List<string> missing)
+        {
+            WallSide[] sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
+            string[] names = { "sul", "norte", "oeste", "leste" };
+            float dry = LevelData.DepthFloor(PoolDepth.Dry);
+            const float half = LevelBuilder.Cell * 0.5f;
+
+            // Retas: a célula com capa naquele lado, sem escada, de preferência com as duas vizinhas do
+            // mesmo lado também com capa (meio de uma reta).
+            for (int k = 0; k < 4; k++)
+            {
+                WallSide side = sides[k];
+                int bestX = -1, bestZ = -1, bestScore = -1;
+                for (int z = 0; z < d.Height; z++)
+                    for (int x = 0; x < d.Width; x++)
+                    {
+                        if (!CopingSide(d, x, z, side) || d.StairAt(x, z, side, out _)) continue;
+                        Vector3 along = Along(side);
+                        int score = 0;
+                        foreach (int s in new[] { -1, 1 })
+                        {
+                            int ax = x + Mathf.RoundToInt(along.x) * s, az = z + Mathf.RoundToInt(along.z) * s;
+                            if (OpenCell(d, ax, az) && CopingSide(d, ax, az, side) && d.EdgeAt(x, z, s < 0 ? (side == WallSide.South || side == WallSide.North ? WallSide.West : WallSide.South) : (side == WallSide.South || side == WallSide.North ? WallSide.East : WallSide.North)) == PoolEdge.Open) score++;
+                        }
+                        if (score > bestScore) { bestScore = score; bestX = x; bestZ = z; }
+                    }
+                if (bestX < 0) { missing.Add("borda virada para " + names[k]); continue; }
+                Vector3 dir = Dir(side);
+                Vector3 edge = CellCenter(d, bestX, bestZ) + dir * half;
+                Vector3 foot = edge - dir * 1.3f;
+                shot("reta_" + names[k], foot, dir, pitchTo(foot, edge));
+            }
+
+            // Ponta do seco: capa em dois lados vizinhos da mesma célula.
+            bool point = false;
+            for (int z = 0; z < d.Height && !point; z++)
+                for (int x = 0; x < d.Width && !point; x++)
+                    foreach (WallSide a in new[] { WallSide.South, WallSide.North })
+                    {
+                        foreach (WallSide b in new[] { WallSide.West, WallSide.East })
+                        {
+                            if (!CopingSide(d, x, z, a) || !CopingSide(d, x, z, b) || d.StairAt(x, z, a, out _) || d.StairAt(x, z, b, out _)) continue;
+                            Vector3 diagonal = Dir(a) + Dir(b);
+                            Vector3 corner = CellCenter(d, x, z) + diagonal * half;
+                            Vector3 foot = corner - diagonal.normalized * 1.6f;
+                            shot("canto_ponta_do_seco", foot, diagonal, pitchTo(foot, corner));
+                            point = true;
+                            break;
+                        }
+                        if (point) break;
+                    }
+            if (!point) missing.Add("canto em ponta do seco");
+
+            // Canto da piscina: a célula seca não tem capa naqueles dois lados, mas as duas vizinhas
+            // têm, viradas para a diagonal (mais baixa).
+            bool pool = false;
+            for (int z = 0; z < d.Height && !pool; z++)
+                for (int x = 0; x < d.Width && !pool; x++)
+                {
+                    if (!OpenCell(d, x, z) || d.Depth[x, z] != PoolDepth.Dry) continue;
+                    foreach (WallSide a in new[] { WallSide.South, WallSide.North })
+                    {
+                        foreach (WallSide b in new[] { WallSide.West, WallSide.East })
+                        {
+                            if (CopingSide(d, x, z, a) || CopingSide(d, x, z, b)) continue;
+                            if (d.EdgeAt(x, z, a) != PoolEdge.Open || d.EdgeAt(x, z, b) != PoolEdge.Open) continue;
+                            if (!d.Neighbor(x, z, b, out int bx, out int bz) || !CopingSide(d, bx, bz, a) || d.StairAt(bx, bz, a, out _)) continue;
+                            if (!d.Neighbor(x, z, a, out int ax, out int az) || !CopingSide(d, ax, az, b) || d.StairAt(ax, az, b, out _)) continue;
+                            Vector3 diagonal = Dir(a) + Dir(b);
+                            Vector3 corner = CellCenter(d, x, z) + diagonal * half;
+                            Vector3 foot = corner - diagonal.normalized * 1.8f;
+                            shot("canto_da_piscina", foot, diagonal, pitchTo(foot, corner));
+                            pool = true;
+                            break;
+                        }
+                        if (pool) break;
+                    }
+                }
+            if (!pool) missing.Add("canto da piscina");
+
+            // Encontro com a escada: o lado da escada que não ocupa a divisa inteira.
+            bool stairShot = false;
+            for (int z = 0; z < d.Height && !stairShot; z++)
+                for (int x = 0; x < d.Width && !stairShot; x++)
+                    foreach (WallSide side in sides)
+                    {
+                        if (!CopingSide(d, x, z, side) || !d.StairAt(x, z, side, out PoolStair stair) || stair.Width > LevelBuilder.Cell - 0.6f) continue;
+                        Vector3 dir = Dir(side), along = Along(side);
+                        Vector3 junction = CellCenter(d, x, z) + dir * half + along * (stair.Width * 0.5f);
+                        Vector3 foot = junction - dir * 1.5f + along * 0.9f;
+                        shot("escada", foot, junction - foot, pitchTo(foot, junction));
+                        stairShot = true;
+                        break;
+                    }
+            if (!stairShot) missing.Add("escada no meio de uma borda com capa");
+
+            // Fim da capa contra a parede: capa num lado e parede (com pilarete) no lado vizinho.
+            bool wallEnd = false;
+            for (int z = 0; z < d.Height && !wallEnd; z++)
+                for (int x = 0; x < d.Width && !wallEnd; x++)
+                    foreach (WallSide side in sides)
+                    {
+                        if (!CopingSide(d, x, z, side) || d.StairAt(x, z, side, out _)) continue;
+                        WallSide end = side == WallSide.South || side == WallSide.North ? WallSide.West : WallSide.South;
+                        if (d.EdgeAt(x, z, end) == PoolEdge.Open) continue;
+                        Vector3 dir = Dir(side), toEnd = Dir(end);
+                        Vector3 corner = CellCenter(d, x, z) + dir * half + toEnd * half;
+                        Vector3 foot = corner - dir * 1.4f - toEnd * 1.4f;
+                        shot("fim_na_parede", foot, corner - foot, pitchTo(foot, corner));
+                        wallEnd = true;
+                        break;
+                    }
+            if (!wallEnd) missing.Add("capa terminando numa parede");
+
+            // Borda por baixo de arco, arco largo ou vão reto (seco de um lado, mais baixo do outro,
+            // sem escada): o que fica na soleira. Conta quantas há.
+            int underArch = 0;
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                    foreach (WallSide side in sides)
+                    {
+                        if (!OpenCell(d, x, z) || d.Depth[x, z] != PoolDepth.Dry || d.StairAt(x, z, side, out _)) continue;
+                        PoolEdge edge = d.EdgeAt(x, z, side);
+                        if (edge != PoolEdge.Arch && edge != PoolEdge.WideArch && edge != PoolEdge.Doorway) continue;
+                        if (!d.Neighbor(x, z, side, out int nx, out int nz) || !OpenCell(d, nx, nz) || d.FloorHeight(nx, nz) >= d.FloorHeight(x, z) - 1e-3f) continue;
+                        if (underArch++ > 0) continue;
+                        Vector3 dir = Dir(side);
+                        Vector3 sill = CellCenter(d, x, z) + dir * half;
+                        Vector3 foot = sill - dir * 1.6f;
+                        shot("sob_arco", foot, dir, pitchTo(foot, sill));
+                    }
+            Debug.Log($"[BackRooms] Bordas sem escada por baixo de arco ou vão nesta seed: {underArch}");
+
+            // A volta de uma piscina e de um canal: do piso seco mais longe do meio da sala.
+            foreach (PoolRoomKind kind in new[] { PoolRoomKind.Basin, PoolRoomKind.Canal })
+            {
+                bool done = false;
+                foreach (PoolRoom room in d.Rooms)
+                {
+                    if (room.Kind != kind || done) continue;
+                    var middle = new Vector3((room.X0 + room.Width * 0.5f) * LevelBuilder.Cell, 0f, (room.Z0 + room.Height * 0.5f) * LevelBuilder.Cell);
+                    int fx = -1, fz = -1;
+                    float far = -1f;
+                    for (int z = room.Z0; z < room.Z0 + room.Height; z++)
+                        for (int x = room.X0; x < room.X0 + room.Width; x++)
+                        {
+                            if (!OpenCell(d, x, z) || d.Depth[x, z] != PoolDepth.Dry) continue;
+                            float distance = Vector3.Distance(CellCenter(d, x, z) - Vector3.up * dry, middle);
+                            if (distance > far) { far = distance; fx = x; fz = z; }
+                        }
+                    // Sem piso seco na sala (canal todo raso): da passagem para o meio.
+                    if (fx < 0 && FindDoor(d, room, out int doorX, out int doorZ, out WallSide doorSide))
+                    {
+                        Vector3 door = CellCenter(d, doorX, doorZ) + Dir(doorSide) * (half - 0.7f);
+                        door.y = StandHeight(d, doorX, doorZ);
+                        Vector3 toMiddle = middle - door;
+                        toMiddle.y = 0f;
+                        if (toMiddle.sqrMagnitude < 1f) toMiddle = -Dir(doorSide);
+                        shot($"{(kind == PoolRoomKind.Basin ? "piscina" : "canal")}_sala{room.Id:00}_passagem", door, toMiddle, 20f);
+                        done = true;
+                        continue;
+                    }
+                    if (fx < 0) continue;
+                    Vector3 foot = CellCenter(d, fx, fz);
+                    Vector3 look = middle - foot;
+                    look.y = 0f;
+                    if (look.sqrMagnitude < 1f) look = Vector3.forward;
+                    string label = kind == PoolRoomKind.Basin ? "piscina" : "canal";
+                    shot($"{label}_sala{room.Id:00}", foot, look, 32f);
+                    shot($"{label}_sala{room.Id:00}_perto", foot + look.normalized * 1.2f, look, 55f);
+                    done = true;
+                }
+                if (!done) missing.Add($"sala {kind} com piso seco");
+            }
         }
 
         static string Capture(int seed, out bool ok)

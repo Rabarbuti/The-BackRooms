@@ -34,6 +34,9 @@ namespace BackRooms.World
         const float CoveRadius = 0.4f;
         const int CoveSegments = 8;
         const float CopingWidth = 0.3f;
+        // Comprimento de uma repetição da textura da capa ao longo da borda (a imagem é quadrada e
+        // vira 0,3 m de largura por 0,6 m de comprimento: a pedra não tem desenho que mostre o esticão).
+        const float CopingRepeat = 0.6f;
         const float RoundWellRadius = 1.6f;
         const float RoundWellDeck = -1.2f;
         const float ShaftHeight = 1f;
@@ -163,7 +166,8 @@ namespace BackRooms.World
                 Worn = new MeshBuilder(poolTileMeters),
                 Bottom = new MeshBuilder(poolMosaicMeters),
                 Accent = new MeshBuilder(poolTileMeters),
-                Coping = new MeshBuilder(0.6f),
+                // A capa passa a UV pronta (AddCoping), já na escala da textura.
+                Coping = new MeshBuilder(1f),
                 CurvedWall = new MeshBuilder(poolTileMeters),
                 CurvedAccent = new MeshBuilder(poolTileMeters),
                 CurvedBottom = new MeshBuilder(poolMosaicMeters),
@@ -896,6 +900,41 @@ namespace BackRooms.World
                 }
         }
 
+        // Lados na ordem de PoolSides (0 = sul, 1 = norte, 2 = oeste, 3 = leste). Cantos da célula:
+        // 0 = sudoeste, 1 = sudeste, 2 = noroeste, 3 = nordeste; cada um junta um lado sul/norte
+        // (CornerZ) e um oeste/leste (CornerX).
+        static int CornerZ(int corner) => corner < 2 ? 0 : 1;
+        static int CornerX(int corner) => corner % 2 == 0 ? 2 : 3;
+
+        /// <summary>
+        /// Aquele lado da célula tem borda com capa? Piso seco que dá, sem parede, para um piso
+        /// aberto mais baixo. A escada corta a capa só no trecho dela (<see cref="StairSpan"/>).
+        /// </summary>
+        bool HasCoping(int x, int z, WallSide side)
+        {
+            if (!OpenCell(x, z) || Data.Depth[x, z] != PoolDepth.Dry || HasWallBox(x, z, side)) return false;
+            if (!Data.Neighbor(x, z, side, out int nx, out int nz) || !OpenCell(nx, nz)) return false;
+            return FloorTop(nx, nz) < FloorTop(x, z) - 1e-3f;
+        }
+
+        /// <summary>Trecho (na coordenada ao longo do lado) que a escada daquele lado ocupa.</summary>
+        bool StairSpan(int x, int z, WallSide side, out float from, out float to)
+        {
+            from = to = float.NaN;
+            if (!Data.StairAt(x, z, side, out PoolStair stair)) return false;
+            float middle = side == WallSide.South || side == WallSide.North ? (x + 0.5f) * Cell : (z + 0.5f) * Cell;
+            from = middle - stair.Width * 0.5f;
+            to = middle + stair.Width * 0.5f;
+            return true;
+        }
+
+        /// <summary>Tem capa naquele lado, no ponto <paramref name="along"/> dele (fora da escada)?</summary>
+        bool HasCopingAt(int x, int z, WallSide side, float along)
+        {
+            if (!HasCoping(x, z, side)) return false;
+            return !StairSpan(x, z, side, out float from, out float to) || along < from - 1e-3f || along > to + 1e-3f;
+        }
+
         void BuildFloorSurface(int x, int z, float x0, float x1, float z0, float z1)
         {
             float y = FloorTop(x, z);
@@ -906,30 +945,33 @@ namespace BackRooms.World
             var coping = new bool[4];
             var stairFrom = new float[4];
             var stairTo = new float[4];
+            // Canto da piscina: a água faz a ponta na diagonal e as capas das duas vizinhas se
+            // encontram no canto desta célula; ele leva a peça de canto (CopingWidth x CopingWidth).
+            var wrap = new bool[4];
             if (depth == PoolDepth.Dry)
             {
                 for (int k = 0; k < 4; k++)
                 {
-                    WallSide side = PoolSides[k];
-                    stairFrom[k] = stairTo[k] = float.NaN;
-                    if (HasWallBox(x, z, side) || !Data.Neighbor(x, z, side, out int nx, out int nz) || !OpenCell(nx, nz)) continue;
-                    if (FloorTop(nx, nz) >= y - 1e-3f) continue;
-                    coping[k] = true;
-                    if (Data.StairAt(x, z, side, out PoolStair stair))
-                    {
-                        float middle = side == WallSide.South || side == WallSide.North ? (x + 0.5f) * Cell : (z + 0.5f) * Cell;
-                        stairFrom[k] = middle - stair.Width * 0.5f;
-                        stairTo[k] = middle + stair.Width * 0.5f;
-                    }
+                    coping[k] = HasCoping(x, z, PoolSides[k]);
+                    if (!coping[k] || !StairSpan(x, z, PoolSides[k], out stairFrom[k], out stairTo[k])) stairFrom[k] = stairTo[k] = float.NaN;
+                }
+                for (int c = 0; c < 4; c++)
+                {
+                    int kz = CornerZ(c), kx = CornerX(c);
+                    WallSide sz = PoolSides[kz], sx = PoolSides[kx];
+                    if (coping[kz] || coping[kx] || HasWallBox(x, z, sz) || HasWallBox(x, z, sx)) continue;
+                    if (!Data.Neighbor(x, z, sx, out int ax, out int az) || !Data.Neighbor(x, z, sz, out int bx, out int bz)) continue;
+                    float cornerX = kx == 2 ? x * Cell : (x + 1) * Cell, cornerZ = kz == 0 ? z * Cell : (z + 1) * Cell;
+                    wrap[c] = HasCopingAt(ax, az, sz, cornerX) && HasCopingAt(bx, bz, sx, cornerZ);
                 }
             }
 
             var xs = new List<float> { x0, x1 };
             var zs = new List<float> { z0, z1 };
-            if (coping[2]) xs.Add(x0 + CopingWidth);
-            if (coping[3]) xs.Add(x1 - CopingWidth);
-            if (coping[0]) zs.Add(z0 + CopingWidth);
-            if (coping[1]) zs.Add(z1 - CopingWidth);
+            if (coping[2] || wrap[0] || wrap[2]) xs.Add(x0 + CopingWidth);
+            if (coping[3] || wrap[1] || wrap[3]) xs.Add(x1 - CopingWidth);
+            if (coping[0] || wrap[0] || wrap[1]) zs.Add(z0 + CopingWidth);
+            if (coping[1] || wrap[2] || wrap[3]) zs.Add(z1 - CopingWidth);
             for (int k = 0; k < 4; k++)
             {
                 if (!coping[k] || float.IsNaN(stairFrom[k])) continue;
@@ -940,26 +982,104 @@ namespace BackRooms.World
             Clean(xs, x0, x1);
             Clean(zs, z0, z1);
 
+            var sides = new List<int>(2);
             for (int a = 0; a + 1 < xs.Count; a++)
                 for (int b = 0; b + 1 < zs.Count; b++)
                 {
                     float mx = (xs[a] + xs[a + 1]) * 0.5f, mz = (zs[b] + zs[b + 1]) * 0.5f;
-                    bool isCoping = false;
-                    for (int k = 0; k < 4 && !isCoping; k++)
+                    List<Vector3> poly = Poly(new Vector3(xs[a], y, zs[b]), new Vector3(xs[a], y, zs[b + 1]),
+                                              new Vector3(xs[a + 1], y, zs[b + 1]), new Vector3(xs[a + 1], y, zs[b]));
+                    sides.Clear();
+                    for (int k = 0; k < 4; k++)
                     {
-                        if (!coping[k]) continue;
-                        float distance = k == 0 ? mz - z0 : k == 1 ? z1 - mz : k == 2 ? mx - x0 : x1 - mx;
-                        if (distance > CopingWidth) continue;
+                        if (!coping[k] || EdgeDistance(k, mx, mz, x0, x1, z0, z1) > CopingWidth) continue;
                         float along = k < 2 ? mx : mz;
                         if (!float.IsNaN(stairFrom[k]) && along > stairFrom[k] && along < stairTo[k]) continue;
-                        isCoping = true;
+                        sides.Add(k);
                     }
 
-                    Look piece = look;
-                    if (isCoping) piece.Kind = Surface.Coping;
-                    Emit(Poly(new Vector3(xs[a], y, zs[b]), new Vector3(xs[a], y, zs[b + 1]),
-                              new Vector3(xs[a + 1], y, zs[b + 1]), new Vector3(xs[a + 1], y, zs[b])), Vector3.up, piece);
+                    int corner = -1;
+                    for (int c = 0; c < 4 && sides.Count == 0; c++)
+                        if (wrap[c] && EdgeDistance(CornerZ(c), mx, mz, x0, x1, z0, z1) < CopingWidth && EdgeDistance(CornerX(c), mx, mz, x0, x1, z0, z1) < CopingWidth)
+                            corner = c;
+
+                    if (sides.Count == 1) AddCoping(poly, sides[0], x0, x1, z0, z1);
+                    else if (sides.Count == 2) Miter(poly, sides[0], sides[1], false, x0, x1, z0, z1);
+                    else if (corner >= 0) Miter(poly, CornerZ(corner), CornerX(corner), true, x0, x1, z0, z1);
+                    else Emit(poly, Vector3.up, look);
                 }
+        }
+
+        /// <summary>Distância do ponto até o lado <paramref name="k"/> do retângulo do piso.</summary>
+        static float EdgeDistance(int k, float px, float pz, float x0, float x1, float z0, float z1)
+        {
+            switch (k)
+            {
+                case 0: return pz - z0;
+                case 1: return z1 - pz;
+                case 2: return px - x0;
+                default: return x1 - px;
+            }
+        }
+
+        /// <summary>
+        /// Canto de duas capas em meia-esquadria, cortado na diagonal que sai do canto do piso. Na
+        /// ponta do seco (capa nos dois lados), cada metade é da capa do lado mais perto; no canto
+        /// da piscina (<paramref name="wrap"/>, as capas vêm das vizinhas), da capa que chega pelo
+        /// outro lado (a que encosta na metade).
+        /// </summary>
+        void Miter(List<Vector3> poly, int kz, int kx, bool wrap, float x0, float x1, float z0, float z1)
+        {
+            float sz = kz == 0 ? 1f : -1f, sx = kx == 2 ? 1f : -1f;
+            float ez = kz == 0 ? z0 : z1, ex = kx == 2 ? x0 : x1;
+            // dz = sz * (z - ez) e dx = sx * (x - ex): distâncias até os dois lados.
+            List<Vector3> nearZ = ClipLinear(poly, sx, -sz, sz * ez - sx * ex);   // dx - dz >= 0
+            List<Vector3> nearX = ClipLinear(poly, -sx, sz, sx * ex - sz * ez);   // dz - dx >= 0
+            AddCoping(nearZ, wrap ? kx : kz, x0, x1, z0, z1);
+            AddCoping(nearX, wrap ? kz : kx, x0, x1, z0, z1);
+        }
+
+        /// <summary>Parte do polígono (no plano XZ) onde a * x + b * z + c >= 0.</summary>
+        static List<Vector3> ClipLinear(List<Vector3> poly, float a, float b, float c)
+        {
+            var output = new List<Vector3>(poly.Count + 2);
+            for (int k = 0; k < poly.Count; k++)
+            {
+                Vector3 p = poly[k], q = poly[(k + 1) % poly.Count];
+                float fp = a * p.x + b * p.z + c, fq = a * q.x + b * q.z + c;
+                if (fp >= 0f) AddDistinct(output, p);
+                if ((fp >= 0f) != (fq >= 0f)) AddDistinct(output, Vector3.Lerp(p, q, fp / (fp - fq)));
+            }
+            if (output.Count > 1 && (output[0] - output[output.Count - 1]).sqrMagnitude < 1e-10f) output.RemoveAt(output.Count - 1);
+            return output;
+        }
+
+        /// <summary>
+        /// Pedaço de capa com a UV da faixa do lado <paramref name="k"/>: U ao longo da borda (em
+        /// metros, contínuo de uma célula para a outra) e V atravessando a faixa, de 0 no lado da
+        /// água (onde a textura tem a aresta arredondada, embaixo da imagem) a 1 no lado do piso.
+        /// Olhando de cima, (U, V) gira junto com a borda: a textura nunca fica espelhada.
+        /// </summary>
+        void AddCoping(List<Vector3> poly, int k, float x0, float x1, float z0, float z1)
+        {
+            if (poly.Count < 3) return;
+            MeshBuilder mesh = _kit.Coping;
+            int first = mesh.VertexCount;
+            foreach (Vector3 p in poly)
+            {
+                float u, v;
+                switch (k)
+                {
+                    case 0: u = p.x; v = p.z - z0; break;
+                    case 1: u = -p.x; v = z1 - p.z; break;
+                    case 2: u = -p.z; v = p.x - x0; break;
+                    default: u = p.z; v = x1 - p.x; break;
+                }
+                // Um centímetro de folga em cada ponta de V: a amostra bilinear não pega a outra borda da imagem.
+                v = Mathf.Lerp(0.01f, 0.99f, Mathf.Clamp01(v / CopingWidth));
+                mesh.AddVertex(p, Vector3.up, new Vector2(u / CopingRepeat, v));
+            }
+            for (int i = 1; i + 1 < poly.Count; i++) mesh.AddTriangleFacing(first, first + i, first + i + 1, Vector3.up);
         }
 
         static void Clean(List<float> cuts, float min, float max)

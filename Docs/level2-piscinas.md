@@ -208,9 +208,14 @@ piscava.
 | **Poço** | −6 m | **nada**, cai devagar | fôlego (seção 4.2), escuro, o ralo |
 
 **Escada ou borda.** Numa divisa aberta entre duas alturas, ou há escada (degraus de 20 x 30 cm, da
-largura do vão, e aí se anda nos dois sentidos) ou é uma **borda** com capa: cai-se na água por ela,
-mas não se sobe. A piscina afundada tem borda em volta e escada só em um ou dois lugares, como uma
-piscina de verdade. Regra do gerador, no espírito de "buraco nunca isola": **toda célula com piso que
+largura do vão, e aí se anda nos dois sentidos) ou é uma **borda**: cai-se na água por ela, mas não
+se sobe. Quando o lado de cima é seco, a borda tem **capa**: uma faixa de pedra de 30 cm rente ao
+piso, com a aresta arredondada sempre do lado da água e a textura correndo ao longo da borda (UV por
+trecho, `LevelBuilder.AddCoping`); a escada interrompe a capa só na largura dela. Nos cantos as faixas
+se encontram em meia-esquadria: na ponta do seco (capa em dois lados da célula) e no canto da
+piscina (a água faz a ponta e o seco a contorna, com a peça de canto na célula da diagonal). Borda
+entre dois pisos molhados (raso e fundo) não tem capa: fica debaixo d'água. A piscina afundada tem
+borda em volta e escada só em um ou dois lugares, como uma piscina de verdade. Regra do gerador, no espírito de "buraco nunca isola": **toda célula com piso que
 não é poço continua alcançável a pé** (mesma altura ou escada), e **de todo poço se sai nadando** — por
 uma célula funda vizinha ou por uma escada que desce até 1,6 m abaixo da água, com corrimão.
 
@@ -459,7 +464,10 @@ início). Até lá, a saída é a sala seca da seção 3.2.
   closes, `Logs/Previews/level2_*.png`) e `Level2Preview.BatchCloseups` (`-seed N`: só os closes do
   acabamento, como tijolo de vidro, janelão, poço redondo, teto de vidro, degrau na linha d'água,
   manchas e marcações, e a mesma vista de uma piscina em cinco momentos do anoitecer, em
-  `Logs/Previews/level2_s{seed}_*.png`, sem apagar as outras fotos) e `Level2Preview.BatchCeilings`
+  `Logs/Previews/level2_s{seed}_*.png`, sem apagar as outras fotos; com `-so borda`, só o grupo da
+  capa: as quatro orientações de borda reta, a ponta do seco, o canto da piscina, o encontro com uma
+  escada, o fim contra uma parede, a borda sob arco (nenhuma das seeds de conferência tem) e a volta de
+  uma piscina e de um canal, `level2_s{seed}_borda_*.png`) e `Level2Preview.BatchCeilings`
   (sem `-seed`: 1998 e 7; o teto como o jogador o vê, olhando 30° para cima de uma ponta e de um canto
   de cada salão, raia, piscina, galeria, canal, escadaria, patamar, saída e corredor de janelas, sem a
   filmadora, em `Logs/Previews/level2_s{seed}_teto_*.png`).
