@@ -2053,17 +2053,18 @@ namespace BackRooms.World
             d.SpawnX = d.RoomX0 + d.RoomWidth / 2;
             d.SpawnZ = d.RoomZ0 + d.RoomHeight / 2;
 
-            // Claraboias acesas; umas poucas quebradas, longe do início.
-            var dead = new List<(int x, int z)>();
+            // Toda claraboia acesa: claraboia "queimada" lia como lâmpada, e a luz aqui é do dia
+            // (canto escuro é sala sem claraboia). O sorteio que escolhia as quebradas continua
+            // sendo tirado, sem uso, para cada seed manter a mesma planta de antes.
+            var unused = new List<(int x, int z)>();
             for (int z = 0; z < c.H; z++)
                 for (int x = 0; x < c.W; x++)
                 {
                     d.Lights[x, z] = d.Sky[x, z] != PoolSky.None ? LightState.On : LightState.None;
-                    if (d.Sky[x, z] != PoolSky.None && !c.KeepSky[x, z] && LevelGenerator.WearAt(d, x, z) >= 0.75f) dead.Add((x, z));
+                    if (d.Sky[x, z] != PoolSky.None && !c.KeepSky[x, z] && LevelGenerator.WearAt(d, x, z) >= 0.75f) unused.Add((x, z));
                 }
-            Shuffle(dead, c.R);
-            int deadCount = Math.Min(dead.Count, c.R.Next(3));
-            for (int k = 0; k < deadCount; k++) d.Lights[dead[k].x, dead[k].z] = LightState.Dead;
+            Shuffle(unused, c.R);
+            c.R.Next(3);
 
             d.PathCells = FootPath(d);
             d.SafePathCells = new List<int>(d.PathCells);
@@ -2526,7 +2527,7 @@ namespace BackRooms.World
                         continue;
                     }
                     skyCells++;
-                    if (l != LightState.On && l != LightState.Dead) Add(p, "claraboia sem luz marcada");
+                    if (l != LightState.On) Add(p, "claraboia sem luz acesa");
                     if (d.Solid[x, z]) { Add(p, "claraboia em maciço"); continue; }
                     PoolRoom room = d.Rooms[d.Room[x, z]];
                     if (room.Vault) Add(p, "claraboia em abóbada");
@@ -2673,9 +2674,8 @@ namespace BackRooms.World
             }
         }
 
-        static char SkyChar(PoolSky s, LightState l)
+        static char SkyChar(PoolSky s)
         {
-            if (s != PoolSky.None && l == LightState.Dead) return 'x';
             switch (s)
             {
                 case PoolSky.Square: return 'q';
@@ -2705,7 +2705,7 @@ namespace BackRooms.World
             var sb = new StringBuilder();
             int w = d.Width, h = d.Height;
             sb.AppendLine("Legenda: célula = sala, profundidade (S seco, R raso, F fundo, P poço, # maciço), claraboia (q quadrada, o redonda,");
-            sb.AppendLine("  = rasgo em X, ! rasgo em Z, * teto de vidro, x quebrada), marca (^ v < > escada subindo, L lâmpada, @ início, X saída).");
+            sb.AppendLine("  = rasgo em X, ! rasgo em Z, * teto de vidro), marca (^ v < > escada subindo, L lâmpada, @ início, X saída).");
             sb.AppendLine("  Divisas: - | parede, a arco, A arco largo, d vão reto, o abertura redonda, J janelão, f frestas, v vigia, g tijolo de vidro.");
             sb.AppendLine("  Vértices: O tambor/coluna redonda, Q pilar quadrado, + parede.");
 
@@ -2761,7 +2761,7 @@ namespace BackRooms.World
                     if (x == w) break;
                     if (d.Solid[x, row]) { line.Append("####"); continue; }
                     char depth = d.Depth[x, row] == PoolDepth.Dry ? 'S' : d.Depth[x, row] == PoolDepth.Shallow ? 'R' : d.Depth[x, row] == PoolDepth.Deep ? 'F' : 'P';
-                    line.Append(RoomChar(d.Room[x, row])).Append(depth).Append(SkyChar(d.Sky[x, row], d.Lights[x, row])).Append(marks[x, row]);
+                    line.Append(RoomChar(d.Room[x, row])).Append(depth).Append(SkyChar(d.Sky[x, row])).Append(marks[x, row]);
                 }
                 sb.AppendLine(line.ToString());
             }

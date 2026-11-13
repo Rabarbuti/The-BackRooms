@@ -251,7 +251,7 @@ namespace BackRooms.World
         /// <summary>Altura do teto de cada célula, em metros acima do zero dos pisos (o da sala dela).</summary>
         public float[,] Ceiling;
 
-        /// <summary>Claraboia de cada célula. Onde há uma, <see cref="Lights"/> está On (ou Dead, quebrada).</summary>
+        /// <summary>Claraboia de cada célula. Onde há uma, <see cref="Lights"/> está On (nenhuma nasce quebrada).</summary>
         public PoolSky[,] Sky;
 
         /// <summary>

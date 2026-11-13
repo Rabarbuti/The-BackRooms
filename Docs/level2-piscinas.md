@@ -19,7 +19,8 @@ Level 2 (teste)) com as etapas 1 a 7 da seção 8.1:
   poço redondo e água só nas células molhadas.
 - **Luz:** nenhuma luminária. Claraboias com luz de caixa inclinada (o mesmo "sol" no mapa todo, sombra
   de uma face em cache), janelões, frestas, vigias acesas e tijolo de vidro com spot, lâmpadas dentro
-  d'água sem sombra, salas escuras de propósito e o anoitecer no apagão (seção 7).
+  d'água sem sombra, salas escuras de propósito e o anoitecer no lugar do apagão: a luz esquenta, cai
+  devagar até a noite e volta devagar, sem pisca (seção 7).
 - **Visual:** perfil de Volume próprio (`Settings/Level2_Volume.asset`); água `HDRP/Lit` transparente
   com refração e cáustica animada (`PoolWater`); texturas das folhas A, B, C e D (seção 10), com
   poucas manchas e marcações pintadas postas pela seed como decalques.
@@ -369,9 +370,24 @@ início). Até lá, a saída é a sala seca da seção 3.2.
 - **Alcance:** as luzes das claraboias e das janelas deixam de iluminar a 45 m da câmera e a sombra
   vai 20% além, até 54 m (`lightFadeDistance`, a regra do Level 0: luz sem sombra atravessaria as
   paredes); as lâmpadas submersas, sem sombra, somem a 60 m.
-- **Anoitecer** (o apagão desta fase): pelo mesmo relógio do apagão do Level 0, o vidro das claraboias
-  fica azul-noite, o das janelas apaga e o céu vira azul-marinho; sobram as luzes de dentro d'água e
-  as lanternas.
+- **Anoitecer** (o apagão desta fase), sem pisca nenhum: a luz aqui é do dia, então nada liga e
+  desliga seco como lâmpada. Pelo mesmo relógio e pela mesma conta do apagão do Level 0
+  (`GameSession.SessionSeconds`, `LightsOut.PhaseAt`; ninguém manda evento pela rede e quem entra no
+  meio vê o mesmo), com a noite exatamente no escuro do `LightsOut` (o primeiro aos 60 s, 10 s de
+  noite):
+  - **aviso** (10 s antes de começar a escurecer): a luz das claraboias e janelas esquenta de 4800 K
+    para 2600 K e cai para 75%, fim de tarde alaranjado;
+  - **escurece** (10 s): a luz cai até zero e o vidro vai do branco estourado ao azul-noite (#223048
+    com emissão fraca; o brilho cai em proporção, não em linha reta); o céu azul-marinho e o sumiço da
+    cáustica vão na mesma rampa;
+  - **noite** (10 s): sobram as lâmpadas de dentro d'água (as piscinas brilhando no escuro) e as
+    lanternas;
+  - **amanhece** (10 s): o mesmo, ao contrário, de alaranjado a branco.
+  Para caber dia pleno entre as rampas, o apagão das Piscinas tem 50 s de luz em vez de 30 (ciclo de
+  60 s em vez de 40; 20 s de dia pleno, como o Level 0 antes de piscar). O vidro e as luzes são
+  `DaylightPanel` (fora do `CeilingLight`, então o `LightsOut` e o Level 0 não mudaram); quem os leva
+  é o `PoolWater` (`DaylightAt`), com um `MaterialPropertyBlock` no vidro (o material não troca).
+  Nenhuma claraboia nasce "quebrada": canto escuro é sala sem claraboia.
 
 ---
 
@@ -387,11 +403,13 @@ início). Até lá, a saída é a sala seca da seção 3.2.
   System do HDRP. Física no `PlayerController`, pela altura do jogador em relação à superfície.
 - **Montagem da cena** pelo `Level0Setup.SceneOptions`, com perfil de Volume próprio
   (`Level2Setup`), mais `LevelCatalog` (índice 2) e a lista de cenas da build.
-- **Conferência e fotos:** `Level2Setup.BatchCheck` (5 seeds), `Level2PlayTest.BatchRun` (em Play),
-  `Level2Preview.BatchCapture` (planta, salas e closes, `Logs/Previews/level2_*.png`) e
-  `Level2Preview.BatchCloseups` (`-seed N`: só os closes do acabamento, como tijolo de vidro, janelão,
-  poço redondo, teto de vidro, manchas e marcações, em `Logs/Previews/level2_s{seed}_*.png`, sem apagar
-  as outras fotos).
+- **Conferência e fotos:** `Level2Setup.BatchCheck` (5 seeds), `Level2PlayTest.BatchRun` (em Play; no
+  fim, um anoitecer encurtado: a luz das claraboias e janelas desce sem voltar a subir até zero, as
+  lâmpadas submersas ficam acesas e a luz volta à do dia), `Level2Preview.BatchCapture` (planta, salas e
+  closes, `Logs/Previews/level2_*.png`) e `Level2Preview.BatchCloseups` (`-seed N`: só os closes do
+  acabamento, como tijolo de vidro, janelão, poço redondo, teto de vidro, degrau na linha d'água,
+  manchas e marcações, e a mesma vista de uma piscina em cinco momentos do anoitecer, em
+  `Logs/Previews/level2_s{seed}_*.png`, sem apagar as outras fotos).
 - **Modelos** (pelo caminho do Blender, `modelos-blender.md`), para depois: escadinha de metal,
   cadeira de salva-vidas, grade de ralo, válvula e bombas, plaquinha de profundidade, boia esquecida.
 

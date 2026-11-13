@@ -258,9 +258,12 @@ namespace BackRooms.EditorTools
                     if (PoolWater.Current != null) leftovers.Add("água");
                     if (controller.Submersion != 0f || controller.IsSwimming || controller.IsUnderwater) leftovers.Add("jogador ainda na água");
                     foreach (UnityEngine.Rendering.Volume volume in Object.FindObjectsByType<UnityEngine.Rendering.Volume>(FindObjectsSortMode.None))
-                        if (volume.name == "DebaixoDagua" || volume.name == "LuzRebatida") leftovers.Add("volume " + volume.name);
+                        if (volume.name == "DebaixoDagua" || volume.name == "LuzRebatida" || volume.name == "Anoitecer") leftovers.Add("volume " + volume.name);
+                    // Nem o anoitecer: os vidros de luz do dia e o ciclo mais longo do apagão são só das Piscinas.
+                    if (DaylightPanel.All.Count > 0) leftovers.Add($"{DaylightPanel.All.Count} vidro(s) de luz do dia");
+                    if (LightsOut.Instance != null && !Mathf.Approximately(LightsOut.Instance.litSeconds, 30f)) leftovers.Add($"apagão com {LightsOut.Instance.litSeconds} s de luz");
                     if (leftovers.Count > 0) { Finish(false, "voltou ao Level 0 com restos das Piscinas: " + string.Join(", ", leftovers)); return; }
-                    Notes.Add("voltou ao Level 0 sem nada das Piscinas (água, nado, volumes)");
+                    Notes.Add("voltou ao Level 0 sem nada das Piscinas (água, nado, volumes, anoitecer)");
 
                     // Agora a porta do Level 0, sozinho: abre na hora e leva para o Level 1.
                     PlayerPrefs.SetInt(LevelProgress.ClearedKey, 0);

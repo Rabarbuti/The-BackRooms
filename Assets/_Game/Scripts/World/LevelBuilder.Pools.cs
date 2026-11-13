@@ -122,7 +122,6 @@ namespace BackRooms.World
             public bool AlongX;
             public int Line, Index, Side;
             public Vector3 Normal, Center;
-            public LightState State = LightState.On;
             public List<GlassPiece> Glass = new List<GlassPiece>();
         }
 
@@ -151,7 +150,6 @@ namespace BackRooms.World
         }
 
         PoolKit _kit;
-        static readonly Dictionary<Material, Material> DarkCopies = new Dictionary<Material, Material>();
 
         // ---------------------------------------------------------------- Montagem
 
@@ -542,7 +540,6 @@ namespace BackRooms.World
                     Index = alongX ? i : j,
                     Side = s.Lit,
                     Normal = s.Across * s.Lit,
-                    State = LightState.On,
                 };
                 float glass = s.Lit * (HalfWall - GlassRecess);
                 foreach (Hole hole in s.Holes)
@@ -2166,10 +2163,7 @@ namespace BackRooms.World
 
         void CountShadowLights(out int count)
         {
-            count = 0;
-            foreach (SkyItem item in SkyItems())
-                if (item.State != LightState.Dead) count++;
-            count += GroupLitOpenings().Count;
+            count = SkyItems().Count + GroupLitOpenings().Count;
         }
 
         // Luzes de caixa e spots: uma face de sombra cada. A maior resolução que cabe no atlas.
@@ -2206,23 +2200,19 @@ namespace BackRooms.World
             hd.SetShadowResolution(resolution);
         }
 
-        static Material DarkCopy(Material lit)
+        // Vidro de noite (DaylightPanel): a cor e o brilho do material de claraboia apagada, o
+        // azul-noite (#223048 com emissão fraca). Vale também para as janelas.
+        void NightGlass(out Color baseColor, out Color emissive)
         {
-            if (lit == null) return null;
-            if (DarkCopies.TryGetValue(lit, out Material dark) && dark != null) return dark;
-            dark = new Material(lit) { name = lit.name + " (apagado)", hideFlags = HideFlags.DontSave };
-            if (dark.HasProperty("_EmissiveColor")) dark.SetColor("_EmissiveColor", Color.black);
-            if (dark.HasProperty("_EmissiveColorLDR")) dark.SetColor("_EmissiveColorLDR", Color.black);
-            if (dark.HasProperty("_BaseColor")) dark.SetColor("_BaseColor", dark.GetColor("_BaseColor") * 0.45f);
-            DarkCopies[lit] = dark;
-            return dark;
+            Material night = panelOffMaterial;
+            baseColor = night != null && night.HasProperty("_BaseColor") ? night.GetColor("_BaseColor") : new Color(0.13f, 0.19f, 0.28f);
+            emissive = night != null && night.HasProperty("_EmissiveColor") ? night.GetColor("_EmissiveColor") : new Color(0.25f, 0.45f, 1f) * 16f;
         }
 
         sealed class SkyItem
         {
             public PoolSky Sky;
             public int X0, X1, Z;  // células X0..X1 (Full em faixa) na fileira Z
-            public LightState State;
         }
 
         // Claraboias: uma por célula; as Full vizinhas na mesma fileira e sala viram uma faixa só.
@@ -2234,7 +2224,6 @@ namespace BackRooms.World
                 {
                     PoolSky sky = Data.Sky[x, z];
                     if (sky == PoolSky.None || !OpenCell(x, z) || RoomAt(x, z).Vault) continue;
-                    LightState state = Data.Lights[x, z] == LightState.None ? LightState.On : Data.Lights[x, z];
 
                     if (sky == PoolSky.Full && items.Count > 0)
                     {
@@ -2242,20 +2231,20 @@ namespace BackRooms.World
                         if (last.Sky == PoolSky.Full && last.Z == z && last.X1 == x - 1 && Data.Room[x - 1, z] == Data.Room[x, z])
                         {
                             last.X1 = x;
-                            if (state != LightState.Dead) last.State = LightState.On;
                             continue;
                         }
                     }
-                    items.Add(new SkyItem { Sky = sky, X0 = x, X1 = x, Z = z, State = state });
+                    items.Add(new SkyItem { Sky = sky, X0 = x, X1 = x, Z = z });
                 }
             return items;
         }
 
         /// <summary>
-        /// Vidro fosco aceso em cada claraboia (com o CeilingLight, que o apaga no apagão) e luzes
-        /// de caixa do HDRP: raios paralelos inclinados, o mesmo "sol" no mapa todo. As células Full
-        /// vizinhas da mesma sala formam um teto de vidro só (uma malha, UV contínua, sem costura),
-        /// com uma luz por faixa de células numa fileira.
+        /// Vidro fosco aceso em cada claraboia e luzes de caixa do HDRP: raios paralelos inclinados,
+        /// o mesmo "sol" no mapa todo. As células Full vizinhas da mesma sala formam um teto de vidro
+        /// só (uma malha, UV contínua, sem costura), com uma luz por faixa de células numa fileira.
+        /// Toda claraboia nasce acesa (nada de claraboia "queimada": canto escuro é sala sem
+        /// claraboia); o <see cref="DaylightPanel"/> leva o vidro e as luzes pelo anoitecer.
         /// </summary>
         void BuildSkylights(int resolution)
         {
@@ -2264,7 +2253,7 @@ namespace BackRooms.World
             Transform root = CreateChild("Claraboias").transform;
 
             Material on = panelOnMaterial != null ? panelOnMaterial : ceilingMaterial;
-            Material off = panelOffMaterial != null ? panelOffMaterial : DarkCopy(on);
+            NightGlass(out Color nightBase, out Color nightEmissive);
 
             // Teto de vidro: componentes ligadas de células Full da mesma sala.
             int w = Data.Width, h = Data.Height;
@@ -2316,14 +2305,14 @@ namespace BackRooms.World
 
                 string name = $"Claraboia_{list[0].x}_{list[0].y}_teto";
                 Mesh mesh = glass.ToMesh(name);
-                MeshRenderer panel = CreateRenderer(name, mesh, off, ShadowCastingMode.Off, root);
+                MeshRenderer panel = CreateRenderer(name, mesh, on, ShadowCastingMode.Off, root);
                 panel.gameObject.AddComponent<MeshCollider>().sharedMesh = mesh;
                 _kit.Objects++;
 
                 var lights = new List<HDAdditionalLightData>();
                 foreach (SkyItem item in items)
                 {
-                    if (item.Sky != PoolSky.Full || component[item.X0, item.Z] != k || item.State == LightState.Dead) continue;
+                    if (item.Sky != PoolSky.Full || component[item.X0, item.Z] != k) continue;
                     var corners = new List<Vector3>();
                     for (int x = item.X0; x <= item.X1; x++)
                     {
@@ -2334,8 +2323,7 @@ namespace BackRooms.World
                     lights.Add(CreateSun(panel.transform, corners, c, item.X0, item.Z, resolution));
                 }
 
-                LightState state = lights.Count > 0 ? LightState.On : LightState.Dead;
-                panel.gameObject.AddComponent<CeilingLight>().Init(state, lights.Count > 0 ? lights.ToArray() : null, panel, on, off);
+                panel.gameObject.AddComponent<DaylightPanel>().Init(lights.ToArray(), panel, on, nightBase, nightEmissive);
             }
 
             // Claraboias recortadas (quadrada, redonda, rasgos): vidro no alto do poço de luz.
@@ -2361,13 +2349,12 @@ namespace BackRooms.World
 
                 string name = $"Claraboia_{x}_{z}";
                 Mesh mesh = glass.ToMesh(name);
-                MeshRenderer panel = CreateRenderer(name, mesh, off, ShadowCastingMode.Off, root);
+                MeshRenderer panel = CreateRenderer(name, mesh, on, ShadowCastingMode.Off, root);
                 panel.gameObject.AddComponent<MeshCollider>().sharedMesh = mesh;
                 _kit.Objects++;
 
-                HDAdditionalLightData[] lights = null;
-                if (item.State != LightState.Dead) lights = new[] { CreateSun(panel.transform, corners, glassY, x, z, resolution) };
-                panel.gameObject.AddComponent<CeilingLight>().Init(item.State, lights, panel, on, off);
+                var lights = new[] { CreateSun(panel.transform, corners, glassY, x, z, resolution) };
+                panel.gameObject.AddComponent<DaylightPanel>().Init(lights, panel, on, nightBase, nightEmissive);
             }
         }
 
@@ -2454,8 +2441,9 @@ namespace BackRooms.World
         }
 
         /// <summary>
-        /// Janelão, frestas, vigia acesa e tijolo de vidro: o vidro aceso (que apaga no apagão,
-        /// com um material sem emissão criado aqui) e um spot com sombra entrando na sala.
+        /// Janelão, frestas, vigia acesa e tijolo de vidro: o vidro aceso e um spot com sombra
+        /// entrando na sala; no anoitecer os dois seguem a mesma rampa das claraboias
+        /// (<see cref="DaylightPanel"/>), e o vidro termina no mesmo azul-noite.
         /// </summary>
         void BuildLitOpenings(int resolution)
         {
@@ -2464,13 +2452,13 @@ namespace BackRooms.World
             Transform root = CreateChild("Janelas").transform;
 
             Material fallback = poolWindowMaterial != null ? poolWindowMaterial : panelOnMaterial != null ? panelOnMaterial : wallMaterial;
+            NightGlass(out Color nightBase, out Color nightEmissive);
 
             foreach (List<LitOpening> group in groups)
             {
                 LitOpening first = group[0];
                 bool blocks = first.Type == PoolEdge.GlassBlock;
                 Material on = blocks && poolGlassBlockMaterial != null ? poolGlassBlockMaterial : fallback;
-                Material off = DarkCopy(on);
 
                 // Tijolo de vidro: 1,2 m por repetição, pela UV do mundo. Os outros: 0 a 1 em cada vidro.
                 var glass = new MeshBuilder(blocks ? 1.2f : 1f);
@@ -2501,7 +2489,7 @@ namespace BackRooms.World
                 center /= group.Count;
 
                 string name = $"Janela_{(first.AlongX ? "X" : "Z")}{first.Line}_{first.Index}";
-                MeshRenderer panel = CreateRenderer(name, glass.ToMesh(name), off, ShadowCastingMode.Off, root);
+                MeshRenderer panel = CreateRenderer(name, glass.ToMesh(name), on, ShadowCastingMode.Off, root);
                 _kit.Objects++;
 
                 // A luz entra pela janela, um pouco para baixo.
@@ -2521,7 +2509,7 @@ namespace BackRooms.World
                 _kit.Lights++;
                 if (ceilingShadows) _kit.ShadowLights++;
 
-                panel.gameObject.AddComponent<CeilingLight>().Init(LightState.On, new[] { hd }, panel, on, off);
+                panel.gameObject.AddComponent<DaylightPanel>().Init(new[] { hd }, panel, on, nightBase, nightEmissive);
             }
         }
 

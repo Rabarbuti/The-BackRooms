@@ -269,19 +269,62 @@ namespace BackRooms.EditorTools
                         // Aceso, o vidro estoura e não mostra emenda nenhuma: apagado (vidro azul-noite
                         // com a textura de vidro fosco), uma repetição por célula apareceria.
                         var lightsOut = Object.FindFirstObjectByType<LightsOut>();
-                        if (lightsOut != null)
+                        if (lightsOut != null && water != null)
                         {
-                            foreach (CeilingLight lamp in CeilingLight.All) lamp.SetPower(PowerPhase.Dark);
-                            lightsOut.SetDarkness(1f);
-                            if (water != null) water.ForceNight = 1f;
+                            water.ForceSeconds = lightsOut.firstDarkAt + lightsOut.darkSeconds * 0.5f;
+                            water.Snap(builder.transform.TransformPoint(foot));
                             Shot("teto_full_emenda_apagado", foot, Vector3.right, -62f);
-                            if (water != null) water.ForceNight = -1f;
-                            lightsOut.SetDarkness(0f);
-                            foreach (CeilingLight lamp in CeilingLight.All) lamp.SetPower(PowerPhase.Steady);
+                            water.ForceSeconds = -1.0;
+                            water.Snap(builder.transform.TransformPoint(foot));
                         }
                         roof = true;
                     }
                 if (!roof) missing.Add("teto Full com duas células");
+
+                // Anoitecer: a mesma vista de uma sala clara com piscina, com o relógio forçado em
+                // cinco momentos (dia, meio do aviso, meio da descida, noite, meio da subida), com e
+                // sem a filmadora. O estado de cada uma vai para o log.
+                var duskClock = Object.FindFirstObjectByType<LightsOut>();
+                PoolRoom bright = null;
+                foreach (PoolRoomKind kind in new[] { PoolRoomKind.Basin, PoolRoomKind.Lane, PoolRoomKind.Hall })
+                {
+                    foreach (PoolRoom room in d.Rooms)
+                        if (room.Kind == kind && !room.Dark) { bright = room; break; }
+                    if (bright != null) break;
+                }
+                if (bright != null && duskClock != null && water != null && FindDoor(d, bright, out int duskX, out int duskZ, out WallSide bside))
+                {
+                    Vector3 dir = Dir(bside);
+                    Vector3 foot = CellCenter(d, duskX, duskZ) + dir * (LevelBuilder.Cell * 0.5f - 0.7f);
+                    foot.y = StandHeight(d, duskX, duskZ);
+                    var middle = new Vector3((bright.X0 + bright.Width * 0.5f) * LevelBuilder.Cell, foot.y, (bright.Z0 + bright.Height * 0.5f) * LevelBuilder.Cell);
+                    Vector3 look = middle - foot;
+                    if (new Vector2(look.x, look.z).sqrMagnitude < 1f) look = -dir;
+                    double dark = duskClock.firstDarkAt;
+                    var moments = new (string label, double seconds)[]
+                    {
+                        ("0_dia", dark - water.duskFade - water.duskWarning - 10.0),
+                        ("1_aviso", dark - water.duskFade - water.duskWarning * 0.5),
+                        ("2_descida", dark - water.duskFade * 0.5),
+                        ("3_noite", dark + duskClock.darkSeconds * 0.5),
+                        ("4_subida", dark + duskClock.darkSeconds + water.dawnFade * 0.5),
+                    };
+                    var states = new List<string>();
+                    Vector3 viewer = builder.transform.TransformPoint(foot);
+                    foreach (var (label, seconds) in moments)
+                    {
+                        water.ForceSeconds = Math.Max(0.0, seconds);
+                        water.Snap(viewer);
+                        Daylight light = water.CurrentDaylight;
+                        states.Add($"{label} ({seconds:F0} s): sol {light.Sun:F2}, quente {light.Warmth:F2}, noite {light.Night:F2}");
+                        Shot("anoitecer_" + label, foot, look, 6f);
+                        CleanShot("anoitecer_" + label + "_limpa", foot, look, 6f);
+                    }
+                    water.ForceSeconds = -1.0;
+                    water.Snap(viewer);
+                    Debug.Log($"[BackRooms] Anoitecer na sala {bright.Id} ({bright.Kind}): " + string.Join("; ", states));
+                }
+                else missing.Add("sala clara com piscina para o anoitecer");
 
                 // Decalques: um close de cada material, de frente (parede) ou de trás do desenho (piso).
                 var seen = new HashSet<string>();

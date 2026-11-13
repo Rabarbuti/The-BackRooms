@@ -82,6 +82,7 @@ namespace BackRooms.EditorTools
                 {
                     Apply(level.GetComponent<LevelBuilder>(), materials);
                     UseOwnAtmosphere(profile);
+                    UseDusk();
                 },
             });
             Debug.Log($"[BackRooms] Level 2 de teste montado em {ScenePath}: abra a cena, aperte Play e hospede (H).");
@@ -98,6 +99,20 @@ namespace BackRooms.EditorTools
 
             foreach (FluorescentHum hum in Object.FindObjectsByType<FluorescentHum>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 Object.DestroyImmediate(hum);
+        }
+
+        /// <summary>Mais longo que o apagão do Level 0, para o dia caber entre as rampas.</summary>
+        public const float DuskLitSeconds = 50f;
+
+        // O apagão aqui é o anoitecer (PoolWater.DaylightAt), pelo mesmo relógio e pela mesma conta
+        // do LightsOut: o primeiro escuro aos 60 s e 10 s de noite, como no Level 0. Mas o aviso
+        // (10 s), a descida (10 s) e a subida (10 s) não cabem nos 30 s de luz do Level 0 sem
+        // sobrar dia nenhum; com 50 s, sobram 20 s de dia pleno, o mesmo que o Level 0 tem antes
+        // de começar a piscar. O ciclo fica de 60 s em vez de 40.
+        static void UseDusk()
+        {
+            foreach (LightsOut clock in Object.FindObjectsByType<LightsOut>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                clock.litSeconds = DuskLitSeconds;
         }
 
         static void Apply(LevelBuilder builder, PoolMaterials m)
@@ -221,10 +236,18 @@ namespace BackRooms.EditorTools
                     problems.Add("falta algum material de mancha (Decal_Stain_*)");
                 if (builder.poolMarkDecals == null || builder.poolMarkDecals.Length != 4 || builder.poolMarkDecals.Any(m => m == null))
                     problems.Add("falta algum material de marcação (Decal_Mark_*)");
+                var clock = Object.FindFirstObjectByType<LightsOut>();
+                if (clock == null || !Mathf.Approximately(clock.litSeconds, DuskLitSeconds))
+                    problems.Add($"o LightsOut da cena não tem os {DuskLitSeconds} s de luz do anoitecer");
 
                 builder.seed = CheckSeeds[0];
                 builder.Rebuild();
                 lines.Add($"montagem da seed {builder.seed}: {builder.PoolStats}");
+                // Nenhuma luminária: o vidro de luz do dia não pisca (DaylightPanel, fora do CeilingLight).
+                int panels = builder.GetComponentsInChildren<DaylightPanel>(true).Length;
+                int fixtures = builder.GetComponentsInChildren<CeilingLight>(true).Length;
+                if (panels == 0) problems.Add("nenhum vidro de luz do dia (DaylightPanel)");
+                if (fixtures > 0) problems.Add($"{fixtures} luminária(s) (CeilingLight) nas Piscinas: piscariam no apagão");
                 lines.Add($"manchas e marcações: {builder.PoolDecalLog}");
                 lines.Add("fotos: " + Capture(builder));
             }
@@ -371,17 +394,14 @@ namespace BackRooms.EditorTools
                     Shot("caminho", from, to - from, 3f);
                 }
 
-                // Apagão ("anoitecer"), da sala inicial.
+                // Apagão ("anoitecer"), da sala inicial: o relógio forçado no meio da noite.
                 var lightsOut = Object.FindFirstObjectByType<LightsOut>();
-                if (lightsOut != null)
+                if (lightsOut != null && water != null)
                 {
-                    foreach (CeilingLight lamp in CeilingLight.All) lamp.SetPower(PowerPhase.Dark);
-                    lightsOut.SetDarkness(1f);
-                    if (water != null) water.ForceNight = 1f;
+                    water.ForceSeconds = lightsOut.firstDarkAt + lightsOut.darkSeconds * 0.5f;
                     Shot("apagao", builder.SpawnCenter, Vector3.forward, 4f);
-                    if (water != null) water.ForceNight = -1f;
-                    lightsOut.SetDarkness(0f);
-                    foreach (CeilingLight lamp in CeilingLight.All) lamp.SetPower(PowerPhase.Steady);
+                    water.ForceSeconds = -1.0;
+                    water.Snap(builder.SpawnCenter);
                 }
             }
             finally

@@ -14,7 +14,9 @@ namespace BackRooms.World
     ///   apagada no apagão e mais forte para quem está debaixo d'água;
     /// - debaixo d'água: névoa verde-água clara (visão de ~10 m) e imagem puxada para o ciano,
     ///   só na máquina de quem está com a cabeça submersa;
-    /// - o apagão vira "anoitecer": céu azul-marinho por cima do escuro do <see cref="LightsOut"/>;
+    /// - o apagão vira "anoitecer" (<see cref="DaylightAt"/>): pelo relógio do <see cref="LightsOut"/>,
+    ///   sem pisca nenhum, a luz das claraboias e janelas (<see cref="DaylightPanel"/>) esquenta,
+    ///   cai devagar até a noite e volta devagar; o céu azul-marinho e a cáustica seguem a mesma rampa;
     /// - salas escuras de propósito (<see cref="PoolRoom.Dark"/>): a luz ambiente cai enquanto a
     ///   câmera está dentro delas (o céu do HDRP não é barrado por parede; sem isso nenhuma sala
     ///   escurece).
@@ -68,6 +70,20 @@ namespace BackRooms.World
         public float darkRoomShade = 6f;
         public float tunnelShade = 11f;
 
+        [Header("Anoitecer (no lugar do apagão)")]
+        [Tooltip("Aviso: segundos em que a luz esquenta e baixa um pouco, antes de começar a escurecer.")]
+        public float duskWarning = 10f;
+        [Tooltip("Segundos em que a luz cai até a noite; termina quando começa o escuro do LightsOut.")]
+        public float duskFade = 10f;
+        [Tooltip("Segundos em que a luz volta, a partir do fim do escuro do LightsOut.")]
+        public float dawnFade = 10f;
+        [Tooltip("Quanto sobra da luz no fim do aviso (fim de tarde).")]
+        [Range(0f, 1f)] public float warningLight = 0.75f;
+        [Tooltip("Temperatura da luz no fim de tarde, em kelvin (a do dia vem do LevelBuilder).")]
+        public float warmTemperature = 2600f;
+        [Tooltip("Tinta do brilho do vidro no fim de tarde.")]
+        public Color warmGlass = new Color(1f, 0.7f, 0.42f);
+
         /// <summary>Altura da superfície da água no mundo.</summary>
         public float SurfaceY => transform.position.y;
 
@@ -77,8 +93,14 @@ namespace BackRooms.World
         /// </summary>
         public bool LocalUnderwater { get; set; }
 
-        /// <summary>Para as fotos fora do Play: 0 a 1 força o "anoitecer"; negativo = segue o <see cref="LightsOut"/>.</summary>
-        public float ForceNight { get; set; } = -1f;
+        /// <summary>
+        /// Para as fotos e os testes: força o relógio do anoitecer (segundos de sessão); negativo =
+        /// segue o relógio da sessão, como no jogo.
+        /// </summary>
+        public double ForceSeconds { get; set; } = -1.0;
+
+        /// <summary>A luz do dia aplicada no último quadro.</summary>
+        public Daylight CurrentDaylight { get; private set; } = Daylight.Day;
 
         static readonly int BaseColorMapSt = Shader.PropertyToID("_BaseColorMap_ST");
         static readonly int DetailMapSt = Shader.PropertyToID("_DetailMap_ST");
@@ -94,7 +116,7 @@ namespace BackRooms.World
 
         Volume _underwater, _night, _darkRoom;
         readonly List<Rect> _darkRects = new List<Rect>();
-        float _nightWeight;
+        LightsOut _clock;
 
         void OnEnable()
         {
@@ -187,8 +209,7 @@ namespace BackRooms.World
             float rate = Time.deltaTime * 6f;
             if (_underwater != null)
                 _underwater.weight = Mathf.MoveTowards(_underwater.weight, LocalUnderwater ? 1f : 0f, rate);
-            _nightWeight = Mathf.MoveTowards(_nightWeight, NightTarget(), rate);
-            if (_night != null) _night.weight = _nightWeight;
+            ApplyDaylight();
 
             Camera viewer = Camera.main;
             if (_darkRoom != null && viewer != null) _darkRoom.weight = DarkRoomWeight(viewer.transform.position);
@@ -201,17 +222,91 @@ namespace BackRooms.World
         {
             Prepare();
             if (_underwater != null) _underwater.weight = LocalUnderwater ? 1f : 0f;
-            _nightWeight = NightTarget();
-            if (_night != null) _night.weight = _nightWeight;
+            ApplyDaylight();
             if (_darkRoom != null) _darkRoom.weight = DarkRoomWeight(viewer);
             Animate(Time.realtimeSinceStartup);
         }
 
-        float NightTarget()
+        // ---------------------------------------------------------------- Anoitecer
+
+        /// <summary>O relógio do apagão: o LightsOut da cena (fora do Play o Instance não existe).</summary>
+        LightsOut Clock()
         {
-            if (ForceNight >= 0f) return Mathf.Clamp01(ForceNight);
-            LightsOut power = LightsOut.Instance;
-            return power != null && power.Phase == PowerPhase.Dark ? 1f : 0f;
+            if (LightsOut.Instance != null) return LightsOut.Instance;
+            if (_clock == null) _clock = FindAnyObjectByType<LightsOut>();
+            return _clock;
+        }
+
+        /// <summary>Segundos de sessão que valem agora para o anoitecer (negativo = fora de partida).</summary>
+        public double DaylightSeconds()
+        {
+            if (ForceSeconds >= 0.0) return ForceSeconds;
+            LightsOut clock = Clock();
+            if (!Application.isPlaying || clock == null || clock.session == null || !clock.eventEnabled) return -1.0;
+            return clock.session.SessionSeconds;
+        }
+
+        // Tudo sai da mesma conta, a cada quadro: o vidro e as luzes do dia, o céu azul-marinho
+        // e a cáustica. O LightsOut continua ligando o Volume de apagão dele (priority 50) no escuro,
+        // de uma vez, mas ali o "Anoitecer" (51) já está com peso 1 e cobre o céu; a névoa da fase
+        // usa a cor do céu, então a névoa preta do apagão não aparece.
+        void ApplyDaylight()
+        {
+            Daylight light = DaylightAt(Clock(), DaylightSeconds());
+            CurrentDaylight = light;
+            if (_night != null) _night.weight = light.Night;
+
+            for (int i = DaylightPanel.All.Count - 1; i >= 0; i--)
+            {
+                DaylightPanel panel = DaylightPanel.All[i];
+                if (panel == null) { DaylightPanel.All.RemoveAt(i); continue; }
+                panel.Apply(light, warmTemperature, warmGlass);
+            }
+        }
+
+        /// <summary>
+        /// A luz do dia aos <paramref name="seconds"/> de sessão, pelo ciclo do apagão do
+        /// <see cref="LightsOut"/> (mesma conta, <see cref="LightsOut.PhaseAt"/>): a noite é
+        /// exatamente o escuro dele. Antes, <see cref="duskWarning"/> s de aviso (a luz esquenta e
+        /// cai para <see cref="warningLight"/>) e <see cref="duskFade"/> s escurecendo; depois,
+        /// <see cref="dawnFade"/> s clareando, de alaranjado a branco. Função só do relógio: quem
+        /// entra no meio do anoitecer vê o mesmo que os outros, e nada vai pela rede.
+        /// </summary>
+        public Daylight DaylightAt(LightsOut clock, double seconds)
+        {
+            if (clock == null || seconds < 0.0) return Daylight.Day;
+            PowerPhase phase = clock.PhaseAt(seconds, out float toChange);
+            if (phase == PowerPhase.Dark) return new Daylight { Sun = 0f, Warmth = 1f, Night = 1f };
+            if (toChange < 0f) return Daylight.Day;
+
+            // Indo para a noite: aviso e depois a queda.
+            float untilDark = toChange;
+            float fall = Ramp(1f - untilDark / Mathf.Max(0.01f, duskFade));
+            float warn = Ramp(1f - (untilDark - duskFade) / Mathf.Max(0.01f, duskWarning));
+
+            // Voltando da noite: segundos desde o fim do último escuro.
+            float rise = 0f;
+            if (seconds >= clock.firstDarkAt)
+            {
+                float since = Mathf.Max(0.1f, clock.litSeconds) - untilDark;
+                rise = Ramp(1f - since / Mathf.Max(0.01f, dawnFade));
+            }
+
+            float night = Mathf.Max(fall, rise);
+            float warmth = Mathf.Max(warn, rise);
+            return new Daylight
+            {
+                Night = night,
+                Warmth = warmth,
+                Sun = (1f - night) * Mathf.Lerp(1f, warningLight, warmth),
+            };
+        }
+
+        // Rampa suave de 0 a 1 (sem degrau nas pontas).
+        static float Ramp(float t)
+        {
+            t = Mathf.Clamp01(t);
+            return t * t * (3f - 2f * t);
         }
 
         float DarkRoomWeight(Vector3 viewer)
@@ -241,8 +336,8 @@ namespace BackRooms.World
             }
 
             if (_caustics.Count == 0) return;
-            // A cáustica é luz do dia que passou pela água: some com o apagão.
-            float strength = (1f - _nightWeight) * (LocalUnderwater ? causticUnderwaterBoost : 1f);
+            // A cáustica é luz do dia que passou pela água: cai junto com ela no anoitecer.
+            float strength = CurrentDaylight.Sun * (LocalUnderwater ? causticUnderwaterBoost : 1f);
             Color color = _causticColor * strength;
             color.a = _causticColor.a;
             _block.Clear();
@@ -324,8 +419,8 @@ namespace BackRooms.World
             return volume;
         }
 
-        // "Anoitecer": acima do apagão do LightsOut (50), com o mesmo peso dele. O escuro
-        // continua escuro (lanterna), mas azul-marinho como a noite das Poolrooms.
+        // "Anoitecer": acima do apagão do LightsOut (50), com o peso da noite (DaylightAt). O
+        // escuro continua escuro (lanterna), mas azul-marinho como a noite das Poolrooms.
         Volume CreateNightVolume()
         {
             Volume volume = CreateVolume("Anoitecer", 51f, out VolumeProfile profile);

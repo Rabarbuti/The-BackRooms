@@ -5,6 +5,7 @@ using BackRooms.World;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Rendering.HighDefinition;
 
 namespace BackRooms.EditorTools
 {
@@ -12,8 +13,10 @@ namespace BackRooms.EditorTools
     /// Teste em Play do Level 2 de teste (Scenes/Level2_Test.unity, As Piscinas): hospeda,
     /// confere que o jogador nasce no seco da sala inicial, anda o caminho a pé até a saída
     /// (descendo e subindo escadas, passando pela água), depois cai num poço e confere que boia
-    /// com a cabeça fora, mergulha até acabar o fôlego (afoga e volta à sala inicial) e, por fim,
-    /// nada para fora do poço até uma área funda vizinha e fica de pé nela.
+    /// com a cabeça fora, mergulha até acabar o fôlego (afoga e volta à sala inicial), nada para
+    /// fora do poço até uma área funda vizinha e fica de pé nela e, por fim, passa por um
+    /// anoitecer encurtado: a luz das claraboias e janelas desce sem voltar a subir até zero, as
+    /// lâmpadas submersas continuam acesas e a luz volta ao valor do dia.
     ///
     /// Linha de comando: -executeMethod BackRooms.EditorTools.Level2PlayTest.BatchRun (sai com 0
     /// se passou, 3 se falhou; o editor fecha com o Level 0 aberto). Menu: BackRooms > Testar
@@ -141,6 +144,10 @@ namespace BackRooms.EditorTools
 
                 case 7:
                     SwimOut(dt);
+                    break;
+
+                case 8:
+                    Dusk(session);
                     break;
             }
         }
@@ -322,7 +329,7 @@ namespace BackRooms.EditorTools
             if (cell.x == _deepX && cell.y == _deepZ && !_controller.IsSwimming && _body.isGrounded && Mathf.Abs(position.y - goal.y) < 0.15f)
             {
                 Notes.Add($"saiu do poço nadando e ficou de pé na área funda (piso a {goal.y:F1} m, água no peito)");
-                Finish(true, string.Join("; ", Notes));
+                Next();
                 return;
             }
 
@@ -334,6 +341,117 @@ namespace BackRooms.EditorTools
 
             Vector3 toGoal = Flat(goal - position);
             if (toGoal.magnitude > 0.2f) _body.Move(toGoal.normalized * 1.5f * dt);
+        }
+
+        // ---------------------------------------------------------------- Anoitecer
+
+        static double _duskDark, _duskDawnEnd;
+        static float _duskDay, _duskLast;
+        static int _duskSamples, _duskNightSamples;
+        static bool _duskStarted, _duskReachedNight;
+        static List<(Light light, HDAdditionalLightData data, float intensity)> _lamps;
+
+        // Anoitecer encurtado (mesma conta, tempos menores): adianta o próximo escuro para daqui a
+        // pouco e acompanha a luz das claraboias e janelas quadro a quadro. Tem de descer sem
+        // voltar a subir (sem pisca) até ~0 na noite, com as lâmpadas submersas acesas o tempo
+        // todo, e voltar ao valor do dia depois.
+        static void Dusk(GameSession session)
+        {
+            PoolWater water = PoolWater.Current;
+            LightsOut clock = LightsOut.Instance;
+            if (water == null || clock == null) { Finish(false, "anoitecer: sem PoolWater ou sem LightsOut na fase"); return; }
+            double now = session.SessionSeconds;
+
+            if (!_duskStarted)
+            {
+                if (Object.FindObjectsByType<CeilingLight>(FindObjectsInactive.Include).Length > 0)
+                {
+                    Finish(false, "anoitecer: há luminária (CeilingLight) nas Piscinas, que piscaria no apagão");
+                    return;
+                }
+                if (DaylightPanel.All.Count == 0) { Finish(false, "anoitecer: nenhum vidro de luz do dia"); return; }
+
+                water.duskWarning = 2f;
+                water.duskFade = 3f;
+                water.dawnFade = 3f;
+                clock.darkSeconds = 2f;
+                clock.firstDarkAt = (float)now + water.duskWarning + water.duskFade + 1.5f;
+                _duskDark = clock.firstDarkAt;
+                _duskDawnEnd = _duskDark + clock.darkSeconds + water.dawnFade;
+
+                _lamps = new List<(Light, HDAdditionalLightData, float)>();
+                Transform lamps = _level.transform.Find("Lampadas");
+                if (lamps != null)
+                    foreach (Light light in lamps.GetComponentsInChildren<Light>(true))
+                        _lamps.Add((light, light.GetComponent<HDAdditionalLightData>(), light.intensity));
+                _duskStarted = true;
+                _duskDay = -1f;
+                return;
+            }
+
+            float sky = SkylightIntensity();
+            if (_duskDay < 0f)
+            {
+                // Primeiro quadro depois de adiantar o relógio: ainda é dia pleno.
+                _duskDay = _duskLast = sky;
+                if (sky <= 0f) { Finish(false, "anoitecer: as claraboias e janelas começaram sem luz"); return; }
+                return;
+            }
+            _duskSamples++;
+            float eps = _duskDay * 1e-4f;
+
+            foreach (var (light, data, intensity) in _lamps)
+                if (light == null || !light.enabled || !light.gameObject.activeInHierarchy || !Mathf.Approximately(light.intensity, intensity) ||
+                    (data != null && data.lightDimmer < 0.999f))
+                {
+                    Finish(false, $"anoitecer: uma lâmpada submersa mudou ou apagou aos {now - _duskDark:F1} s do escuro");
+                    return;
+                }
+
+            // A fase vem do estado que o PoolWater aplicou junto com as luzes (o relógio lido aqui
+            // pode estar um quadro à frente).
+            bool night = water.CurrentDaylight.Night >= 0.999f;
+            if (!_duskReachedNight && !night)
+            {
+                if (sky > _duskLast + eps) { Finish(false, $"anoitecer: a luz voltou a subir antes da noite ({_duskLast:F0} -> {sky:F0}, {now - _duskDark:F2} s do escuro): pisca"); return; }
+                if (now > _duskDark + 1.0) { Finish(false, $"anoitecer: 1 s depois do escuro do LightsOut ainda não era noite (luz em {sky / _duskDay:P1})"); return; }
+            }
+            else if (night)
+            {
+                _duskReachedNight = true;
+                _duskNightSamples++;
+                if (sky > _duskDay * 0.001f) { Finish(false, $"anoitecer: de noite as claraboias ainda dão {sky / _duskDay:P1} da luz do dia"); return; }
+            }
+            else
+            {
+                if (sky < _duskLast - eps) { Finish(false, $"anoitecer: a luz caiu de novo no amanhecer ({_duskLast:F0} -> {sky:F0}): pisca"); return; }
+                if (now >= _duskDawnEnd + 0.5)
+                {
+                    if (_duskNightSamples == 0) { Finish(false, "anoitecer: nenhuma amostra da noite"); return; }
+                    if (Mathf.Abs(sky - _duskDay) > _duskDay * 0.01f) { Finish(false, $"anoitecer: depois de amanhecer a luz ficou em {sky / _duskDay:P1} da do dia"); return; }
+                    Notes.Add($"anoitecer: a luz das claraboias e janelas desceu sem voltar a subir até 0 ({_duskSamples} amostras, {_duskNightSamples} de noite), " +
+                              $"{_lamps.Count} lâmpadas submersas acesas o tempo todo, e voltou a 100% do dia");
+                    Finish(true, string.Join("; ", Notes));
+                    return;
+                }
+            }
+            _duskLast = sky;
+        }
+
+        // Luz que as claraboias e janelas dão agora: intensidade vezes dimmer, somada.
+        static float SkylightIntensity()
+        {
+            float total = 0f;
+            foreach (DaylightPanel panel in DaylightPanel.All)
+            {
+                if (panel == null) continue;
+                foreach (HDAdditionalLightData data in panel.GetComponentsInChildren<HDAdditionalLightData>(true))
+                {
+                    var light = data.GetComponent<Light>();
+                    if (light != null && light.enabled) total += light.intensity * data.lightDimmer;
+                }
+            }
+            return total;
         }
 
         static Vector2Int CellOf(Vector3 world)
