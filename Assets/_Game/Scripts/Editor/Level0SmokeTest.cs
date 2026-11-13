@@ -100,6 +100,11 @@ namespace BackRooms.EditorTools
         static bool _sawRemoteFigure;
         static bool _sawRemoteHolding;
         static bool _sawRemoteBlue;
+        static int _handSamples;
+        static float _handClosest = float.PositiveInfinity;
+        static float _handDeepest = float.NegativeInfinity;
+        static float _tipGap;
+        static int _tipOffScreen;
         static int _penKeyStep;
         static int _penKeyTicks;
         static bool _penKeyReleased;
@@ -345,6 +350,7 @@ namespace BackRooms.EditorTools
                     else if (t < 2.0)
                     {
                         InputSystem.QueueStateEvent(_keyboard, new KeyboardState());
+                        CheckHandAtWall(held);
 
                         // Um evento de mouse a cada 1/60 s; mais que isso giraria rápido demais.
                         if (Now - _lastMouseEvent > 1.0 / 60.0)
@@ -465,6 +471,25 @@ namespace BackRooms.EditorTools
             _penKeyReleased = false;
             _penKeyTicks = 0;
             return _penKeyStep >= PenKeyOrder.Length;
+        }
+
+        // Riscando encostado na parede (o olho fica a ~0,33 m dela): nenhum vértice das peças da
+        // mão em primeira pessoa passa do plano da superfície riscada, e a ponta da caneta fica
+        // na tela, perto do ponto riscado.
+        static void CheckHandAtWall(PenTool pen)
+        {
+            if (pen == null || !pen.IsDrawing || pen.hand == null || !pen.hand.isActiveAndEnabled || _local.playerCamera == null) return;
+            if (!pen.TryAim(out RaycastHit hit)) return;
+
+            _handSamples++;
+            _handClosest = Mathf.Min(_handClosest, hit.distance);
+            _handDeepest = Mathf.Max(_handDeepest, pen.hand.DepthPast(hit.point, hit.normal));
+
+            Vector3 tip = pen.hand.TipPosition;
+            if (hit.distance < 0.6f) _tipGap = Mathf.Max(_tipGap, Vector3.Distance(tip, hit.point));
+
+            Vector3 view = _local.playerCamera.WorldToViewportPoint(tip);
+            if (view.z < _local.playerCamera.nearClipPlane || view.x < 0f || view.x > 1f || view.y < 0f || view.y > 1f) _tipOffScreen++;
         }
 
         // A cor na mão do dono: o nome da tinta se caneta, mão e rede concordam; senão o que diverge.
@@ -1053,6 +1078,12 @@ namespace BackRooms.EditorTools
             {
                 ok &= _handOk;
                 report += $" mao_com_caneta={_handOk}";
+
+                // A mão não atravessa a parede riscando de perto (tolerância de 1 cm).
+                bool wallOk = _handSamples > 0 && _handClosest < 0.6f && _handDeepest <= 0.01f && _tipOffScreen == 0;
+                ok &= wallOk;
+                report += $" mao_na_parede={wallOk} [amostras={_handSamples} parede_mais_perto={_handClosest:F2}m " +
+                          $"peca_mais_funda={_handDeepest * 100f:+0.0;-0.0}cm ponta_longe_do_risco={_tipGap * 100f:F1}cm ponta_fora_da_tela={_tipOffScreen}]";
             }
 
             if (_role == ClientRole && !LateJoin)

@@ -88,7 +88,8 @@ WASD anda, Shift corre, Ctrl ou C agacha, Espaço pula, F lanterna, uma tecla po
 2 azul, 3 vermelha: puxa a caneta, troca de cor ou, se já é a da mão, guarda), botão esquerdo
 risca, E abre a porta
 de saída (ou solta, se já estava esperando os outros), F9 grava a tela, Esc solta o mouse. No menu: H hospeda,
-J entra; a lista "Fase" troca de nível (no editor todas ficam liberadas).
+J entra; a lista "Fase" troca de nível (no editor todas ficam liberadas). Na água sem pé (poço das
+Piscinas), segurar Espaço sobe e fica à tona; sem tecla, afunda devagar; Ctrl ou C mergulha.
 
 ## Conteúdo gerado: não editar à mão
 
@@ -266,8 +267,8 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
 "C:\Program Files\Unity\Hub\Editor\6000.6.4f1\Editor\Unity.exe" -batchmode -projectPath "<pasta>" -executeMethod BackRooms.EditorTools.Level0SmokeTest.BatchRun -logFile "<log>"
 ```
 
-- `Level0SmokeTest.BatchRun` — sozinho: entra em Play, anda, corre, pula, risca, atravessa uma
-  faixa, cai num buraco, vê um apagão, grava 3 s de vídeo e é pego pela entidade. Sai com 0 se
+- `Level0SmokeTest.BatchRun` — sozinho: entra em Play, anda, corre, pula, risca encostado na
+  parede (a mão não pode passar dela), troca as canetas pelas teclas, atravessa uma faixa, cai num buraco, vê um apagão, grava 3 s de vídeo e é pego pela entidade. Sai com 0 se
   passou, 3 se falhou. O resultado é a linha `[BackRooms] Teste de fumaça PASSOU/FALHOU: ...`
   do log.
 - `Level0SmokeTest.BatchHost` + `BatchJoin` — host e cliente ao mesmo tempo. O segundo editor
@@ -296,6 +297,10 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   (`Tools/Blender/personagens/esqueleto_*.json`).
 - `Level0Preview.BatchCaptureHud` — só o painel da filmadora, em 1920 x 1080, de frente para a
   porta de saída (`Logs/Previews/painel_*.png`). Não recria a cena.
+- `Level0Preview.BatchCaptureHandWall` — a mão em primeira pessoa riscando uma parede a 1,5 m,
+  0,8 m, 0,4 m e 0,15 m, de frente e a 45°, as três canetas e o traje com a caneta colado na
+  parede (`Logs/Previews/mao_parede/*.png`); escreve no log quanto cada uma passa da parede. Não
+  recria a cena.
 - `Level2Setup.BatchCheck` — recria a cena e os materiais das Piscinas e confere 5 seeds
   (`PoolGenerator.Validate` sem problemas, mesma seed = mesmo `Hash`, perfil de Volume da fase,
   água e cáustica na cena); fotos de cada tipo de sala em `Logs/Previews/level2_look_*.png` (com
@@ -312,8 +317,8 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   Apaga só as fotos da mesma seed, não as outras. Escreve no log quantas manchas e marcações a seed
   tem e quais das seeds de conferência têm poço redondo, tijolo de vidro e janelão.
 - `Level2PlayTest.BatchRun` (`-seed N`) — as Piscinas em Play: nasce no seco, anda o caminho a pé
-  até a saída pelas escadas e arcos, boia num poço, mergulha até afogar e voltar, e sai nadando
-  para a área funda.
+  até a saída pelas escadas e arcos, fica à tona num poço segurando Espaço, afunda e se afoga sem
+  tecla, sobe e sai nadando para a área funda, e agachado na funda põe a cabeça debaixo d'água.
 - `Level0ColliderCheck.BatchRunLevel2` — colisores contra a malha visível na cena das Piscinas.
 - `Level1Models.BatchUpdateAndCapture` — cria os materiais dos lotes, reimporta os modelos,
   escreve as medidas no log e salva fotos em `Logs/Previews/moveis_*.png` (todos, ou só os de

@@ -55,6 +55,158 @@ namespace BackRooms.EditorTools
             }
         }
 
+        /// <summary>
+        /// Uso em linha de comando: a mão em primeira pessoa riscando a parede norte da sala
+        /// inicial a 1,5 m, 0,8 m, 0,4 m e 0,15 m, de frente e a 45° (com a parede do lado da
+        /// mão), as três canetas a 0,4 m, e o traje (como os outros o veem) com a caneta,
+        /// colado na parede. Não recria a cena. Pasta: <c>-previewOut</c> (padrão
+        /// Logs/Previews/mao_parede). Escreve no log quanto a mão passa do plano da parede.
+        /// </summary>
+        public static void BatchCaptureHandWall()
+        {
+            try
+            {
+                string folder = ArgumentAfter("-previewOut") ?? Path.Combine(DefaultFolder(), "mao_parede");
+                EditorApplication.Exit(CaptureHandWall(folder) ? 0 : 2);
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+                EditorApplication.Exit(1);
+            }
+        }
+
+        static bool CaptureHandWall(string folder)
+        {
+            EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+
+            var builder = UnityEngine.Object.FindFirstObjectByType<LevelBuilder>();
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
+            var board = UnityEngine.Object.FindFirstObjectByType<BackRooms.Items.DrawingBoard>();
+            var source = prefab != null ? prefab.GetComponentInChildren<BackRooms.Player.ItemHand>(true) : null;
+            var figureSource = prefab != null ? prefab.GetComponentInChildren<BackRooms.Player.PlayerBody>(true) : null;
+            if (builder == null || source == null || figureSource == null || board == null)
+            {
+                Debug.LogError("[BackRooms] Falta LevelBuilder, quadro dos riscos ou a mão/traje no prefab do jogador.");
+                return false;
+            }
+
+            GameObject playerObject = CreateCameraRig(prefab, out Camera camera);
+            Directory.CreateDirectory(folder);
+
+            bool asyncBefore = ShaderUtil.allowAsyncCompilation;
+            ShaderUtil.allowAsyncCompilation = false;
+
+            var target = new RenderTexture(1280, 720, 24, RenderTextureFormat.ARGB32);
+            var readback = new Texture2D(target.width, target.height, TextureFormat.RGBA32, false);
+            GameObject holder = null;
+            GameObject figure = null;
+
+            try
+            {
+                builder.Rebuild();
+
+                var camcorder = UnityEngine.Object.FindFirstObjectByType<BackRooms.UI.Camcorder>();
+                Transform player = playerObject.transform;
+                camera.targetTexture = target;
+
+                holder = new GameObject("MaoDaFoto");
+                holder.transform.SetParent(camera.transform, false);
+                holder.transform.localPosition = source.transform.localPosition;
+                holder.transform.localRotation = source.transform.localRotation;
+
+                var hand = holder.AddComponent<BackRooms.Player.ItemHand>();
+                hand.suitMaterial = source.suitMaterial;
+                hand.gloveMaterial = source.gloveMaterial;
+                hand.penMaterial = source.penMaterial;
+                hand.Build();
+
+                // Face de dentro da parede norte da sala inicial, no meio da sala.
+                LevelData data = builder.Data;
+                float wallZ = (data.RoomZ0 + data.RoomHeight) * LevelBuilder.Cell - LevelBuilder.WallThickness * 0.5f;
+                Vector3 wall = builder.transform.TransformPoint(new Vector3(data.SpawnCenterX * LevelBuilder.Cell, 0f, wallZ));
+                Vector3 normal = -builder.transform.forward;
+
+                void Pose(float distance, float yaw, int color, string name)
+                {
+                    // A distância é a da câmera ao plano da parede; a 45° o raio da mira é mais comprido.
+                    player.position = new Vector3(wall.x, 0.05f, wall.z) + normal * distance;
+                    player.rotation = Quaternion.LookRotation(-normal, Vector3.up) * Quaternion.Euler(0f, yaw, 0f);
+                    Physics.SyncTransforms();
+
+                    hand.PenRenderer.sharedMaterial = board.inkMaterials[color];
+                    if (camcorder != null) camcorder.Draw(true, 207.47f, 207.47f, 0.8f, false, "PEN " + BackRooms.Items.PenTool.ColorNames[color]);
+                    hand.PreviewPose(1f);
+
+                    float past = hand.DepthPast(wall, normal);
+                    Debug.Log($"[BackRooms] Mão {name}: a {distance:F2} m da parede, yaw {yaw:F0}°, peça mais funda {past * 100f:+0.0;-0.0} cm " +
+                              (past > 0.01f ? "(ATRAVESSA)" : "(não atravessa)"));
+                    Shoot(camera, target, readback, Path.Combine(folder, name + ".png"));
+                }
+
+                foreach (float distance in new[] { 1.5f, 0.8f, 0.4f, 0.15f })
+                {
+                    string tag = Mathf.RoundToInt(distance * 100f) + "cm";
+                    Pose(distance, 0f, 0, "mao_" + tag + "_frente");
+                    // A parede fica do lado da mão (direita): a câmera gira para a esquerda.
+                    Pose(distance, -45f, 0, "mao_" + tag + "_45");
+                }
+
+                Pose(0.4f, 0f, 1, "mao_40cm_frente_vermelha");
+                Pose(0.4f, 0f, 2, "mao_40cm_frente_azul");
+
+                UnityEngine.Object.DestroyImmediate(holder);
+                holder = null;
+
+                // O traje com a caneta e a lanterna, colado na parede (0,33 m, o raio do jogador
+                // com a pele), visto de lado.
+                figure = new GameObject("JogadorDaFoto");
+                var body = figure.AddComponent<BackRooms.Player.PlayerBody>();
+                body.suitMaterial = figureSource.suitMaterial;
+                body.rubberMaterial = figureSource.rubberMaterial;
+                body.visorMaterial = figureSource.visorMaterial;
+                body.gearMaterial = figureSource.gearMaterial;
+                body.Build();
+                body.SetPenInk(board.inkMaterials[1]);
+
+                Vector3 along = Vector3.Cross(Vector3.up, normal).normalized;
+                Vector3 spot = new Vector3(wall.x, 0f, wall.z) + normal * 0.33f;
+                figure.transform.SetPositionAndRotation(spot, Quaternion.LookRotation(-normal, Vector3.up));
+                Physics.SyncTransforms();
+
+                body.ProbeWall();
+                body.Pose(0f, 0f, 0f, 0f, 1f, 1f, 1f);
+                float clearance = body.ArmClearance();
+                Debug.Log($"[BackRooms] Traje a 0,33 m da parede, com caneta e lanterna: folga dos braços {clearance * 100f:+0.0;-0.0} cm " +
+                          (clearance < -0.01f ? "(ATRAVESSA)" : "(não atravessa)"));
+                if (camcorder != null) camcorder.Draw(true, 207.47f, 207.47f, 0.8f, false);
+
+                Vector3 from = spot + along * 2.2f + normal * 0.9f;
+                player.position = new Vector3(from.x, 0.05f, from.z);
+                player.rotation = Quaternion.LookRotation(spot - from, Vector3.up);
+                Shoot(camera, target, readback, Path.Combine(folder, "traje_na_parede.png"));
+
+                from = spot - along * 1.6f + normal * 1.1f;
+                player.position = new Vector3(from.x, 0.05f, from.z);
+                player.rotation = Quaternion.LookRotation(spot - from, Vector3.up);
+                Shoot(camera, target, readback, Path.Combine(folder, "traje_na_parede_outro_lado.png"));
+
+                Debug.Log("[BackRooms] Fotos da mão na parede salvas em " + folder);
+                return true;
+            }
+            finally
+            {
+                if (holder != null) UnityEngine.Object.DestroyImmediate(holder);
+                if (figure != null) UnityEngine.Object.DestroyImmediate(figure);
+                camera.targetTexture = null;
+                RenderTexture.active = null;
+                UnityEngine.Object.DestroyImmediate(target);
+                UnityEngine.Object.DestroyImmediate(readback);
+                ShaderUtil.allowAsyncCompilation = asyncBefore;
+                EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            }
+        }
+
         [MenuItem("BackRooms/Capturar prévia do painel")]
         public static void CaptureHudFromMenu()
         {

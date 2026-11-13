@@ -69,7 +69,9 @@ juntas pelo relógio `GameSession.SessionSeconds`.
 - **Lanterna** (F), por enquanto com bateria infinita. Passos sintetizados em código.
 - **Traje** (`PlayerBody`): o que os outros veem é um explorador de traje de proteção amarelo,
   que anda, agacha, acompanha o olhar e mostra a caneta e a lanterna nas mãos.
-- **Mão em primeira pessoa** (`ItemHand`) segurando o item em uso.
+- **Mão em primeira pessoa** (`ItemHand`) segurando o item em uso. Perto de uma superfície o
+  braço encolhe e a ponta da caneta vai ao ponto mirado; nenhuma peça passa da superfície. O
+  traje que os outros veem encolhe o braço do mesmo jeito diante de uma parede.
 
 ### Caneta
 
