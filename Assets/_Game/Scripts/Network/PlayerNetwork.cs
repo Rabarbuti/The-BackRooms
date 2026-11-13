@@ -49,6 +49,11 @@ namespace BackRooms.Net
         readonly NetworkVariable<bool> _atExit = new NetworkVariable<bool>(
             false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
+        // Índice da tinta da caneta na mão (ordem de PenTool.ColorNames), para o corpo que os
+        // outros veem segurar a caneta da mesma cor. Quem entra depois recebe o valor atual.
+        readonly NetworkVariable<byte> _penColor = new NetworkVariable<byte>(
+            0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+
         float _nextSend;
         float _shownPitch;
         float _shownEye;
@@ -71,6 +76,9 @@ namespace BackRooms.Net
 
         /// <summary>Com a mão na porta de saída, esperando os outros? Vale em qualquer máquina.</summary>
         public bool AtExit => _atExit.Value;
+
+        /// <summary>Cor da caneta publicada na rede (índice da tinta). Vale em qualquer máquina.</summary>
+        public int PenColor => _penColor.Value;
 
         /// <summary>
         /// Quantos jogadores da sessão estão esperando na porta de saída e quantos estão no
@@ -190,6 +198,9 @@ namespace BackRooms.Net
             bool holding = pen != null && pen.Equipped;
             if (_holding.Value != holding) _holding.Value = holding;
 
+            byte penColor = pen != null ? (byte)pen.ColorIndex : (byte)0;
+            if (_penColor.Value != penColor) _penColor.Value = penColor;
+
             bool atExit = BackRooms.World.LevelExit.Instance != null && BackRooms.World.LevelExit.Instance.LocalWaiting;
             if (_atExit.Value != atExit) _atExit.Value = atExit;
 
@@ -221,6 +232,11 @@ namespace BackRooms.Net
                 // olha e mostra o que ele tem nas mãos.
                 float crouch = Mathf.InverseLerp(controller.standingEyeHeight, controller.crouchingEyeHeight, _shownEye);
                 figure.SetState(crouch, _shownPitch, _holding.Value, _flashlightOn.Value);
+
+                // A caneta na mão do traje leva a tinta escolhida.
+                BackRooms.Items.DrawingBoard board = BackRooms.Items.DrawingBoard.Instance;
+                if (board != null && board.inkMaterials != null && board.inkMaterials.Length > 0)
+                    figure.SetPenInk(board.inkMaterials[Mathf.Min(_penColor.Value, board.inkMaterials.Length - 1)]);
             }
             else if (body != null)
             {

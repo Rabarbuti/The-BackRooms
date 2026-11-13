@@ -99,6 +99,13 @@ namespace BackRooms.EditorTools
         static bool _handOk;
         static bool _sawRemoteFigure;
         static bool _sawRemoteHolding;
+        static bool _sawRemoteBlue;
+        static int _penKeyStep;
+        static int _penKeyTicks;
+        static bool _penKeyReleased;
+        static double _penKeyHalfStart;
+        static bool _penKeysOk;
+        static string _penKeyLog = "";
         static int _baitStep;
         static double _baitStart;
         static bool _clientCaughtOk;
@@ -303,11 +310,16 @@ namespace BackRooms.EditorTools
                     Observe();
                     PenTool held = _local != null ? _local.pen : null;
 
-                    if (held != null && !held.Equipped && Now - _phaseStart < 8.0)
+                    // O host do teste de dois editores pega a azul (tecla 2), para o cliente conferir
+                    // a cor que chega pela rede; sozinho, a preta (tecla 1).
+                    Key equipKey = _role == HostRole ? Key.Digit2 : Key.Digit1;
+
+                    // Só até a primeira vez: depois, as teclas das canetas guardam a caneta de propósito.
+                    if (held != null && !held.Equipped && Now - _phaseStart < 8.0 && _penKeyLog.Length == 0)
                     {
                         // Alterna apertado e solto a cada décimo de segundo, até a caneta estar na mão.
                         bool down = (int)((Now - _phaseStart) * 10.0) % 2 == 0;
-                        InputSystem.QueueStateEvent(_keyboard, down ? new KeyboardState(Key.Digit1) : new KeyboardState());
+                        InputSystem.QueueStateEvent(_keyboard, down ? new KeyboardState(equipKey) : new KeyboardState());
                         _penReady = Now;
                         break;
                     }
@@ -317,6 +329,14 @@ namespace BackRooms.EditorTools
                         _handOk = true;
 
                     double t = Now - _penReady;
+
+                    // A primeira tecla puxou a caneta da cor dela (a rede publica no quadro seguinte).
+                    if (held != null && t >= 0.2 && _penKeyLog.Length == 0)
+                    {
+                        string first = PenState(held);
+                        _penKeyLog = $"{(equipKey == Key.Digit1 ? 1 : 2)}:{first}";
+                        _penKeysOk = first == (equipKey == Key.Digit1 ? "BLACK" : "BLUE");
+                    }
 
                     if (t < 0.2)
                     {
@@ -337,6 +357,10 @@ namespace BackRooms.EditorTools
                     {
                         // Solta tudo e dá tempo de os riscos chegarem ao outro editor.
                         InputSystem.QueueStateEvent(_mouse, new MouseState());
+                    }
+                    else if (_role == Solo && !PenKeys(held))
+                    {
+                        // Sozinho: aperta as teclas das canetas, uma de cada vez (PenKeys).
                     }
                     else
                     {
@@ -404,6 +428,63 @@ namespace BackRooms.EditorTools
             _phaseStart = Now;
         }
 
+        // Teclas das canetas, depois de riscar com a preta: 2 troca para a azul, 3 para a
+        // vermelha, 3 de novo guarda, 2 puxa a azul direto e 1 volta para a preta (o resto do
+        // teste segue com ela na mão). Cada tecla fica 0,15 s apertada e 0,15 s solta; então
+        // confere a cor da caneta, a tinta na mão e o que foi publicado na rede.
+        static readonly Key[] PenKeyOrder = { Key.Digit2, Key.Digit3, Key.Digit3, Key.Digit2, Key.Digit1 };
+        static readonly string[] PenKeyExpected = { "BLUE", "RED", "guardada", "BLUE", "BLACK" };
+
+        // Conta por passadas e por tempo desde o começo de cada metade, não pelo relógio do
+        // estágio: com a gravação desenhando a câmera a cada passada, uma passada pode levar
+        // mais que 0,15 s e pular a metade apertada inteira.
+        static bool PenKeys(PenTool pen)
+        {
+            const double Half = 0.15;
+            const int MinTicks = 3;
+            if (_penKeyStep >= PenKeyOrder.Length) return true;
+
+            if (_penKeyTicks == 0) _penKeyHalfStart = Now;
+            _penKeyTicks++;
+            bool halfDone = _penKeyTicks > MinTicks && Now - _penKeyHalfStart >= Half;
+
+            if (!_penKeyReleased)
+            {
+                InputSystem.QueueStateEvent(_keyboard, new KeyboardState(PenKeyOrder[_penKeyStep]));
+                if (halfDone) { _penKeyReleased = true; _penKeyTicks = 0; }
+                return false;
+            }
+
+            InputSystem.QueueStateEvent(_keyboard, new KeyboardState());
+            if (!halfDone) return false;
+
+            string state = PenState(pen);
+            _penKeyLog += $" {PenKeyOrder[_penKeyStep] - Key.Digit1 + 1}:{state}";
+            _penKeysOk &= state == PenKeyExpected[_penKeyStep];
+            _penKeyStep++;
+            _penKeyReleased = false;
+            _penKeyTicks = 0;
+            return _penKeyStep >= PenKeyOrder.Length;
+        }
+
+        // A cor na mão do dono: o nome da tinta se caneta, mão e rede concordam; senão o que diverge.
+        static string PenState(PenTool pen)
+        {
+            if (pen == null) return "sem_caneta";
+            if (!pen.Equipped) return "guardada";
+
+            DrawingBoard board = DrawingBoard.Instance;
+            Material ink = board != null && board.inkMaterials != null && pen.ColorIndex < board.inkMaterials.Length
+                ? board.inkMaterials[pen.ColorIndex] : null;
+            bool hand = pen.hand != null && pen.hand.PenRenderer != null && pen.hand.PenRenderer.sharedMaterial == ink;
+            bool net = _local != null && _local.PenColor == pen.ColorIndex;
+
+            string name = pen.ColorName;
+            if (!hand) name += "(mao=" + (pen.hand != null && pen.hand.PenRenderer != null ? pen.hand.PenRenderer.sharedMaterial.name : "nada") + ")";
+            if (!net) name += "(rede=" + (_local != null ? _local.PenColor : -1) + ")";
+            return name;
+        }
+
         static void FindPlayers()
         {
             int spawned = 0;
@@ -429,6 +510,13 @@ namespace BackRooms.EditorTools
             // O outro jogador aparece como a figura de traje, e ela mostra o item que ele pegou.
             if (_remote.figure != null && _remote.body.activeInHierarchy && _remote.figure.GetComponentsInChildren<Renderer>().Length > 20) _sawRemoteFigure = true;
             if (_remote.figure != null && _remote.figure.Holding) _sawRemoteHolding = true;
+
+            // O host pegou a caneta azul (tecla 2): a rede diz azul e o traje a segura com a tinta azul.
+            DrawingBoard board = DrawingBoard.Instance;
+            if (_remote.figure != null && _remote.figure.Holding && _remote.PenColor == 2 && board != null &&
+                board.inkMaterials != null && board.inkMaterials.Length > 2 && _remote.figure.PenRenderer != null &&
+                _remote.figure.PenRenderer.sharedMaterial == board.inkMaterials[2])
+                _sawRemoteBlue = true;
             if (_remote.flashlight != null && _remote.flashlight.IsOn) _sawRemoteFlashlight = true;
         }
 
@@ -920,20 +1008,13 @@ namespace BackRooms.EditorTools
             if (pen == null) report += " (jogador sem caneta)";
             else if (!pen.Equipped) report += $" (ligada={pen.isActiveAndEnabled} na_rede={pen.IsSpawned} dono={pen.IsOwner})";
 
-            // Cores da caneta (teclas 2 e 3 / R): voltar do preto vai para o azul, e avançar
-            // dá a volta até o preto de novo.
-            if (pen != null && DrawingBoard.Instance != null && _role == Solo)
+            // Uma tecla por caneta (1 preta, 2 azul, 3 vermelha; a mesma tecla guarda): a cor
+            // na caneta, na mão em primeira pessoa e na rede, depois de cada tecla.
+            if (_role != ClientRole)
             {
-                int before = pen.ColorIndex;
-                pen.ChangeColor(DrawingBoard.Instance, -before);
-                pen.ChangeColor(DrawingBoard.Instance, -1);
-                int back = pen.ColorIndex;
-                pen.ChangeColor(DrawingBoard.Instance, 1);
-                int forward = pen.ColorIndex;
-                bool colors = back == DrawingBoard.Instance.ColorCount - 1 && forward == 0;
+                bool colors = _penKeysOk && (_role != Solo || _penKeyStep >= PenKeyOrder.Length);
                 ok &= colors;
-                report += $" cores_da_caneta={colors}";
-                pen.ChangeColor(DrawingBoard.Instance, before);
+                report += $" cores_da_caneta={colors} [{_penKeyLog}]";
             }
 
             ok &= _rayOffLevel == 0;
@@ -976,8 +1057,8 @@ namespace BackRooms.EditorTools
 
             if (_role == ClientRole && !LateJoin)
             {
-                ok &= _sawRemoteFigure && _sawRemoteHolding;
-                report += $" traje_do_host={_sawRemoteFigure} viu_o_host_com_a_caneta={_sawRemoteHolding}";
+                ok &= _sawRemoteFigure && _sawRemoteHolding && _sawRemoteBlue;
+                report += $" traje_do_host={_sawRemoteFigure} viu_o_host_com_a_caneta={_sawRemoteHolding} caneta_do_host_azul={_sawRemoteBlue}";
             }
 
             if (_entityTested)

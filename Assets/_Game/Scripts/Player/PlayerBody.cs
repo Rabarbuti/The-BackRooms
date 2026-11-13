@@ -30,6 +30,9 @@ namespace BackRooms.Player
         /// <summary>Verdadeiro se, pelo que chegou, este jogador está com um item na mão.</summary>
         public bool Holding => _holding;
 
+        /// <summary>O corpo da caneta na mão direita, com a tinta escolhida pelo jogador.</summary>
+        public Renderer PenRenderer => _penBody;
+
         Transform _rig, _pelvis, _spine, _head;
         readonly Transform[] _thigh = new Transform[2];
         readonly Transform[] _shin = new Transform[2];
@@ -37,6 +40,7 @@ namespace BackRooms.Player
         readonly Transform[] _upperArm = new Transform[2];
         readonly Transform[] _forearm = new Transform[2];
         GameObject _pen;
+        Renderer _penBody;
         GameObject _torch;
 
         Vector3 _lastPosition;
@@ -63,6 +67,13 @@ namespace BackRooms.Player
             _pitch = pitch;
             _holding = holding;
             _lightOn = lightOn;
+        }
+
+        /// <summary>Tinta da caneta que este jogador tem na mão (chega pela rede, como o resto).</summary>
+        public void SetPenInk(Material ink)
+        {
+            if (!_built) Build();
+            if (_penBody != null && ink != null && _penBody.sharedMaterial != ink) _penBody.sharedMaterial = ink;
         }
 
         void Update()
@@ -226,6 +237,7 @@ namespace BackRooms.Player
                     // Caneta na mão direita, só enquanto o jogador a usa.
                     Transform grip = FigureKit.Joint(hand, "Caneta", new Vector3(0f, -0.08f, 0.03f), new Vector3(-70f, 0f, 0f));
                     FigureKit.Limb(grip, "Caneta_Ponta", 0.15f, 0.008f, true, rubber);
+                    _penBody = grip.Find("Caneta_Peca").GetComponent<Renderer>();
                     _pen = grip.gameObject;
                     _pen.SetActive(false);
                 }

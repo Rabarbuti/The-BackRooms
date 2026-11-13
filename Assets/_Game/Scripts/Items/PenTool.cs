@@ -8,8 +8,12 @@ namespace BackRooms.Items
 {
     /// <summary>
     /// Caneta: o jogador risca paredes e chão para marcar por onde passou ou o que evitar.
-    /// Tecla 1 pega e guarda; botão esquerdo do mouse risca; R ou 3 passa para a cor seguinte
-    /// e 2 volta para a anterior (preto, vermelho, azul).
+    /// Uma tecla por caneta: 1 preta, 2 azul, 3 vermelha. Sem caneta na mão, a tecla puxa
+    /// aquela; com outra cor na mão, troca; com a mesma, guarda. Botão esquerdo do mouse risca.
+    ///
+    /// A ordem das cores (<see cref="ColorNames"/>, <c>DrawingBoard.inkMaterials</c> e o byte
+    /// que vai na rede) continua preto, vermelho, azul; as teclas só apontam para o índice
+    /// (<see cref="KeyColors"/>).
     ///
     /// Rede: quem risca vê o traço na hora. A cada décimo de segundo os pontos novos vão
     /// para o host, que os repassa aos demais. Quem entra depois recebe tudo pelo
@@ -18,6 +22,9 @@ namespace BackRooms.Items
     public sealed class PenTool : NetworkBehaviour
     {
         public static readonly string[] ColorNames = { "BLACK", "RED", "BLUE" };
+
+        /// <summary>Índice da cor de cada tecla: 1 preta (0), 2 azul (2), 3 vermelha (1).</summary>
+        public static readonly int[] KeyColors = { 0, 2, 1 };
 
         [Header("Referências")]
         [Tooltip("De onde sai a mira: a câmera do jogador.")]
@@ -50,7 +57,8 @@ namespace BackRooms.Items
 
         static readonly RaycastHit[] Hits = new RaycastHit[16];
 
-        InputAction _equip, _draw, _nextColor, _previousColor;
+        InputAction _draw;
+        readonly InputAction[] _keys = new InputAction[3];
         readonly List<Vector3> _pending = new List<Vector3>();
         readonly Vector3[] _single = new Vector3[1];
         bool _active;
@@ -62,28 +70,29 @@ namespace BackRooms.Items
 
         void Awake()
         {
-            _equip = new InputAction("Pen", InputActionType.Button, "<Keyboard>/1");
-            _equip.AddBinding("<Gamepad>/dpadUp");
+            // Uma tecla por caneta, na ordem de KeyColors. No controle: cima preta, esquerda
+            // azul, direita vermelha.
+            string[] keyboard = { "<Keyboard>/1", "<Keyboard>/2", "<Keyboard>/3" };
+            string[] gamepad = { "<Gamepad>/dpadUp", "<Gamepad>/dpadLeft", "<Gamepad>/dpadRight" };
+            for (int i = 0; i < _keys.Length; i++)
+            {
+                _keys[i] = new InputAction("Pen" + ColorNames[KeyColors[i]], InputActionType.Button, keyboard[i]);
+                _keys[i].AddBinding(gamepad[i]);
+            }
 
             _draw = new InputAction("Draw", InputActionType.Button, "<Mouse>/leftButton");
             _draw.AddBinding("<Gamepad>/rightTrigger");
 
-            _nextColor = new InputAction("PenColor", InputActionType.Button, "<Keyboard>/r");
-            _nextColor.AddBinding("<Keyboard>/3");
-            _nextColor.AddBinding("<Gamepad>/dpadRight");
-
-            _previousColor = new InputAction("PenColorBack", InputActionType.Button, "<Keyboard>/2");
-            _previousColor.AddBinding("<Gamepad>/dpadLeft");
-
             if (viewModel != null) viewModel.SetActive(false);
         }
 
-        void OnEnable() { _equip.Enable(); _draw.Enable(); _nextColor.Enable(); _previousColor.Enable(); }
-        void OnDisable() { _equip.Disable(); _draw.Disable(); _nextColor.Disable(); _previousColor.Disable(); }
+        void OnEnable() { foreach (InputAction key in _keys) key.Enable(); _draw.Enable(); }
+        void OnDisable() { foreach (InputAction key in _keys) key.Disable(); _draw.Disable(); }
 
         public override void OnDestroy()
         {
-            _equip.Dispose(); _draw.Dispose(); _nextColor.Dispose(); _previousColor.Dispose();
+            foreach (InputAction key in _keys) key.Dispose();
+            _draw.Dispose();
             base.OnDestroy();
         }
 
@@ -91,7 +100,12 @@ namespace BackRooms.Items
         {
             if (!IsSpawned || !IsOwner) return;
 
-            if (_equip.WasPressedThisFrame()) SetEquipped(!Equipped);
+            for (int i = 0; i < _keys.Length; i++)
+            {
+                if (!_keys[i].WasPressedThisFrame()) continue;
+                Select(KeyColors[i]);
+                break;
+            }
 
             if (!Equipped)
             {
@@ -101,9 +115,6 @@ namespace BackRooms.Items
 
             DrawingBoard board = DrawingBoard.Instance;
             if (board == null) return;
-
-            int step = (_nextColor.WasPressedThisFrame() ? 1 : 0) - (_previousColor.WasPressedThisFrame() ? 1 : 0);
-            if (step != 0) ChangeColor(board, step);
 
             // Com o mouse solto (Esc), o clique serve para voltar ao jogo, não para riscar.
             bool drawing = _draw.IsPressed() && PlayerController.MouseCaptured && aim != null;
@@ -116,13 +127,23 @@ namespace BackRooms.Items
             if (_pending.Count > 0 && Time.unscaledTime >= _nextFlush) Flush();
         }
 
-        /// <summary>Passa <paramref name="step"/> cores para a frente (negativo volta), em ciclo.</summary>
-        public void ChangeColor(DrawingBoard board, int step)
-        {
+        /// <summary>
+        /// O que a tecla de uma caneta faz (<paramref name="color"/> é o índice da tinta): sem
+        /// caneta na mão, puxa essa; com outra cor na mão, troca; com a mesma, guarda.
+        /// </summary>
+        public void Select(int color)
+        {            if (Equipped && ColorIndex == color)
+            {
+                SetEquipped(false);
+                return;
+            }
+
+            // Cor antes de pôr na mão: a mão já aparece com a tinta certa no primeiro quadro.
             EndStroke();
-            int count = Mathf.Max(1, board.ColorCount);
-            ColorIndex = ((ColorIndex + step) % count + count) % count;
-            ApplyViewModelColor(board);
+            ColorIndex = color;
+
+            if (!Equipped) SetEquipped(true);
+            else if (DrawingBoard.Instance != null) ApplyViewModelColor(DrawingBoard.Instance);
         }
 
         /// <summary>
