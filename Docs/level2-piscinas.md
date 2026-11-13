@@ -11,7 +11,7 @@ Level 2 (teste)) com as etapas 1 a 7 da seção 8.1:
   e sala da saída (seção 3.2), maciços fechados entre elas (15 a 30% do mapa) e ligações com laços.
   `PoolGenerator.Validate` confere todas as regras da seção 3 e, se reprovar, sorteia de novo.
 - **Profundidade por célula** (`LevelData.Depth`: seco +0,2 m, raso −0,4, fundo −1,2, poço −6, água em
-  0) e **escadas explícitas** com largura (`LevelData.Stairs`); desnível sem escada é borda: desce-se,
+  +0,05, `LevelData.WaterLevel`) e **escadas explícitas** com largura (`LevelData.Stairs`); desnível sem escada é borda: desce-se,
   não se sobe (`LevelData.CanStep`). Tudo que não é poço continua alcançável a pé e de todo poço se
   sai nadando.
 - **Construção** (`LevelBuilder.Pools.cs`): paredes de 0,4 m com arcos, vãos e vigias recortados sem
@@ -192,7 +192,11 @@ há colunas, desníveis e água.
 
 ### 3.1 Profundidades
 
-Cada célula tem um piso numa de quatro alturas (a água fica em Y = 0):
+Cada célula tem um piso numa de quatro alturas, na grade de 20 cm do azulejo. A água fica 5 cm acima
+do zero dessa grade (`LevelData.WaterLevel` = +0,05 m; tudo que depende dela lê `PoolWater.SurfaceY`):
+assim o primeiro degrau de toda escada que desce do seco (a 0) fica logo abaixo da lâmina, como numa
+piscina de verdade. Com a água em 0, o piso desse degrau e a lâmina ficavam no mesmo plano e a textura
+piscava.
 
 | Profundidade | Piso | Andar | Outros |
 |---|---|---|---|
@@ -275,7 +279,9 @@ inclinado, sala octogonal, tobogã e as casas de máquinas do objetivo.
 
 ### 4.2 Como se joga
 
-- **Lentidão e barulho** pela profundidade (seção 3.1).
+- **Lentidão e barulho** pela profundidade (seção 3.1). Nada quem tem mais de 1,3 m de água acima dos
+  pés (`swimDepth`; na área funda são 1,25 m, então lá se anda) e boia com os pés 1,4 m abaixo da
+  superfície (`floatDepth`), com os olhos 25 cm acima dela.
 - **Fôlego:** com a cabeça debaixo d'água o jogador tem 20 s. O painel da filmadora mostra
   `AIR` e uma barra; nos últimos 5 s a imagem escurece. Acabou o fôlego = **afogado**, a mesma
   regra da queda no buraco e da captura: NO SIGNAL e volta ao patamar inicial. Não há morte.
@@ -290,7 +296,7 @@ O nível da água de cada região **sobe e desce sozinho**, junto em todas as m�
 até +0,9 m, 15 s descendo.
 
 - Na maré alta, o raso vira fundo e o fundo vira poço: corredores que eram passagem viram nado, e
-  quem estava num patamar baixo fica ilhado. O seco (+0,2 m) também fica com 0,7 m de água: se ele
+  quem estava num patamar baixo fica ilhado. O seco (+0,2 m) também fica com 0,75 m de água: se ele
   continua sendo refúgio é a decisão 5 da seção 9.
 - **Aviso:** 10 s antes, os ralos borbulham e a água começa a puxar levemente para eles; o som
   da sala muda (um "glub" grave e longe).

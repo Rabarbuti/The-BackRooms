@@ -218,6 +218,38 @@ namespace BackRooms.EditorTools
                     }
                 if (!well) missing.Add("poço redondo");
 
+                // Degrau na linha d'água: o primeiro degrau de uma escada que desce do seco para a
+                // água, de frente (rente à água, de dentro dela) e de cima (do seco). Sem a filmadora:
+                // o chuvisco esconderia duas faces piscando no mesmo plano.
+                CustomPassVolume[] camcorderPasses = Object.FindObjectsByType<CustomPassVolume>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+                void CleanShot(string name, Vector3 foot, Vector3 look, float pitch)
+                {
+                    foreach (CustomPassVolume pass in camcorderPasses) pass.enabled = false;
+                    try { Shot(name, foot, look, pitch); }
+                    finally { foreach (CustomPassVolume pass in camcorderPasses) pass.enabled = true; }
+                }
+                bool waterStep = false;
+                float surface = water != null ? water.SurfaceY : 0f;
+                foreach (PoolStair stair in d.Stairs)
+                {
+                    if (!d.Neighbor(stair.X, stair.Z, stair.Side, out int ux, out int uz) || d.IsSolid(ux, uz) || d.Depth[ux, uz] != PoolDepth.Dry) continue;
+                    PoolDepth lower = d.Depth[stair.X, stair.Z];
+                    if (lower != PoolDepth.Shallow && lower != PoolDepth.Deep) continue;
+                    Vector3 toUpper = Dir(stair.Side);
+                    // O primeiro degrau ocupa os 30 cm junto da divisa (ou da face da parede, num arco).
+                    Vector3 step = CellCenter(d, stair.X, stair.Z) + toUpper * (LevelBuilder.Cell * 0.5f - 0.25f);
+                    step.y = LevelData.DepthFloor(PoolDepth.Dry) - LevelData.StepRise;
+                    Vector3 front = step - toUpper * 2.2f;
+                    front.y = surface + 0.35f - Eye;
+                    CleanShot("degrau_na_agua_frente", front, toUpper, PitchTo(front, step));
+                    Vector3 above = step + toUpper * 1.1f;
+                    above.y = LevelData.DepthFloor(PoolDepth.Dry);
+                    CleanShot("degrau_na_agua_cima", above, -toUpper, PitchTo(above, step));
+                    waterStep = true;
+                    break;
+                }
+                if (!waterStep) missing.Add("escada do seco para a água");
+
                 // Teto de vidro Full: a emenda entre duas células vizinhas da mesma sala, e a faixa toda de uma ponta.
                 bool roof = false;
                 for (int z = 0; z < d.Height && !roof; z++)
@@ -524,7 +556,7 @@ namespace BackRooms.EditorTools
 
         static Vector3 CellCenter(LevelData d, int x, int z) => new Vector3((x + 0.5f) * LevelBuilder.Cell, d.FloorHeight(x, z), (z + 0.5f) * LevelBuilder.Cell);
 
-        // Onde os pés ficam: no poço, boiando; no fundo, de pé (olhos a 0,45 m acima da água).
+        // Onde os pés ficam: no poço, boiando; no fundo, de pé (olhos a 0,4 m acima da água).
         static float StandHeight(LevelData d, int x, int z)
         {
             if (d.IsSolid(x, z)) return 0.2f;

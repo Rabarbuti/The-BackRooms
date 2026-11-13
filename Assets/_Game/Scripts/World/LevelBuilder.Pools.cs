@@ -17,7 +17,8 @@ namespace BackRooms.World
     /// malhas com MeshCollider da MESMA malha. Toda face de caixa que um raio alcança tem a face
     /// visível no mesmo lugar (Level0ColliderCheck).
     ///
-    /// Medidas em metros; célula de 4 m; água em Y = 0. Tudo depende só de <see cref="Data"/>.
+    /// Medidas em metros; célula de 4 m; pisos na grade de 20 cm a partir de Y = 0 e água 5 cm
+    /// acima (<see cref="LevelData.WaterLevel"/>). Tudo depende só de <see cref="Data"/>.
     /// </summary>
     public sealed partial class LevelBuilder
     {
@@ -43,6 +44,9 @@ namespace BackRooms.World
         const int ColumnSides = 24;
         const int VaultSegments = 24;
         const float CausticsLift = 0.01f;
+        const float WaterY = LevelData.WaterLevel;
+        /// <summary>Base da fiada de azulejo (20 cm) que a linha d'água corta.</summary>
+        static float WaterlineCourse => Mathf.Floor(WaterY / LevelData.StepRise) * LevelData.StepRise;
         // Manchas: no máximo uma a cada tantas células com piso, e um teto para o mapa inteiro.
         const int CellsPerStain = 10;
         const int MaxStains = 10;
@@ -191,12 +195,13 @@ namespace BackRooms.World
                 _kit.WornRoom[r] = poolWornTileMaterial != null && LevelGenerator.WearAt(Data, cx, cz) > 0.6f;
                 _kit.AccentRoom[r] = room.Accent && poolAccentMaterial != null;
 
-                // A primeira fiada azul fica logo acima da água; em sala com piso seco, rente a ele.
+                // A primeira fiada azul é a da linha d'água (a fiada de azulejo que a água corta,
+                // como numa piscina de verdade); em sala com piso seco, rente a ele.
                 bool dry = false;
                 for (int z = room.Z0; z < room.Z0 + room.Height; z++)
                     for (int x = room.X0; x < room.X0 + room.Width; x++)
                         if (OpenCell(x, z) && Data.Depth[x, z] == PoolDepth.Dry) dry = true;
-                _kit.Band[r] = dry ? LevelData.DepthFloor(PoolDepth.Dry) : 0f;
+                _kit.Band[r] = dry ? LevelData.DepthFloor(PoolDepth.Dry) : WaterlineCourse;
             }
 
             FindRoundWells();
@@ -362,9 +367,9 @@ namespace BackRooms.World
             if (look.NoCaustics || look.Room < 0 || poolCausticsMaterial == null) return;
             float lowest = float.MaxValue;
             foreach (Vector3 p in poly) lowest = Mathf.Min(lowest, p.y);
-            if (lowest >= -0.001f) return;
+            if (lowest >= WaterY - 0.001f) return;
 
-            List<Vector3> wet = ClipY(poly, float.NegativeInfinity, 0f);
+            List<Vector3> wet = ClipY(poly, float.NegativeInfinity, WaterY);
             if (wet.Count < 3) return;
             for (int k = 0; k < wet.Count; k++) wet[k] += normal * CausticsLift;
             _kit.Caustics.AddPolygon(wet, normal);
@@ -1518,11 +1523,11 @@ namespace BackRooms.World
                     mesh.AddTriangleFacing(i, i + 1, i + 3, facing);
                     mesh.AddTriangleFacing(i, i + 3, i + 2, facing);
 
-                    if (poolCausticsMaterial == null || bottom >= 0f) continue;
+                    if (poolCausticsMaterial == null || bottom >= WaterY) continue;
                     float ta = Mathf.PI * 2f * k / ColumnSides, tb = Mathf.PI * 2f * (k + 1) / ColumnSides;
                     float rr = column.Radius + CausticsLift;
                     Vector3 pa = center + new Vector3(Mathf.Cos(ta), 0f, Mathf.Sin(ta)) * rr, pb = center + new Vector3(Mathf.Cos(tb), 0f, Mathf.Sin(tb)) * rr;
-                    float wet = Mathf.Min(0f, top);
+                    float wet = Mathf.Min(WaterY, top);
                     _kit.Caustics.AddPolygon(Poly(pa + Vector3.up * bottom, pa + Vector3.up * wet, pb + Vector3.up * wet, pb + Vector3.up * bottom), facing);
                 }
             }
@@ -1530,7 +1535,9 @@ namespace BackRooms.World
 
         // ---------------------------------------------------------------- Água
 
-        // Lâmina em Y = 0, vista de cima e de baixo, só sobre as células com piso abaixo da água.
+        // Lâmina vista de cima e de baixo, só sobre as células com piso abaixo da água. A malha fica
+        // em Y = 0 do objeto "Agua", que sobe até LevelData.WaterLevel (CreatePoolRenderers): a
+        // altura da superfície é a do objeto (PoolWater.SurfaceY), e a maré só vai movê-lo.
         // Sem colisor: o jogador decide sozinho se anda, vadeia ou nada (PlayerController).
         void BuildPoolWater()
         {
@@ -1539,7 +1546,7 @@ namespace BackRooms.World
                 int runStart = -1;
                 for (int x = 0; x <= Data.Width; x++)
                 {
-                    bool wet = x < Data.Width && OpenCell(x, z) && FloorTop(x, z) < 0f;
+                    bool wet = x < Data.Width && OpenCell(x, z) && FloorTop(x, z) < WaterY;
                     if (wet && runStart < 0) runStart = x;
                     if (wet || runStart < 0) continue;
 
@@ -1584,6 +1591,7 @@ namespace BackRooms.World
             if (!_kit.Water.IsEmpty)
             {
                 MeshRenderer water = CreateRenderer("Agua", _kit.Water.ToMesh("Agua"), waterMaterial, ShadowCastingMode.Off);
+                water.transform.localPosition = new Vector3(0f, WaterY, 0f);
                 water.gameObject.AddComponent<PoolWater>();
             }
         }
@@ -1640,7 +1648,7 @@ namespace BackRooms.World
                     foreach (WallSide side in PoolSides)
                     {
                         if (!PlainWall(x, z, side)) continue;
-                        if (FloorTop(x, z) < 0f && Data.Depth[x, z] != PoolDepth.Well) slime.Add((x, z, side));
+                        if (FloorTop(x, z) < WaterY && Data.Depth[x, z] != PoolDepth.Well) slime.Add((x, z, side));
                         if (!room.Vault && roomSky[room.Id]) lime.Add((x, z, side));
                         if (shaded) mould.Add((x, z, side));
                     }
@@ -1717,9 +1725,9 @@ namespace BackRooms.World
                 switch (type)
                 {
                     case 0:
-                        // Faixa de limo: a linha escura da textura (62% abaixo do topo) em Y = 0.
+                        // Faixa de limo: a linha escura da textura (62% abaixo do topo) na linha d'água.
                         placed = WallDecal(Root(), material, x, z, side, HalfWall, Mathf.Round(Mathf.Lerp(-0.6f, 0.6f, r0) / 0.2f) * 0.2f,
-                                           0.62f * 0.5f - 0.25f, new Vector2(2.4f, 0.5f), flip, obstacles, "limo");
+                                           WaterY + 0.62f * 0.5f - 0.25f, new Vector2(2.4f, 0.5f), flip, obstacles, "limo");
                         break;
                     case 1:
                         // Calcário: o topo da textura (que não esmaece) colado no começo da sanca,
@@ -1735,7 +1743,7 @@ namespace BackRooms.World
                         Vector3 dir = SideDir(side);
                         Vector3 tangent = Mathf.Abs(dir.x) > 0.5f ? Vector3.forward : Vector3.right;
                         float rightSign = Mathf.Sign(Vector3.Dot(Vector3.Cross(Vector3.up, dir), tangent)) * (flip ? -1f : 1f);
-                        float lineY = Mathf.Round((Mathf.Max(FloorTop(x, z), 0f) + 0.8f + r1 * 1.2f) / tile) * tile;
+                        float lineY = Mathf.Round((Mathf.Max(FloorTop(x, z), WaterY) + 0.8f + r1 * 1.2f) / tile) * tile;
                         float lineAlong = Mathf.Round(Mathf.Lerp(-1.2f, 1.2f, r0) / tile) * tile;
                         placed = WallDecal(Root(), material, x, z, side, HalfWall, lineAlong - rightSign * MouldLineRight * size,
                                            lineY - MouldLineUp * size, new Vector2(size, size), flip, obstacles, "mofo");
@@ -1944,7 +1952,7 @@ namespace BackRooms.World
                     Shuffle(spots, rng);
                     if (roll)
                         foreach (var (x, z, side) in spots)
-                            if (WallMark(Root(), Mark(1), 1, x, z, side, Mathf.Max(FloorTop(x, z), 0f) + 1.6f, obstacles))
+                            if (WallMark(Root(), Mark(1), 1, x, z, side, Mathf.Max(FloorTop(x, z), WaterY) + 1.6f, obstacles))
                                 break;
                 }
 
@@ -1969,7 +1977,7 @@ namespace BackRooms.World
                         for (int k = 0; k < spots.Count; k++)
                         {
                             var (x, z, side, _, _) = spots[(first + k) % spots.Count];
-                            if (WallMark(Root(), Mark(2), 2, x, z, side, Mathf.Max(FloorTop(x, z), 0f) + 1.5f, obstacles)) break;
+                            if (WallMark(Root(), Mark(2), 2, x, z, side, Mathf.Max(FloorTop(x, z), WaterY) + 1.5f, obstacles)) break;
                         }
                     }
                 }
@@ -2055,7 +2063,7 @@ namespace BackRooms.World
         bool WallDepthMark(Transform root, Material material, int x, int z, WallSide side, List<Bounds> obstacles)
         {
             int room = Data.Room[x, z];
-            float bottom = (_kit.AccentRoom[room] ? _kit.Band[room] + 0.2f : 0f) + 0.12f;
+            float bottom = (_kit.AccentRoom[room] ? _kit.Band[room] + 0.2f : WaterY) + 0.12f;
             return WallMark(root, material, 0, x, z, side, bottom + MarkHeight(0) * 0.5f, obstacles);
         }
 
@@ -2070,7 +2078,7 @@ namespace BackRooms.World
                 if (centerY + height * 0.5f > 2f - 0.05f && centerY - height * 0.5f < 2.2f + 0.05f) centerY = 2f - 0.05f - height * 0.5f;
                 if (centerY - height * 0.5f < band + 0.2f + 0.05f && centerY + height * 0.5f > band - 0.05f) centerY = band + 0.25f + height * 0.5f;
             }
-            if (centerY - height * 0.5f < Mathf.Max(FloorTop(x, z), 0f) + 0.05f) return false;
+            if (centerY - height * 0.5f < Mathf.Max(FloorTop(x, z), WaterY) + 0.05f) return false;
             if (!WallDecal(root, material, x, z, side, HalfWall, 0f, centerY, new Vector2(width, height), false, obstacles, MarkLabel[kind])) return false;
             _kit.MarkCount[kind] += kind == 0 ? 0 : 1;
             return true;
