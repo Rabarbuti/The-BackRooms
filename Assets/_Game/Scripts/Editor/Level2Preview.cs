@@ -74,6 +74,124 @@ namespace BackRooms.EditorTools
             Level1Setup.ExitWithLevel0Open(code);
         }
 
+        /// <summary>
+        /// Linha de comando: -executeMethod BackRooms.EditorTools.Level2Preview.BatchCeilings
+        /// [-seed N] (sem -seed: 1998 e 7). O teto como o jogador o vê: em cada salão de pilares,
+        /// raia, piscina com deque, galeria, canal, escadaria, patamar, saída e corredor de janelas,
+        /// uma foto do meio de uma ponta olhando o comprimento da sala para cima (30°) e uma do canto
+        /// olhando a diagonal, sem a filmadora. Em Logs/Previews/level2_s{seed}_teto_*.png; apaga
+        /// antes só as fotos de teto da mesma seed.
+        /// </summary>
+        public static void BatchCeilings()
+        {
+            int code = 1;
+            try
+            {
+                int seed = SeedArgument(int.MinValue);
+                int[] seeds = seed == int.MinValue ? new[] { 1998, 7 } : new[] { seed };
+                string report = Ceilings(seeds, out bool ok);
+                Debug.Log("[BackRooms] Fotos do teto do Level 2: " + report);
+                code = ok ? 0 : 3;
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+            Level1Setup.ExitWithLevel0Open(code);
+        }
+
+        static readonly PoolRoomKind[] CeilingKinds =
+        {
+            PoolRoomKind.Hall, PoolRoomKind.Lane, PoolRoomKind.Basin, PoolRoomKind.Gallery, PoolRoomKind.Canal,
+            PoolRoomKind.Terrace, PoolRoomKind.Start, PoolRoomKind.Exit, PoolRoomKind.WindowGallery
+        };
+
+        static string Ceilings(int[] seeds, out bool ok)
+        {
+            ok = false;
+            Level2Setup.BuildScene();
+            EditorSceneManager.OpenScene(Level2Setup.ScenePath, OpenSceneMode.Single);
+            var builder = Object.FindFirstObjectByType<LevelBuilder>();
+            if (builder == null || !builder.poolsEnabled) return "a cena não tem LevelBuilder com as Piscinas ligadas";
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
+            if (prefab == null) return "sem o prefab do jogador";
+
+            string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Logs", "Previews"));
+            Directory.CreateDirectory(folder);
+            GameObject rig = Level0Preview.CreateCameraRig(prefab, out Camera camera);
+            bool asyncBefore = ShaderUtil.allowAsyncCompilation;
+            ShaderUtil.allowAsyncCompilation = false;
+            var target = new RenderTexture(1280, 720, 24, RenderTextureFormat.ARGB32);
+            var readback = new Texture2D(target.width, target.height, TextureFormat.RGBA32, false);
+            var names = new List<string>();
+            CustomPassVolume[] camcorderPasses = Object.FindObjectsByType<CustomPassVolume>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var stats = new List<string>();
+
+            try
+            {
+                camera.targetTexture = target;
+                camera.farClipPlane = Mathf.Max(camera.farClipPlane, 150f);
+                foreach (CustomPassVolume pass in camcorderPasses) pass.enabled = false;
+
+                foreach (int seed in seeds)
+                {
+                    builder.seed = seed;
+                    builder.Rebuild();
+                    LevelData d = builder.Data;
+                    WakeWater(builder);
+                    foreach (HDAdditionalLightData light in builder.GetComponentsInChildren<HDAdditionalLightData>(true))
+                        light.shadowUpdateMode = ShadowUpdateMode.EveryFrame;
+                    stats.Add($"seed {seed}: {builder.PoolStats}");
+                    foreach (string old in Directory.GetFiles(folder, $"level2_s{seed}_teto_*.png")) File.Delete(old);
+
+                    void Shot(string name, Vector3 foot, Vector3 look, float pitch)
+                    {
+                        look.y = 0f;
+                        if (look.sqrMagnitude < 1e-6f) look = Vector3.forward;
+                        rig.transform.SetPositionAndRotation(builder.transform.TransformPoint(foot), Quaternion.LookRotation(look.normalized, Vector3.up));
+                        camera.transform.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+                        string file = $"level2_s{seed}_teto_{name}.png";
+                        Shoot(camera, target, readback, Path.Combine(folder, file));
+                        names.Add(file);
+                    }
+
+                    foreach (PoolRoom room in d.Rooms)
+                    {
+                        if (Array.IndexOf(CeilingKinds, room.Kind) < 0) continue;
+                        string label = $"sala{room.Id:00}_{room.Kind.ToString().ToLowerInvariant()}";
+                        bool alongX = room.Width > room.Height;
+                        // Ponta: célula do meio da largura (à esquerda do meio, se for par: o meio de
+                        // uma galeria é a fila de pilares), a 0,8 m da parede, olhando o comprimento.
+                        int across = alongX ? room.Height : room.Width;
+                        int mid = across % 2 == 1 ? across / 2 : across / 2 - 1;
+                        int cx = alongX ? room.X0 : room.X0 + mid, cz = alongX ? room.Z0 + mid : room.Z0;
+                        Vector3 along = alongX ? Vector3.right : Vector3.forward;
+                        Vector3 foot = CellCenter(d, cx, cz) - along * (LevelBuilder.Cell * 0.5f - 0.8f);
+                        foot.y = StandHeight(d, cx, cz);
+                        Shot(label + "_ponta", foot, along, -30f);
+
+                        // Canto: a 1 m das duas paredes, olhando o canto oposto.
+                        Vector3 corner = new Vector3(room.X0 * LevelBuilder.Cell + 1f, 0f, room.Z0 * LevelBuilder.Cell + 1f);
+                        Vector3 far = new Vector3((room.X0 + room.Width) * LevelBuilder.Cell - 1f, 0f, (room.Z0 + room.Height) * LevelBuilder.Cell - 1f);
+                        corner.y = StandHeight(d, room.X0, room.Z0);
+                        Shot(label + "_canto", corner, far - corner, -30f);
+                    }
+                }
+                ok = names.Count > 0;
+            }
+            finally
+            {
+                foreach (CustomPassVolume pass in camcorderPasses) if (pass != null) pass.enabled = true;
+                camera.targetTexture = null;
+                RenderTexture.active = null;
+                Object.DestroyImmediate(target);
+                Object.DestroyImmediate(readback);
+                Object.DestroyImmediate(rig);
+                ShaderUtil.allowAsyncCompilation = asyncBefore;
+            }
+            return $"{names.Count} fotos em {folder}; {string.Join("; ", stats)}";
+        }
+
         static readonly int[] ScanSeeds = { 1998, 7, 4242, 31337, 90210, 5, 21 };
 
         static string Closeups(int seed, out bool ok)

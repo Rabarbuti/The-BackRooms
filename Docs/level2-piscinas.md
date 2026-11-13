@@ -17,7 +17,7 @@ Level 2 (teste)) com as etapas 1 a 7 da seção 8.1:
 - **Construção** (`LevelBuilder.Pools.cs`): paredes de 0,4 m com arcos, vãos e vigias recortados sem
   moldura, colunas-tambor, sanca, abóbada de berço, teto claro, escadas, bordas com capa, corrimãos,
   poço redondo e água só nas células molhadas.
-- **Luz:** nenhuma luminária. Claraboias com luz de caixa inclinada (o mesmo "sol" no mapa todo, sombra
+- **Luz:** nenhuma luminária. Claraboias em padrões que seguem a sala (seção 3.4), com luz de caixa inclinada (o mesmo "sol" no mapa todo, sombra
   de uma face em cache), janelões, frestas, vigias acesas e tijolo de vidro com spot, lâmpadas dentro
   d'água sem sombra, salas escuras de propósito e o anoitecer no lugar do apagão: a luz esquenta, cai
   devagar até a noite e volta devagar, sem pisca (seção 7).
@@ -189,6 +189,7 @@ há colunas, desníveis e água.
   lâmpadas dentro d'água. **O sol é um só:** a luz do dia viaja para +X e +Z no mapa inteiro, então as
   janelas ficam sempre nas paredes sul e oeste e toda mancha de sol cai para o mesmo lado. Serve de
   bússola.
+- **Claraboias seguem a estrutura da sala** (seção 3.4), nunca furos soltos no teto.
 - **Sala inicial = patamar de chegada:** seco, com escada de borda a borda descendo para a água.
 
 ### 3.1 Profundidades
@@ -249,7 +250,8 @@ piso, salas estreitas no máximo 40% das salas e corredores de uma célula de la
 das células. Depois da árvore mínima de ligações entram mais 30% de ligações para formar laços;
 túnel e fenda ligam exatamente duas salas e nunca dois seguidos; beco só na saída, nas salas de poço
 e na cisterna. De 70 a 85% das divisas na borda das salas são parede cega. Orçamentos: 30 a 70
-claraboias, 3 a 8 células de poço, até 24 lâmpadas e até 48 janelas. O caminho a pé do início à saída
+células com claraboia (até 48 luzes de claraboia, seção 3.4), 3 a 8 células de poço, até 24 lâmpadas e
+até 48 janelas. O caminho a pé do início à saída
 tem pelo menos 60% de seco e raso e nunca mais de três células fundas seguidas.
 
 Ainda sem lugar na grade (ficam para depois): corredor curvo em S, escada em caracol, mezanino, teto
@@ -261,6 +263,53 @@ inclinado, sala octogonal, tobogã e as casas de máquinas do objetivo.
 - Uma porta de azulejo na parede, sem maçaneta, com água escorrendo pela fresta.
 - Plaquinhas de profundidade erradas: "-2 M", "∞", "1.2 M" num lugar seco.
 - Uma raia pintada no fundo que continua pelas paredes e pelo teto.
+
+### 3.4 Claraboias
+
+Jogando a primeira versão, o teto "tinha buracos aleatórios, que não seguem um padrão": as claraboias
+eram sorteadas célula a célula dentro de cada sala. Agora seguem a estrutura da sala, como num projeto
+de arquiteto (`PoolGenerator.ArrangeSkies`):
+
+- **Um formato por sala:** todas quadradas, todas redondas, rasgos todos no mesmo sentido ou um teto de
+  vidro (`Full`). Nunca misturado.
+- **Simétricas** em relação aos dois eixos do retângulo da sala (ou a um deles, quando a sala pede:
+  o óculo sobre o poço de canto, a faixa sobre uma raia fora do meio do salão).
+- **Em ritmo regular:** toda célula, uma sim uma não ou a cada 3, em fileira ou em grade, fechando
+  simétrico nas duas pontas; nada de claraboia solta fora do ritmo.
+- **No centro dos vãos:** as colunas ficam nos vértices da grade, então o vão entre colunas é a célula
+  e a claraboia fica no meio dela.
+- **Borda livre:** a fileira encostada na parede fica sem claraboia quando a sala tem 4 ou mais
+  células naquele sentido (a sanca e a parede leem melhor), salvo no anel de borda.
+
+A seed escolhe **qual padrão**, entre os que cabem na sala, nunca posições soltas:
+
+| Sala | Padrões |
+|---|---|
+| Patamar | uma no meio, redonda ou quadrada |
+| Átrio | óculo redondo no meio, sobre a ilha |
+| Saída | as do meio (o par em 2 x 3, as quatro em 2 x 2): quadradas, redondas ou teto de vidro |
+| Salão de pilares | todas as baias do miolo (e grades de passo maior); xadrez (só com o miolo ímpar nos dois sentidos); fileiras alternadas; só a nave central (fileira do meio, ou faixa de vidro); só o anel de borda (toda baia ou uma sim uma não); com raia funda cortando, rasgos em ritmo ou faixa de vidro exatamente sobre ela |
+| Piscina com deque | sobre a água: teto de vidro sobre a água inteira (ou só a faixa do meio), faixa de vidro atravessada no meio, ou grade de quadradas ou redondas (todas, xadrez, passos maiores, até uma no meio) |
+| Raia longa | faixa de vidro contínua sobre a raia funda, de ponta a ponta dela, ou rasgos em ritmo |
+| Canal | faixa de vidro ou fileira de rasgos em ritmo, no meio, sobre o canal |
+| Galeria | rasgos em par, um de cada lado da fila de pilares, no comprimento ou atravessados, em ritmo |
+| Corredor de janelas | fileira de rasgos em ritmo, ou nenhuma (a luz é das janelas) |
+| Escadaria afogada | faixa de vidro de parede a parede sobre o meio da escada, ou fileira de quadradas ou redondas ali |
+| Grande poço | escura, ou óculo sobre o poço (com o poço de 4 células: quatro óculos ou teto de vidro sobre ele) |
+| Poço de canto | escura, ou óculo sobre o poço |
+| Fenda | o rasgo em todas as células |
+| Cisterna, túnel | nenhuma |
+
+Cada sala tem **famílias** de padrões (a mesma ideia, do mais cheio ao mais ralo). O orçamento do mapa
+(30 a 70 células com claraboia e até 48 luzes de claraboia) se acerta andando **dentro da família**
+("todas as baias" vira "uma sim uma não"); só quando nenhuma sala pode mais, uma troca de família
+para o padrão mais próximo e, por último, uma sala que não é marco fica sem claraboia. Nunca se tira
+claraboia avulsa. O teto de vidro conta uma luz por faixa no sentido mais comprido dele (a faixa de uma
+raia inteira é uma luz só, corra ela em X ou em Z). `Validate` confere um formato por sala, a simetria e
+o ritmo (grade inteira, xadrez ou anel de colunas e fileiras igualmente espaçadas).
+
+As claraboias usam um `System.Random` só delas (da seed). O sorteio antigo continua sendo tirado do
+principal, sem uso, então salas, água, escadas, colunas e lâmpadas de cada seed ficaram as mesmas.
 
 ---
 
@@ -350,8 +399,9 @@ início). Até lá, a saída é a sala seca da seção 3.2.
   que há do outro lado.
 - **Uma luz de caixa por claraboia** (raios paralelos, inclinados 35 graus, rumo 35 graus, sempre para
   o mesmo lado; 700 lux, 4800 K, sol de fim de tarde): a mancha de sol cai deslocada no piso e sobe na
-  parede, e as colunas fazem sombra comprida. Nas faixas de teto de vidro, uma luz por fileira de
-  células. Sombra em cache, uma face por luz (o Level 0 gasta seis por luminária). Os fachos acendem
+  parede, e as colunas fazem sombra comprida. Nas faixas de teto de vidro, uma luz por faixa no
+  sentido mais comprido do teto de vidro (a de uma raia inteira é uma luz só). As claraboias seguem a
+  estrutura da sala (seção 3.4); até 48 luzes de claraboia por mapa. Sombra em cache, uma face por luz (o Level 0 gasta seis por luminária). Os fachos acendem
   a névoa.
 - **Janelões, frestas, vigias acesas e tijolo de vidro** têm um spot com sombra entrando na sala, um
   pouco para baixo; até três aberturas vizinhas da mesma parede dividem um.
@@ -409,7 +459,10 @@ início). Até lá, a saída é a sala seca da seção 3.2.
   closes, `Logs/Previews/level2_*.png`) e `Level2Preview.BatchCloseups` (`-seed N`: só os closes do
   acabamento, como tijolo de vidro, janelão, poço redondo, teto de vidro, degrau na linha d'água,
   manchas e marcações, e a mesma vista de uma piscina em cinco momentos do anoitecer, em
-  `Logs/Previews/level2_s{seed}_*.png`, sem apagar as outras fotos).
+  `Logs/Previews/level2_s{seed}_*.png`, sem apagar as outras fotos) e `Level2Preview.BatchCeilings`
+  (sem `-seed`: 1998 e 7; o teto como o jogador o vê, olhando 30° para cima de uma ponta e de um canto
+  de cada salão, raia, piscina, galeria, canal, escadaria, patamar, saída e corredor de janelas, sem a
+  filmadora, em `Logs/Previews/level2_s{seed}_teto_*.png`).
 - **Modelos** (pelo caminho do Blender, `modelos-blender.md`), para depois: escadinha de metal,
   cadeira de salva-vidas, grade de ralo, válvula e bombas, plaquinha de profundidade, boia esquecida.
 

@@ -44,6 +44,8 @@ namespace BackRooms.World
         const int MaxLamps = 24;
         const int MaxWindows = 48;
         const int MinSky = 30, MaxSky = 70;
+        /// <summary>Teto das luzes de claraboia (uma por recortada, uma por faixa de teto de vidro).</summary>
+        const int MaxSkyLights = 48;
         const int MinWells = 3, MaxWells = 8;
         const float MinSolid = 0.15f, MaxSolid = 0.30f;
         const float MaxCorridor = 0.15f;
@@ -200,6 +202,8 @@ namespace BackRooms.World
             public readonly int W, H, N;
             public readonly List<Info> Rooms = new List<Info>();
             public readonly bool[,] Reserved;
+            /// <summary>Claraboias do sorteio antigo (sem uso; ver <see cref="PlaceSkies"/>).</summary>
+            public readonly PoolSky[,] OldSky;
             public readonly bool[,] KeepSky;
             public readonly bool[,] PrimarySky;
             public Info Start, Exit, Well;
@@ -214,6 +218,7 @@ namespace BackRooms.World
                 H = h;
                 N = w * h;
                 Reserved = new bool[w, h];
+                OldSky = new PoolSky[w, h];
                 KeepSky = new bool[w, h];
                 PrimarySky = new bool[w, h];
             }
@@ -255,6 +260,7 @@ namespace BackRooms.World
             PlaceSkies(c);
             if (!PlaceLamps(c)) return "sala escura sem lugar para lâmpada";
             Finish(c);
+            ArrangeSkies(c);
             return null;
         }
 
@@ -753,10 +759,11 @@ namespace BackRooms.World
             return TryStair(c.D, x, z, i.F.Side(localSide), width);
         }
 
+        // Sorteio antigo das claraboias (vai para OldSky, sem uso): ver PlaceSkies.
         static void SkyLocal(Ctx c, Info i, int u, int v, PoolSky sky, bool primary = false)
         {
             i.F.Cell(u, v, out int x, out int z);
-            c.D.Sky[x, z] = sky;
+            c.OldSky[x, z] = sky;
             c.KeepSky[x, z] = true;
             if (primary) c.PrimarySky[x, z] = true;
         }
@@ -1562,7 +1569,7 @@ namespace BackRooms.World
                 if (fenda)
                     foreach ((int x, int z) in cells)
                     {
-                        d.Sky[x, z] = alongX ? PoolSky.SlotX : PoolSky.SlotZ;
+                        c.OldSky[x, z] = alongX ? PoolSky.SlotX : PoolSky.SlotZ;
                         c.KeepSky[x, z] = true;
                         c.PrimarySky[x, z] = true;
                     }
@@ -1924,12 +1931,19 @@ namespace BackRooms.World
                 }
         }
 
+        /// <summary>
+        /// Sorteio ANTIGO das claraboias: espalhava claraboias soltas pelas salas e lia como furos
+        /// ao acaso. Continua sendo tirado do mesmo System.Random, na mesma ordem (aqui, no Fill e
+        /// no Finish), só para cada seed manter a mesma planta de antes: o resultado fica em OldSky
+        /// e não vai para o mapa. As claraboias de verdade saem por padrão de sala, no fim
+        /// (<see cref="ArrangeSkies"/>), com um Random só delas.
+        /// </summary>
         static void PlaceSkies(Ctx c)
         {
-            LevelData d = c.D;
+            PoolSky[,] sky = c.OldSky;
             Random r = c.R;
             int count = 0;
-            foreach (PoolSky s in d.Sky) if (s != PoolSky.None) count++;
+            foreach (PoolSky s in sky) if (s != PoolSky.None) count++;
 
             int target = 34 + r.Next(26);
             if (count < target)
@@ -1940,12 +1954,12 @@ namespace BackRooms.World
                     if (i.SkyStyle == PoolSky.None || i.Room.Dark || i.Room.Vault) continue;
                     for (int z = i.Room.Z0; z < i.Room.Z0 + i.Room.Height; z++)
                         for (int x = i.Room.X0; x < i.Room.X0 + i.Room.Width; x++)
-                            if (d.Sky[x, z] == PoolSky.None) cells.Add((x, z, i.SkyStyle));
+                            if (sky[x, z] == PoolSky.None) cells.Add((x, z, i.SkyStyle));
                 }
                 Shuffle(cells, r);
                 for (int k = 0; k < cells.Count && count < target; k++)
                 {
-                    d.Sky[cells[k].x, cells[k].z] = cells[k].s;
+                    sky[cells[k].x, cells[k].z] = cells[k].s;
                     count++;
                 }
             }
@@ -1955,15 +1969,535 @@ namespace BackRooms.World
                 var removable = new List<(int x, int z)>();
                 for (int z = 0; z < c.H; z++)
                     for (int x = 0; x < c.W; x++)
-                        if (d.Sky[x, z] != PoolSky.None && !c.PrimarySky[x, z] && (pass == 1 || !c.KeepSky[x, z])) removable.Add((x, z));
+                        if (sky[x, z] != PoolSky.None && !c.PrimarySky[x, z] && (pass == 1 || !c.KeepSky[x, z])) removable.Add((x, z));
                 Shuffle(removable, r);
                 for (int k = 0; k < removable.Count && count > MaxSky - 8; k++)
                 {
-                    d.Sky[removable[k].x, removable[k].z] = PoolSky.None;
+                    sky[removable[k].x, removable[k].z] = PoolSky.None;
                     c.KeepSky[removable[k].x, removable[k].z] = false;
                     count--;
                 }
             }
+        }
+
+        // ================================================================ Claraboias por padrão de sala
+        //
+        // As claraboias seguem a estrutura da sala, como num projeto de arquiteto: um formato só por
+        // sala, simétricas, em ritmo regular, no centro dos vãos entre colunas (as colunas ficam nos
+        // vértices, então o vão é a célula). A seed escolhe QUAL padrão, nunca posições soltas. Cada
+        // sala tem famílias de padrões (todas as baias, xadrez, fileiras alternadas, nave central,
+        // anel de borda, faixa sobre a raia...), cada família do mais cheio ao mais ralo; o orçamento
+        // do mapa (30 a 70 células) se acerta andando dentro da família, nunca tirando claraboia
+        // avulsa. Usa um System.Random só dele (da seed): o principal não é tocado, e a planta
+        // (salas, água, escadas, colunas, lâmpadas) fica a mesma de antes.
+
+        /// <summary>Um padrão: um formato só e as células, no sistema local da sala (u, v).</summary>
+        sealed class SkyPattern
+        {
+            public PoolSky Shape;
+            public readonly List<(int u, int v)> Cells = new List<(int u, int v)>();
+
+            /// <summary>
+            /// Luzes com sombra que o construtor cria: uma por claraboia recortada; o teto de vidro
+            /// (sempre um retângulo) leva uma por faixa no sentido mais comprido dele.
+            /// </summary>
+            public int Lights
+            {
+                get
+                {
+                    if (Shape != PoolSky.Full || Cells.Count == 0) return Cells.Count;
+                    int u0 = int.MaxValue, u1 = int.MinValue, v0 = int.MaxValue, v1 = int.MinValue;
+                    foreach ((int u, int v) in Cells)
+                    {
+                        u0 = Math.Min(u0, u); u1 = Math.Max(u1, u);
+                        v0 = Math.Min(v0, v); v1 = Math.Max(v1, v);
+                    }
+                    return Math.Min(u1 - u0 + 1, v1 - v0 + 1);
+                }
+            }
+        }
+
+        /// <summary>Família de padrões da mesma ideia, do mais cheio ao mais ralo.</summary>
+        sealed class SkyFamily
+        {
+            public double Weight;
+            public readonly List<SkyPattern> Steps = new List<SkyPattern>();
+        }
+
+        sealed class SkyChoice
+        {
+            public Info Room;
+            public List<SkyFamily> Families;
+            public int Family, Step;
+            public SkyPattern Current => Families[Family].Steps[Step];
+            public int Count => Current.Cells.Count;
+            public int Lights => Current.Lights;
+        }
+
+        /// <summary>
+        /// O próximo padrão mais ralo: o degrau seguinte da mesma família; ou, com otherFamily, o
+        /// padrão de outra família com mais células entre os que têm menos que o atual.
+        /// </summary>
+        static bool SparserOption(SkyChoice ch, bool otherFamily, out int family, out int step)
+        {
+            family = step = -1;
+            if (!otherFamily)
+            {
+                if (ch.Step >= ch.Families[ch.Family].Steps.Count - 1) return false;
+                family = ch.Family;
+                step = ch.Step + 1;
+                return true;
+            }
+            int best = -1;
+            for (int f = 0; f < ch.Families.Count; f++)
+            {
+                if (f == ch.Family) continue;
+                for (int s = 0; s < ch.Families[f].Steps.Count; s++)
+                {
+                    int n = ch.Families[f].Steps[s].Cells.Count;
+                    if (n < ch.Count && n > best) { best = n; family = f; step = s; }
+                }
+            }
+            return best >= 0;
+        }
+
+        /// <summary>
+        /// Posições de uma fileira de n células, simétricas e em ritmo: de a até n-1-a, de s em s.
+        /// Null se o ritmo não fecha nas duas pontas ((n-1-2a) precisa ser múltiplo de s).
+        /// </summary>
+        static List<int> Rhythm(int n, int a, int s)
+        {
+            int span = n - 1 - 2 * a;
+            if (span < 0 || s < 1 || span % s != 0) return null;
+            var list = new List<int>();
+            for (int p = a; p <= n - 1 - a; p += s) list.Add(p);
+            return list;
+        }
+
+        /// <summary>A fileira encostada na parede fica sem claraboia quando há 4 ou mais células naquele sentido.</summary>
+        static int Margin(int n) => n >= 4 ? 1 : 0;
+
+        /// <summary>O meio de uma fileira: a célula do meio, ou o par do meio.</summary>
+        static List<int> Middle(int n) => n % 2 == 1 ? new List<int> { n / 2 } : new List<int> { n / 2 - 1, n / 2 };
+
+        /// <summary>
+        /// Ritmos de uma fileira de n células, do mais cheio ao mais ralo: toda célula (depois da
+        /// margem), uma sim uma não, a cada 3 (cada um com a menor margem que fecha simétrico) e o
+        /// meio. Com minCount, só os que têm pelo menos tantas posições (toda célula fica sempre).
+        /// </summary>
+        static List<List<int>> Rhythms(int n, int margin, int minCount = 1, bool middle = true)
+        {
+            var result = new List<List<int>>();
+            for (int s = 1; s <= 3; s++)
+                for (int a = margin; 2 * a <= n - 1; a++)
+                {
+                    List<int> r = Rhythm(n, a, s);
+                    if (r == null) continue;
+                    if (s == 1 || r.Count >= minCount) AddRhythm(result, r);
+                    break;
+                }
+            if (middle && (Middle(n).Count >= minCount || result.Count == 0)) AddRhythm(result, Middle(n));
+            result.Sort((x, y) => y.Count.CompareTo(x.Count));
+            return result;
+        }
+
+        static void AddRhythm(List<List<int>> list, List<int> r)
+        {
+            foreach (List<int> o in list)
+            {
+                if (o.Count != r.Count) continue;
+                bool same = true;
+                for (int k = 0; k < o.Count; k++) if (o[k] != r[k]) same = false;
+                if (same) return;
+            }
+            list.Add(r);
+        }
+
+        static List<int> Range(int from, int to)
+        {
+            var list = new List<int>();
+            for (int p = from; p <= to; p++) list.Add(p);
+            return list;
+        }
+
+        static List<int> Shift(List<int> list, int by)
+        {
+            var result = new List<int>();
+            foreach (int p in list) result.Add(p + by);
+            return result;
+        }
+
+        /// <summary>Grade: o produto das fileiras U (em u) e V (em v).</summary>
+        static SkyPattern Grid(PoolSky shape, List<int> us, List<int> vs)
+        {
+            var p = new SkyPattern { Shape = shape };
+            foreach (int v in vs)
+                foreach (int u in us)
+                    p.Cells.Add((u, v));
+            return p;
+        }
+
+        /// <summary>Xadrez da grade U x V (cantos incluídos). Só é simétrico com as duas contagens ímpares.</summary>
+        static SkyPattern Checker(PoolSky shape, List<int> us, List<int> vs)
+        {
+            var p = new SkyPattern { Shape = shape };
+            for (int iv = 0; iv < vs.Count; iv++)
+                for (int iu = 0; iu < us.Count; iu++)
+                    if ((iu + iv) % 2 == 0) p.Cells.Add((us[iu], vs[iv]));
+            return p;
+        }
+
+        /// <summary>Anel: só a volta de fora da grade U x V.</summary>
+        static SkyPattern Ring(PoolSky shape, List<int> us, List<int> vs)
+        {
+            var p = new SkyPattern { Shape = shape };
+            for (int iv = 0; iv < vs.Count; iv++)
+                for (int iu = 0; iu < us.Count; iu++)
+                    if (iu == 0 || iv == 0 || iu == us.Count - 1 || iv == vs.Count - 1) p.Cells.Add((us[iu], vs[iv]));
+            return p;
+        }
+
+        static SkyFamily Family(double weight, params SkyPattern[] steps)
+        {
+            var f = new SkyFamily { Weight = weight };
+            foreach (SkyPattern p in steps) AddStep(f, p);
+            return f;
+        }
+
+        /// <summary>Acrescenta um degrau à família (sem repetir o mesmo conjunto) e mantém do mais cheio ao mais ralo.</summary>
+        static void AddStep(SkyFamily f, SkyPattern p)
+        {
+            if (p == null) return;
+            foreach (SkyPattern o in f.Steps)
+            {
+                if (o.Shape != p.Shape || o.Cells.Count != p.Cells.Count) continue;
+                var set = new HashSet<(int, int)>(o.Cells);
+                bool same = true;
+                foreach (var cell in p.Cells) if (!set.Contains(cell)) same = false;
+                if (same) return;
+            }
+            f.Steps.Add(p);
+            // Ordenação estável: do mais cheio ao mais ralo, na ordem em que entraram.
+            var sorted = new List<SkyPattern>(f.Steps);
+            f.Steps.Clear();
+            for (int k = 0; k < sorted.Count; k++)
+            {
+                int best = -1;
+                for (int j = 0; j < sorted.Count; j++)
+                    if (sorted[j] != null && (best < 0 || sorted[j].Cells.Count > sorted[best].Cells.Count)) best = j;
+                f.Steps.Add(sorted[best]);
+                sorted[best] = null;
+            }
+        }
+
+        /// <summary>Rasgo atravessado na sala (no sentido da largura, u).</summary>
+        static PoolSky SlotAcross(Info i) => i.F.Swap ? PoolSky.SlotZ : PoolSky.SlotX;
+
+        static PoolSky RoundOrSquare(Random r) => r.Next(2) == 0 ? PoolSky.Round : PoolSky.Square;
+
+        /// <summary>Os padrões que cabem na sala, por família. Lista vazia: sala sem claraboia.</summary>
+        static List<SkyFamily> SkyOptions(Ctx c, Info i, Random r)
+        {
+            var families = new List<SkyFamily>();
+            if (i.Room.Dark || i.Room.Vault) return families;
+            int lw = i.F.LW, lh = i.F.LH;
+            switch (i.T)
+            {
+                case Tpl.Start:
+                case Tpl.Atrium:
+                {
+                    // Um óculo (ou uma quadrada) no meio: sobre a ilha do átrio, sobre o patamar.
+                    PoolSky shape = i.T == Tpl.Atrium || r.Next(2) == 0 ? PoolSky.Round : PoolSky.Square;
+                    families.Add(Family(1, Grid(shape, Middle(lw), Middle(lh))));
+                    break;
+                }
+
+                case Tpl.Exit:
+                {
+                    // Uma no meio, ou o par (ou os quatro) do meio; ou um teto de vidro nesse meio.
+                    families.Add(Family(0.35, Grid(PoolSky.Square, Middle(lw), Middle(lh))));
+                    families.Add(Family(0.35, Grid(PoolSky.Round, Middle(lw), Middle(lh))));
+                    families.Add(Family(0.3, Grid(PoolSky.Full, Middle(lw), Middle(lh))));
+                    break;
+                }
+
+                case Tpl.Hall:
+                    HallOptions(c, i, r, families);
+                    break;
+
+                case Tpl.Basin:
+                {
+                    // Sobre a água (o deque em volta fica com teto cheio).
+                    List<int> wu = Range(1, lw - 2), wv = Range(1, lh - 2);
+                    families.Add(Family(0.3, Grid(PoolSky.Full, wu, wv), Grid(PoolSky.Full, Middle(lw), wv)));
+                    families.Add(Family(0.15, Grid(PoolSky.Full, wu, Middle(lh))));
+                    PoolSky shape = RoundOrSquare(r);
+                    var grid = new SkyFamily { Weight = 0.55 };
+                    List<List<int>> us = Rhythms(lw - 2, 0), vs = Rhythms(lh - 2, 0);
+                    if (wu.Count % 2 == 1 && wv.Count % 2 == 1 && wu.Count >= 3 && wv.Count >= 3) AddStep(grid, Checker(shape, wu, wv));
+                    foreach (List<int> u in us)
+                        foreach (List<int> v in vs)
+                            AddStep(grid, Grid(shape, Shift(u, 1), Shift(v, 1)));
+                    families.Add(grid);
+                    break;
+                }
+
+                case Tpl.Lane:
+                {
+                    // Exatamente sobre a raia funda (u = 1, v = 1..lh-2), de ponta a ponta da raia:
+                    // uma faixa contínua de vidro, ou rasgos em ritmo.
+                    List<int> run = Range(1, lh - 2);
+                    families.Add(Family(0.55, Grid(PoolSky.Full, Middle(lw), run)));
+                    var slots = new SkyFamily { Weight = 0.45 };
+                    foreach (List<int> v in Rhythms(run.Count, 0, 3, false)) AddStep(slots, Grid(SlotAlong(i), Middle(lw), Shift(v, 1)));
+                    families.Add(slots);
+                    break;
+                }
+
+                case Tpl.Canal:
+                {
+                    // Sobre o canal, no meio da largura: faixa de vidro ou fileira de rasgos.
+                    List<int> v0 = Range(Margin(lh), lh - 1 - Margin(lh));
+                    families.Add(Family(0.35, Grid(PoolSky.Full, Middle(lw), v0)));
+                    var slots = new SkyFamily { Weight = 0.65 };
+                    foreach (List<int> v in Rhythms(lh, Margin(lh), 3, false)) AddStep(slots, Grid(SlotAlong(i), Middle(lw), v));
+                    families.Add(slots);
+                    break;
+                }
+
+                case Tpl.Gallery:
+                case Tpl.WindowHall:
+                {
+                    // Fileira de rasgos centrada, em ritmo. Com 2 células de largura o meio é a fila
+                    // de pilares: um rasgo de cada lado dela, em par.
+                    List<int> us = lw <= 2 ? Range(0, lw - 1) : Middle(lw);
+                    var along = new SkyFamily { Weight = i.T == Tpl.Gallery ? 0.6 : 1 };
+                    foreach (List<int> v in Rhythms(lh, Margin(lh), 3, false)) AddStep(along, Grid(SlotAlong(i), us, v));
+                    if (i.T == Tpl.WindowHall)
+                    {
+                        // A luz do corredor de janelas é das janelas: claraboia só se o orçamento pedir.
+                        along.Steps.Add(new SkyPattern { Shape = SlotAlong(i) });
+                        families.Add(along);
+                        break;
+                    }
+                    families.Add(along);
+                    if (lw == 2)
+                    {
+                        var across = new SkyFamily { Weight = 0.4 };
+                        foreach (List<int> v in Rhythms(lh, Margin(lh), 3, false)) AddStep(across, Grid(SlotAcross(i), us, v));
+                        families.Add(across);
+                    }
+                    break;
+                }
+
+                case Tpl.Terrace:
+                {
+                    // Sobre o meio da escada, de parede a parede (ou fora a fileira da borda).
+                    List<int> mid = Middle(lh);
+                    families.Add(Family(0.5, Grid(PoolSky.Full, Range(Margin(lw), lw - 1 - Margin(lw)), mid)));
+                    PoolSky shape = RoundOrSquare(r);
+                    var row = new SkyFamily { Weight = 0.5 };
+                    foreach (List<int> u in Rhythms(lw, Margin(lw))) AddStep(row, Grid(shape, u, mid));
+                    families.Add(row);
+                    break;
+                }
+
+                case Tpl.WellBig:
+                {
+                    // Um óculo sobre o poço (no meio); com o poço de 4 células, quatro óculos ou um
+                    // teto de vidro sobre ele.
+                    List<int> m = Middle(lw);
+                    if (m.Count == 1) families.Add(Family(1, Grid(PoolSky.Round, m, m)));
+                    else
+                    {
+                        families.Add(Family(0.5, Grid(PoolSky.Round, m, m)));
+                        families.Add(Family(0.5, Grid(PoolSky.Full, m, m)));
+                    }
+                    break;
+                }
+
+                case Tpl.WellCorner:
+                    // Um óculo sobre o poço (u = 2, no meio do comprimento).
+                    families.Add(Family(1, Grid(PoolSky.Round, new List<int> { 2 }, Middle(lh))));
+                    break;
+
+                case Tpl.Fenda:
+                    // O rasgo de luz no topo, de ponta a ponta.
+                    families.Add(Family(1, Grid(SlotAlong(i), Range(0, lw - 1), Range(0, lh - 1))));
+                    break;
+            }
+            families.RemoveAll(f => f.Steps.Count == 0);
+            // Fora os marcos (patamar, átrio, raia, fenda, salas de poço), a sala pode ficar sem
+            // claraboia quando o mapa estoura o orçamento mesmo nos padrões mais ralos.
+            bool landmark = i.T == Tpl.Start || i.T == Tpl.Atrium || i.T == Tpl.Lane || i.T == Tpl.Fenda || i.T == Tpl.WellBig || i.T == Tpl.WellCorner;
+            if (families.Count > 0 && !landmark) families.Add(Family(0, new SkyPattern()));
+            return families;
+        }
+
+        static void HallOptions(Ctx c, Info i, Random r, List<SkyFamily> families)
+        {
+            int lw = i.F.LW, lh = i.F.LH;
+            PoolSky shape = RoundOrSquare(r);
+            List<int> iu = Range(Margin(lw), lw - 1 - Margin(lw)), iv = Range(Margin(lh), lh - 1 - Margin(lh));
+            List<List<int>> us = Rhythms(lw, Margin(lw), 2, false), vs = Rhythms(lh, Margin(lh), 2, false);
+
+            // Todas as baias (do miolo) e, mais ralo, as grades de passo maior.
+            var bays = new SkyFamily { Weight = 0.3 };
+            foreach (List<int> u in us)
+                foreach (List<int> v in vs)
+                    AddStep(bays, Grid(shape, u, v));
+            families.Add(bays);
+
+            // Xadrez: só com as duas contagens ímpares (senão não é simétrico).
+            if (iu.Count % 2 == 1 && iv.Count % 2 == 1 && iu.Count >= 3 && iv.Count >= 3)
+            {
+                var checker = new SkyFamily { Weight = 0.15 };
+                AddStep(checker, Checker(shape, iu, iv));
+                foreach (List<int> u in us)
+                    foreach (List<int> v in vs)
+                        if (u.Count < iu.Count && v.Count < iv.Count) AddStep(checker, Grid(shape, u, v));
+                families.Add(checker);
+            }
+
+            // Fileiras alternadas: atravessadas no comprimento, uma sim uma não (ou a cada 3).
+            var rows = new SkyFamily { Weight = 0.2 };
+            foreach (List<int> v in vs)
+                if (v.Count < iv.Count)
+                    foreach (List<int> u in us)
+                        AddStep(rows, Grid(shape, u, v));
+            if (rows.Steps.Count > 0) families.Add(rows);
+
+            // Só a nave central: a fileira do meio, de ponta a ponta do miolo.
+            var nave = new SkyFamily { Weight = 0.15 };
+            foreach (List<int> v in vs) AddStep(nave, Grid(shape, Middle(lw), v));
+            families.Add(nave);
+            families.Add(Family(0.1, Grid(PoolSky.Full, Middle(lw), iv)));
+
+            // Só o anel de borda: a volta das baias encostadas na parede (toda baia ou uma sim uma
+            // não). Só os quatro cantos não conta: lia como sobra, não como anel.
+            var ring = new SkyFamily { Weight = 0.08 };
+            foreach (List<int> u in Rhythms(lw, 0, 3, false))
+                foreach (List<int> v in Rhythms(lh, 0, 3, false))
+                    if (u.Count >= 3 && v.Count >= 3) AddStep(ring, Ring(shape, u, v));
+            if (ring.Steps.Count > 0) families.Add(ring);
+
+            // Raia funda cortando o salão: faixa (ou rasgos em ritmo) exatamente sobre ela.
+            int lane = -1, vs0 = int.MaxValue, vs1 = -1;
+            for (int u = 0; u < lw; u++)
+                for (int v = 0; v < lh; v++)
+                {
+                    i.F.Cell(u, v, out int x, out int z);
+                    if (c.D.Depth[x, z] != PoolDepth.Deep) continue;
+                    lane = u;
+                    vs0 = Math.Min(vs0, v);
+                    vs1 = Math.Max(vs1, v);
+                }
+            if (lane >= 0)
+            {
+                // A raia que vai de parede a parede perde as pontas: a fileira da borda fica livre.
+                vs0 = Math.Max(vs0, Margin(lh));
+                vs1 = Math.Min(vs1, lh - 1 - Margin(lh));
+                var over = new SkyFamily { Weight = 0.3 };
+                foreach (List<int> v in Rhythms(vs1 - vs0 + 1, 0, 3, false)) AddStep(over, Grid(SlotAlong(i), new List<int> { lane }, Shift(v, vs0)));
+                families.Add(over);
+                families.Add(Family(0.15, Grid(PoolSky.Full, new List<int> { lane }, Range(vs0, vs1))));
+            }
+        }
+
+        /// <summary>
+        /// Claraboias do mapa: um padrão por sala (a seed escolhe a família e o degrau), depois o
+        /// orçamento de 30 a 70 células, andando dentro da família. Acende a luz de cada célula
+        /// com claraboia.
+        /// </summary>
+        static void ArrangeSkies(Ctx c)
+        {
+            LevelData d = c.D;
+            var r = new Random(unchecked(d.Seed * 1103515245 + 0x5C1A));
+            var choices = new List<SkyChoice>();
+            foreach (Info i in c.Rooms)
+            {
+                List<SkyFamily> families = SkyOptions(c, i, r);
+                if (families.Count == 0) continue;
+                // Família pelo peso (a de peso zero, "sem claraboia", só entra pelo orçamento).
+                double total = 0;
+                int fi = -1;
+                foreach (SkyFamily f in families) total += f.Weight;
+                double pick = r.NextDouble() * total;
+                for (int k = 0; k < families.Count; k++)
+                {
+                    if (families[k].Weight <= 0) continue;
+                    fi = k;
+                    pick -= families[k].Weight;
+                    if (pick < 0) break;
+                }
+                int si = r.Next(families[fi].Steps.Count);
+                choices.Add(new SkyChoice { Room = i, Families = families, Family = fi, Step = si });
+            }
+
+            int count = 0, lights = 0;
+            foreach (SkyChoice ch in choices) { count += ch.Count; lights += ch.Lights; }
+
+            // Demais (células acima de 70 ou luzes acima do teto): a sala que mais pesa passa para o
+            // degrau mais ralo da MESMA família; só quando nenhuma sala pode mais, troca de família
+            // (para o padrão mais próximo, mais ralo) ou, nas salas que não são marco, fica sem
+            // claraboia. Nunca abaixo de 30 células por causa das luzes.
+            bool Sparsen(bool otherFamily)
+            {
+                bool byCells = count > MaxSky;
+                SkyChoice best = null;
+                int bf = -1, bs = -1;
+                foreach (SkyChoice ch in choices)
+                {
+                    if (!SparserOption(ch, otherFamily, out int f, out int s)) continue;
+                    SkyPattern next = ch.Families[f].Steps[s];
+                    if (!byCells && count - ch.Count + next.Cells.Count < MinSky) continue;
+                    int weight = byCells ? ch.Count : ch.Lights;
+                    int bestWeight = best == null ? -1 : byCells ? best.Count : best.Lights;
+                    if (weight > bestWeight) { best = ch; bf = f; bs = s; }
+                }
+                if (best == null) return false;
+                count -= best.Count; lights -= best.Lights;
+                best.Family = bf;
+                best.Step = bs;
+                count += best.Count; lights += best.Lights;
+                return true;
+            }
+            while (count > MaxSky || lights > MaxSkyLights)
+                if (!Sparsen(false) && !Sparsen(true)) break;
+            // De menos: a sala com menos claraboias passa para o degrau mais cheio da mesma família;
+            // se nenhuma pode, a que mais ganha troca para o padrão mais cheio que tem.
+            while (count < MinSky)
+            {
+                SkyChoice best = null;
+                foreach (SkyChoice ch in choices)
+                    if (ch.Step > 0 && (best == null || ch.Count < best.Count)) best = ch;
+                int bf = best != null ? best.Family : -1, bs = best != null ? best.Step - 1 : -1;
+                if (best == null)
+                {
+                    int gain = 0;
+                    foreach (SkyChoice ch in choices)
+                        for (int f = 0; f < ch.Families.Count; f++)
+                        {
+                            int g = ch.Families[f].Steps[0].Cells.Count - ch.Count;
+                            if (g > gain) { gain = g; best = ch; bf = f; bs = 0; }
+                        }
+                    if (best == null) break;
+                }
+                count -= best.Count; lights -= best.Lights;
+                best.Family = bf;
+                best.Step = bs;
+                count += best.Count; lights += best.Lights;
+            }
+
+            foreach (SkyChoice ch in choices)
+                foreach ((int u, int v) in ch.Current.Cells)
+                {
+                    ch.Room.F.Cell(u, v, out int x, out int z);
+                    d.Sky[x, z] = ch.Current.Shape;
+                }
+            for (int z = 0; z < c.H; z++)
+                for (int x = 0; x < c.W; x++)
+                    d.Lights[x, z] = d.Sky[x, z] != PoolSky.None ? LightState.On : LightState.None;
         }
 
         /// <summary>Altura máxima do centro de uma lâmpada naquele lado, ou NaN se o lado não serve.</summary>
@@ -2053,16 +2587,13 @@ namespace BackRooms.World
             d.SpawnX = d.RoomX0 + d.RoomWidth / 2;
             d.SpawnZ = d.RoomZ0 + d.RoomHeight / 2;
 
-            // Toda claraboia acesa: claraboia "queimada" lia como lâmpada, e a luz aqui é do dia
-            // (canto escuro é sala sem claraboia). O sorteio que escolhia as quebradas continua
-            // sendo tirado, sem uso, para cada seed manter a mesma planta de antes.
+            // O sorteio que escolhia as claraboias quebradas (sobre as do sorteio antigo) continua
+            // sendo tirado, sem uso, para cada seed manter a mesma planta de antes. As luzes
+            // acendem em ArrangeSkies.
             var unused = new List<(int x, int z)>();
             for (int z = 0; z < c.H; z++)
                 for (int x = 0; x < c.W; x++)
-                {
-                    d.Lights[x, z] = d.Sky[x, z] != PoolSky.None ? LightState.On : LightState.None;
-                    if (d.Sky[x, z] != PoolSky.None && !c.KeepSky[x, z] && LevelGenerator.WearAt(d, x, z) >= 0.75f) unused.Add((x, z));
-                }
+                    if (c.OldSky[x, z] != PoolSky.None && !c.KeepSky[x, z] && LevelGenerator.WearAt(d, x, z) >= 0.75f) unused.Add((x, z));
             Shuffle(unused, c.R);
             c.R.Next(3);
 
@@ -2200,6 +2731,63 @@ namespace BackRooms.World
                 float dz = Math.Max(0f, Math.Max(z0 - col.Z, col.Z - z1));
                 if (Math.Sqrt(dx * dx + dz * dz) < col.Radius + 0.1f) return "coluna em cima de escada";
             }
+            return null;
+        }
+
+        /// <summary>
+        /// Claraboias de uma sala como projeto, não furos ao acaso: um formato só; o conjunto
+        /// espelhado em pelo menos um dos eixos da sala; e em ritmo: as colunas (em X) e as fileiras
+        /// (em Z) usadas são igualmente espaçadas, e o conjunto é a grade inteira delas, o xadrez
+        /// dela (cantos incluídos) ou o anel de fora dela. Null se está tudo certo.
+        /// </summary>
+        static string SkyPatternProblem(LevelData d, PoolRoom room)
+        {
+            var cells = new List<(int x, int z)>();
+            PoolSky shape = PoolSky.None;
+            bool mixed = false;
+            for (int z = room.Z0; z < room.Z0 + room.Height; z++)
+                for (int x = room.X0; x < room.X0 + room.Width; x++)
+                {
+                    PoolSky s = d.Sky[x, z];
+                    if (s == PoolSky.None) continue;
+                    if (shape == PoolSky.None) shape = s;
+                    else if (s != shape) mixed = true;
+                    cells.Add((x, z));
+                }
+            if (cells.Count == 0) return null;
+            if (mixed) return "claraboias de formatos diferentes na mesma sala";
+
+            var set = new HashSet<(int, int)>(cells);
+            bool mirrorX = true, mirrorZ = true;
+            var xs = new List<int>();
+            var zs = new List<int>();
+            foreach ((int x, int z) in cells)
+            {
+                if (!set.Contains((2 * room.X0 + room.Width - 1 - x, z))) mirrorX = false;
+                if (!set.Contains((x, 2 * room.Z0 + room.Height - 1 - z))) mirrorZ = false;
+                if (!xs.Contains(x)) xs.Add(x);
+                if (!zs.Contains(z)) zs.Add(z);
+            }
+            if (!mirrorX && !mirrorZ) return "claraboias sem simetria na sala";
+
+            xs.Sort();
+            zs.Sort();
+            bool Even(List<int> list)
+            {
+                for (int k = 2; k < list.Count; k++)
+                    if (list[k] - list[k - 1] != list[1] - list[0]) return false;
+                return true;
+            }
+            if (!Even(xs) || !Even(zs)) return "claraboias fora de ritmo na sala";
+            bool grid = cells.Count == xs.Count * zs.Count, checker = true, ring = true;
+            for (int iz = 0; iz < zs.Count; iz++)
+                for (int ix = 0; ix < xs.Count; ix++)
+                {
+                    bool has = set.Contains((xs[ix], zs[iz]));
+                    if (has != ((ix + iz) % 2 == 0)) checker = false;
+                    if (has != (ix == 0 || iz == 0 || ix == xs.Count - 1 || iz == zs.Count - 1)) ring = false;
+                }
+            if (!grid && !checker && !ring) return "claraboias fora de ritmo na sala";
             return null;
         }
 
@@ -2534,6 +3122,11 @@ namespace BackRooms.World
                     if (room.Dark) Add(p, "claraboia em sala escura");
                 }
             if (skyCells < MinSky || skyCells > MaxSky) Add(p, "claraboias fora de 30 a 70 células");
+            for (int k = 0; k < rooms; k++)
+            {
+                string why = SkyPatternProblem(d, d.Rooms[k]);
+                if (why != null) Add(p, why);
+            }
             for (int k = 0; k < rooms; k++)
                 if (d.Rooms[k].Dark && darkLamps[k] == 0) Add(p, "sala escura sem lâmpada");
 

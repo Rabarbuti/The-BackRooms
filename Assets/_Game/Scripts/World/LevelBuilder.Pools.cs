@@ -2212,29 +2212,71 @@ namespace BackRooms.World
         sealed class SkyItem
         {
             public PoolSky Sky;
-            public int X0, X1, Z;  // células X0..X1 (Full em faixa) na fileira Z
+            public int X0, X1, Z0, Z1;  // células X0..X1 x Z0..Z1 (Full: uma faixa; as outras: uma célula)
         }
 
-        // Claraboias: uma por célula; as Full vizinhas na mesma fileira e sala viram uma faixa só.
+        // Claraboias: uma por célula. As Full vizinhas da mesma sala formam um teto de vidro; ele
+        // vira faixas no sentido mais comprido dele (uma luz cada): a faixa de vidro de uma raia
+        // inteira é uma luz só, corra ela em X ou em Z.
         List<SkyItem> SkyItems()
         {
+            int w = Data.Width, h = Data.Height;
+            // Sentido de cada teto de vidro: o mais comprido da caixa da sala inteira de Full.
+            var alongZ = new bool[w, h];
+            var seen = new bool[w, h];
+            for (int z = 0; z < h; z++)
+                for (int x = 0; x < w; x++)
+                {
+                    if (seen[x, z] || !IsFullSky(x, z)) continue;
+                    var cells = new List<Vector2Int>();
+                    var queue = new Queue<Vector2Int>();
+                    seen[x, z] = true;
+                    queue.Enqueue(new Vector2Int(x, z));
+                    int bx0 = x, bx1 = x, bz0 = z, bz1 = z;
+                    while (queue.Count > 0)
+                    {
+                        Vector2Int cell = queue.Dequeue();
+                        cells.Add(cell);
+                        bx0 = Mathf.Min(bx0, cell.x); bx1 = Mathf.Max(bx1, cell.x);
+                        bz0 = Mathf.Min(bz0, cell.y); bz1 = Mathf.Max(bz1, cell.y);
+                        foreach (WallSide side in PoolSides)
+                        {
+                            if (HasWallBox(cell.x, cell.y, side) || !Data.Neighbor(cell.x, cell.y, side, out int nx, out int nz)) continue;
+                            if (seen[nx, nz] || !IsFullSky(nx, nz) || Data.Room[nx, nz] != Data.Room[cell.x, cell.y]) continue;
+                            seen[nx, nz] = true;
+                            queue.Enqueue(new Vector2Int(nx, nz));
+                        }
+                    }
+                    bool longZ = bz1 - bz0 > bx1 - bx0;
+                    foreach (Vector2Int cell in cells) alongZ[cell.x, cell.y] = longZ;
+                }
+
+            bool SameStrip(int x, int z, int nx, int nz) =>
+                nx >= 0 && nz >= 0 && IsFullSky(nx, nz) && Data.Room[nx, nz] == Data.Room[x, z] && alongZ[nx, nz] == alongZ[x, z];
+
             var items = new List<SkyItem>();
-            for (int z = 0; z < Data.Height; z++)
-                for (int x = 0; x < Data.Width; x++)
+            var stripAt = new SkyItem[w, h];
+            for (int z = 0; z < h; z++)
+                for (int x = 0; x < w; x++)
                 {
                     PoolSky sky = Data.Sky[x, z];
                     if (sky == PoolSky.None || !OpenCell(x, z) || RoomAt(x, z).Vault) continue;
-
-                    if (sky == PoolSky.Full && items.Count > 0)
+                    if (sky == PoolSky.Full)
                     {
-                        SkyItem last = items[items.Count - 1];
-                        if (last.Sky == PoolSky.Full && last.Z == z && last.X1 == x - 1 && Data.Room[x - 1, z] == Data.Room[x, z])
+                        // Continua a faixa da célula anterior (a oeste ou ao sul, conforme o sentido).
+                        int px = alongZ[x, z] ? x : x - 1, pz = alongZ[x, z] ? z - 1 : z;
+                        if (SameStrip(x, z, px, pz) && stripAt[px, pz] != null && !HasWallBox(x, z, alongZ[x, z] ? WallSide.South : WallSide.West))
                         {
-                            last.X1 = x;
+                            SkyItem strip = stripAt[px, pz];
+                            strip.X1 = Mathf.Max(strip.X1, x);
+                            strip.Z1 = Mathf.Max(strip.Z1, z);
+                            stripAt[x, z] = strip;
                             continue;
                         }
                     }
-                    items.Add(new SkyItem { Sky = sky, X0 = x, X1 = x, Z = z });
+                    var item = new SkyItem { Sky = sky, X0 = x, X1 = x, Z0 = z, Z1 = z };
+                    if (sky == PoolSky.Full) stripAt[x, z] = item;
+                    items.Add(item);
                 }
             return items;
         }
@@ -2312,15 +2354,16 @@ namespace BackRooms.World
                 var lights = new List<HDAdditionalLightData>();
                 foreach (SkyItem item in items)
                 {
-                    if (item.Sky != PoolSky.Full || component[item.X0, item.Z] != k) continue;
+                    if (item.Sky != PoolSky.Full || component[item.X0, item.Z0] != k) continue;
                     var corners = new List<Vector3>();
-                    for (int x = item.X0; x <= item.X1; x++)
-                    {
-                        CellRect(x, item.Z, out float x0, out float x1, out float z0, out float z1);
-                        corners.Add(new Vector3(x0, c, z0)); corners.Add(new Vector3(x1, c, z1));
-                        corners.Add(new Vector3(x0, c, z1)); corners.Add(new Vector3(x1, c, z0));
-                    }
-                    lights.Add(CreateSun(panel.transform, corners, c, item.X0, item.Z, resolution));
+                    for (int z = item.Z0; z <= item.Z1; z++)
+                        for (int x = item.X0; x <= item.X1; x++)
+                        {
+                            CellRect(x, z, out float x0, out float x1, out float z0, out float z1);
+                            corners.Add(new Vector3(x0, c, z0)); corners.Add(new Vector3(x1, c, z1));
+                            corners.Add(new Vector3(x0, c, z1)); corners.Add(new Vector3(x1, c, z0));
+                        }
+                    lights.Add(CreateSun(panel.transform, corners, c, item.X0, item.Z0, resolution));
                 }
 
                 panel.gameObject.AddComponent<DaylightPanel>().Init(lights.ToArray(), panel, on, nightBase, nightEmissive);
@@ -2330,7 +2373,7 @@ namespace BackRooms.World
             foreach (SkyItem item in items)
             {
                 if (item.Sky == PoolSky.Full) continue;
-                int x = item.X0, z = item.Z;
+                int x = item.X0, z = item.Z0;
                 float c = Data.Ceiling[x, z];
                 float glassY = c + ShaftHeight;
                 var glass = new MeshBuilder(1f);
