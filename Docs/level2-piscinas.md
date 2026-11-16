@@ -226,7 +226,7 @@ do raso, 8 degraus (2,4 m); do seco, 11 (3,3 m).
 **Escada ou borda.** Numa divisa aberta entre duas alturas, ou há escada (degraus de 20 x 30 cm, da
 largura do vão, e aí se anda nos dois sentidos) ou é uma **borda**: andando, desce-se (cai-se na
 água) e não se sobe; **nadando à tona, sobe-se** (seção 4.2), como em toda piscina de verdade. Quem
-está no raso não sobe no seco pela borda: precisa de escada (o desnível continua obstáculo). Quando o lado de cima é seco, a borda tem **capa**: uma faixa de pedra de 30 cm rente ao
+anda no raso (sem pular) não sobe no seco pela borda: o desnível continua obstáculo. Quando o lado de cima é seco, a borda tem **capa**: uma faixa de pedra de 30 cm rente ao
 piso, com a aresta arredondada sempre do lado da água e a textura correndo ao longo da borda (UV por
 trecho, `LevelBuilder.AddCoping`); a escada interrompe a capa só na largura dela. Nos cantos as faixas
 se encontram em meia-esquadria: na ponta do seco (capa em dois lados da célula) e no canto da
