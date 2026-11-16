@@ -102,7 +102,10 @@ namespace BackRooms.World
         Dry,
         /// <summary>Água na canela: piso a -0,4 m.</summary>
         Shallow,
-        /// <summary>Água no peito: piso a -1,2 m.</summary>
+        /// <summary>
+        /// Água funda (piscinas, raias, canais): piso a -2,0 m, 2,05 m de água. Não dá pé: o
+        /// jogador nada (afunda sem tecla, fica à tona segurando Espaço) e sai só por escada.
+        /// </summary>
         Deep,
         /// <summary>Poço: piso a -6 m, só nadando.</summary>
         Well
@@ -235,8 +238,9 @@ namespace BackRooms.World
 
         /// <summary>
         /// Escadas, nas Piscinas. Uma divisa aberta entre alturas diferentes SEM escada é uma
-        /// borda: desce-se por ela (cai-se na água), mas não se sobe. A pé só contam as divisas
-        /// de mesma altura e as que têm escada (<see cref="CanStep"/>).
+        /// borda: desce-se por ela (cai-se na água), mas não se sobe. Só contam para passar as
+        /// divisas de mesma altura e as que têm escada (<see cref="CanStep"/>); na água funda
+        /// passa-se nadando, e dela só se sai por escada.
         /// </summary>
         public List<PoolStair> Stairs = new List<PoolStair>();
 
@@ -277,7 +281,11 @@ namespace BackRooms.World
         /// </summary>
         public const float WaterLevel = 0.05f;
 
-        /// <summary>Altura do último degrau da escada que entra num poço (abaixo de onde o nadador boia, a -1,35 m).</summary>
+        /// <summary>
+        /// Altura do último degrau de uma escada que subisse de um poço (abaixo de onde o nadador
+        /// boia, a -1,35 m). Desde que a água funda passou a -2,0 m nenhuma cabe: o poço só encosta
+        /// em funda, cujo piso já é mais baixo que isto, e de lá também se sai nadando.
+        /// </summary>
         public const float WellStairFoot = -1.6f;
 
         public bool IsSolid(int x, int z) => Solid != null && Solid[x, z];
@@ -310,8 +318,9 @@ namespace BackRooms.World
         }
 
         /// <summary>
-        /// Dá para andar (nos dois sentidos) da célula para a vizinha daquele lado? Divisa aberta,
-        /// nenhuma das duas é poço nem maciça, e mesma altura ou escada.
+        /// Dá para passar (nos dois sentidos) da célula para a vizinha daquele lado? Divisa aberta,
+        /// nenhuma das duas é poço nem maciça, e mesma altura ou escada. Entre duas fundas
+        /// passa-se nadando: "a pé", aqui, inclui nadar na água funda.
         /// </summary>
         public bool CanStep(int x, int z, WallSide side)
         {
@@ -328,7 +337,7 @@ namespace BackRooms.World
             {
                 case PoolDepth.Dry: return 0.2f;
                 case PoolDepth.Shallow: return -0.4f;
-                case PoolDepth.Deep: return -1.2f;
+                case PoolDepth.Deep: return -2.0f;
                 default: return -6f;
             }
         }
@@ -1461,13 +1470,13 @@ namespace BackRooms.World
         // As Piscinas (Level 2) têm gerador próprio, o PoolGenerator: salas, não este labirinto.
         // Estes atalhos existem para quem já chamava por aqui.
 
-        /// <summary>Verdadeiro se toda célula com piso que não é poço é alcançável a pé a partir da sala inicial.</summary>
+        /// <summary>Verdadeiro se toda célula com piso que não é poço é alcançável (a pé ou nadando na funda) a partir da sala inicial.</summary>
         public static bool AllReachableOnFoot(LevelData d) => PoolGenerator.AllReachableOnFoot(d);
 
-        /// <summary>Células alcançáveis a pé (mesma altura ou escada, sem poço) a partir de (x, z).</summary>
+        /// <summary>Células alcançáveis a pé ou nadando na funda (mesma altura ou escada, sem poço) a partir de (x, z).</summary>
         public static bool[] FootReach(LevelData d, int x0, int z0) => PoolGenerator.FootReach(d, x0, z0);
 
-        /// <summary>Caminho mais curto a pé da sala inicial até a saída, célula por célula.</summary>
+        /// <summary>Caminho mais curto a pé, sem nadar (só seco e raso), da sala inicial até a saída, célula por célula.</summary>
         public static List<int> FootPath(LevelData d) => PoolGenerator.FootPath(d);
 
         // Sujeira, umidade e desgaste: muitas manchas discretas em paredes e no carpete.

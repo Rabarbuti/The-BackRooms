@@ -88,8 +88,9 @@ WASD anda, Shift corre, Ctrl ou C agacha, Espaço pula, F lanterna, uma tecla po
 2 azul, 3 vermelha: puxa a caneta, troca de cor ou, se já é a da mão, guarda), botão esquerdo
 risca, E abre a porta
 de saída (ou solta, se já estava esperando os outros), F9 grava a tela, Esc solta o mouse. No menu: H hospeda,
-J entra; a lista "Fase" troca de nível (no editor todas ficam liberadas). Na água sem pé (poço das
-Piscinas), segurar Espaço sobe e fica à tona; sem tecla, afunda devagar; Ctrl ou C mergulha.
+J entra; a lista "Fase" troca de nível (no editor todas ficam liberadas). Na água funda das
+Piscinas (piscinas, raias, canais e poços: não dá pé), segurar Espaço sobe e fica à tona; sem tecla,
+afunda devagar até o fundo; Ctrl ou C mergulha; da água funda só se sai por escada.
 
 ## Conteúdo gerado: não editar à mão
 
@@ -179,9 +180,11 @@ velho. Mudança só de código não precisa. A cena do Level 1 não tem versão:
   `AddCollider`) e na `PropLayer` (`Spawn`). Não criar um sem o outro. Nas Piscinas, o que é
   curvo (arco, coluna, abóbada, poço) usa `MeshCollider` da mesma malha; enfeite sem colisor
   (sanca, cáustica, corrimão) entra por nome na lista do `Level0ColliderCheck`.
-- **Nas Piscinas, toda célula com piso que não é poço se alcança a pé e de todo poço se sai
-  nadando.** Divisa aberta entre alturas diferentes sem `PoolStair` é borda: desce-se, não se sobe
-  (`LevelData.CanStep`). Regra nova de planta entra no `PoolGenerator.Validate`, que sorteia de novo
+- **Nas Piscinas, toda célula com piso que não é poço se alcança (a pé, ou nadando na água funda),
+  de toda água funda se sai por escada, de todo poço se sai nadando para a funda e o caminho do
+  início à saída nunca exige nadar** (`PoolGenerator.FootPath`, só seco e raso). A funda (piso a
+  −2,0 m) não dá pé. Divisa aberta entre alturas diferentes sem `PoolStair` é borda: desce-se, não
+  se sobe (`LevelData.CanStep`). Regra nova de planta entra no `PoolGenerator.Validate`, que sorteia de novo
   até passar; coluna nunca fica a menos de (raio + 0,6 m) das linhas de centro das células.
 - **A fase das Piscinas não tem luminária:** a luz vem de claraboias e janelas (luz de caixa
   inclinada, sempre para o mesmo lado, sombra de uma face em cache) e o perfil de Volume é o dela.
@@ -315,10 +318,14 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   e de lado), poço redondo (de cima e debaixo d'água), emenda do teto de vidro (aceso e apagado), um
   close de cada tipo de mancha e de marcação, as duas salas com mais decalques e duas vistas longas.
   Apaga só as fotos da mesma seed, não as outras. Escreve no log quantas manchas e marcações a seed
-  tem e quais das seeds de conferência têm poço redondo, tijolo de vidro e janelão.
+  tem e quais das seeds de conferência têm poço redondo, tijolo de vidro e janelão. Com `-so borda`,
+  só a capa da borda; com `-so fundo`, só a água funda (piscina do deque, boiando e debaixo d'água,
+  as escadas mais longas que saem dela, a raia funda e o poço redondo; `level2_s{seed}_fundo_*.png`).
 - `Level2PlayTest.BatchRun` (`-seed N`) — as Piscinas em Play: nasce no seco, anda o caminho a pé
-  até a saída pelas escadas e arcos, fica à tona num poço segurando Espaço, afunda e se afoga sem
-  tecla, sobe e sai nadando para a área funda, e agachado na funda põe a cabeça debaixo d'água.
+  até a saída (sem nadar) pelas escadas e arcos, fica à tona num poço segurando Espaço, afunda e se
+  afoga sem tecla, sobe e sai nadando para a área funda; desce uma escada para a água funda e passa
+  a nadar, atravessa à tona, afunda até o fundo (2 m), sobe e sai subindo a escada; do fundo, sem
+  Espaço, anda até a escada e sobe os degraus andando; por fim, o anoitecer.
 - `Level0ColliderCheck.BatchRunLevel2` — colisores contra a malha visível na cena das Piscinas.
 - `Level1Models.BatchUpdateAndCapture` — cria os materiais dos lotes, reimporta os modelos,
   escreve as medidas no log e salva fotos em `Logs/Previews/moveis_*.png` (todos, ou só os de

@@ -43,7 +43,7 @@ namespace BackRooms.Player
         public float airSeconds = 20f;
         [Tooltip("Segundos para recuperar o fôlego inteiro fora d'água.")]
         public float airRefillSeconds = 3f;
-        [Tooltip("Velocidade (fração da caminhada) com água na canela e com água no peito.")]
+        [Tooltip("Velocidade (fração da caminhada) com água na canela e com água no peito (nos degraus que entram na água funda).")]
         public float wadeShallow = 0.85f;
         public float wadeDeep = 0.55f;
         [Tooltip("Velocidade nadando, fração da caminhada.")]
@@ -352,7 +352,8 @@ namespace BackRooms.Player
             bool grounded = _controller.isGrounded;
             bool movingForward = input.y > 0.1f;
 
-            // Água (só nas Piscinas): quanto mais funda, mais lento; funda demais, nada.
+            // Água (só nas Piscinas): no raso e nos degraus, quanto mais funda, mais lento; na água
+            // funda (piscinas, raias, canais: 2,05 m) e no poço não dá pé, e o jogador nada.
             PoolWater water = PoolWater.Current;
             Submersion = water != null ? Mathf.Max(0f, water.SurfaceY - transform.position.y) : 0f;
             IsSwimming = water != null && Submersion > swimDepth;
@@ -369,14 +370,18 @@ namespace BackRooms.Player
 
             if (IsSwimming)
             {
-                // Onde não dá pé: sem tecla, afunda devagar; segurando Espaço, sobe e fica com a
-                // cabeça fora d'água (os pés a floatDepth da superfície); agachar mergulha mais
-                // rápido. Quem está voltando ao início (afogado) só afunda. A velocidade muda aos
-                // poucos (inércia); uma queda rápida a água freia mais forte.
+                // Onde não dá pé: sem tecla, afunda devagar (na funda, até ficar de pé no fundo,
+                // com a cabeça debaixo d'água, e dá para andar por ele até uma escada); segurando
+                // Espaço, sobe e fica com a cabeça fora d'água (os pés a floatDepth da superfície);
+                // agachar mergulha mais rápido. Quem está voltando ao início (afogado) só afunda. A
+                // velocidade muda aos poucos (inércia); uma queda rápida a água freia mais forte.
                 float floatY = water.SurfaceY - floatDepth;
                 float vertical = -sinkSpeed;
                 if (!IsReturning && _crouch.IsPressed()) vertical = -swimVerticalSpeed;
                 else if (!IsReturning && _jump.IsPressed()) vertical = Mathf.Clamp((floatY - transform.position.y) * 3f, -swimVerticalSpeed, swimVerticalSpeed);
+                // Quem chega andando (descendo a escada para a água funda) traz o empurrão de -2 m/s
+                // que o prende ao chão: não é queda, então não vira mergulho ao sair do degrau.
+                if (grounded && _verticalVelocity < -sinkSpeed) _verticalVelocity = -sinkSpeed;
                 float rate = Mathf.Abs(_verticalVelocity) > swimVerticalSpeed ? swimAcceleration * 3f : swimAcceleration;
                 _verticalVelocity = Mathf.MoveTowards(_verticalVelocity, vertical, rate * dt);
             }

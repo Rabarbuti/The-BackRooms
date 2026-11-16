@@ -38,7 +38,8 @@ namespace BackRooms.World
         // vira 0,3 m de largura por 0,6 m de comprimento: a pedra não tem desenho que mostre o esticão).
         const float CopingRepeat = 0.6f;
         const float RoundWellRadius = 1.6f;
-        const float RoundWellDeck = -1.2f;
+        // O deque do poço redondo é o piso da água funda em volta dele.
+        static float RoundWellDeck => LevelData.DepthFloor(PoolDepth.Deep);
         const float ShaftHeight = 1f;
         const float GlassRecess = 0.15f;
         // Pontos por meia volta nas aberturas redondas (a volta inteira tem o dobro).
@@ -235,7 +236,7 @@ namespace BackRooms.World
             PoolStats = $"{renderers} malhas desenhadas, {vertices} vértices, {boxes} caixas de colisão, " +
                         $"{_kit.Lights} luzes ({_kit.ShadowLights} com sombra de uma face em cache, resolução {resolution}); " +
                         $"manchas {st[0] + st[1] + st[2] + st[3] + st[4]} (limo {st[0]}, calcário {st[1]}, mofo {st[2]}, mofo no teto {st[3]}, ferrugem {st[4]}), " +
-                        $"marcações {mk[0] + mk[1] + mk[2] + mk[3]} (1.2 M {mk[0]}, NO DIVING {mk[1]}, DEEP END {mk[2]}, T de raia {mk[3]})";
+                        $"marcações {mk[0] + mk[1] + mk[2] + mk[3]} (2.0 M {mk[0]}, NO DIVING {mk[1]}, DEEP END {mk[2]}, T de raia {mk[3]})";
             PoolDecalLog = string.Join("; ", _kit.DecalLog);
             _kit = null;
         }
@@ -1110,7 +1111,7 @@ namespace BackRooms.World
         }
 
         /// <summary>
-        /// Poço redondo: deque de piso fundo (-1,2 m) com um furo de raio 1,6 m no meio, que desce
+        /// Poço redondo: deque de piso fundo (-2,0 m) com um furo de raio 1,6 m no meio, que desce
         /// até o fundo do poço (-6 m), escuro, com uma grade de ralo.
         /// </summary>
         void BuildRoundWell(int x, int z, float x0, float x1, float z0, float z1)
@@ -2001,20 +2002,22 @@ namespace BackRooms.World
         // ---------------------------------------------------------------- Marcações
 
         // Largura de cada marcação, em metros, e a proporção largura/altura do desenho
-        // (Art/Fontes/Level2/Mark_*.png): 0 profundidade, 1 proibido mergulhar, 2 DEEP END, 3 T de raia.
-        static readonly float[] MarkWidth = { 0.7f, 0.7f, 1.1f, 1.0f };
-        static readonly float[] MarkAspect = { 1.777f, 0.928f, 2.482f, 0.704f };
-        static readonly string[] MarkLabel = { "1.2 M", "NO DIVING", "DEEP END", "T de raia" };
+        // (Art/Fontes/Level2/Mark_*.png; a de profundidade, "2.0 M", é Art/Level2/Mark_Depth_2m.png,
+        // 923 x 480, remontada pelo Level2Setup com letras da mesma altura da "1.2 M" da fonte):
+        // 0 profundidade, 1 proibido mergulhar, 2 DEEP END, 3 T de raia.
+        static readonly float[] MarkWidth = { 0.76f, 0.7f, 1.1f, 1.0f };
+        static readonly float[] MarkAspect = { 1.923f, 0.928f, 2.482f, 0.704f };
+        static readonly string[] MarkLabel = { "2.0 M", "NO DIVING", "DEEP END", "T de raia" };
         const int MaxDepthMarks = 6;
         const int MaxNoDivingMarks = 4;
-        // Distância do pé dos desenhos de piso à borda (1.2 M: logo depois da capa) e do T à ponta da raia.
+        // Distância do pé dos desenhos de piso à borda (2.0 M: logo depois da capa) e do T à ponta da raia.
         const float DepthMarkGap = CopingWidth + 0.05f;
         const float LaneMarkGap = 0.6f;
 
         static float MarkHeight(int kind) => MarkWidth[kind] / MarkAspect[kind];
 
         /// <summary>
-        /// Marcações pintadas, poucas e onde uma piscina de verdade as tem: "1.2 M" no deque seco
+        /// Marcações pintadas, poucas e onde uma piscina de verdade as tem: "2.0 M" no deque seco
         /// rente à área funda (ou na parede logo acima da água de uma área funda), NO DIVING em
         /// parede cega de sala rasa com deque ou escada, DEEP END em parede cega de sala com poço e
         /// o T azul no fundo, nas duas pontas de uma raia funda. Nada sobre abertura, escada,
@@ -2163,7 +2166,7 @@ namespace BackRooms.World
             return spots;
         }
 
-        // "1.2 M" no deque: lido por quem está no deque olhando para a água (o topo do desenho para a água).
+        // "2.0 M" no deque: lido por quem está no deque olhando para a água (o topo do desenho para a água).
         bool DeckDepthMark(Transform root, Material material, int x, int z, WallSide side, List<Bounds> obstacles)
         {
             Vector3 toWater = SideDir(side);
@@ -2176,7 +2179,7 @@ namespace BackRooms.World
                               false, obstacles, $"{MarkLabel[0]} no deque ({x},{z},{side})");
         }
 
-        // "1.2 M" na parede de uma célula funda, logo acima da água (e da faixa azul, se a sala tem).
+        // "2.0 M" na parede de uma célula funda, logo acima da água (e da faixa azul, se a sala tem).
         bool WallDepthMark(Transform root, Material material, int x, int z, WallSide side, List<Bounds> obstacles)
         {
             int room = Data.Room[x, z];
@@ -2221,7 +2224,7 @@ namespace BackRooms.World
         /// T azul no fundo, nas duas pontas de uma raia: a trave do T a 0,6 m da parede ou da borda
         /// da ponta e a haste para o meio da raia. Raia = fileira de células fundas ao longo do lado
         /// maior da sala (na piscina, a do meio; no canal e na raia longa, a funda). Se a escada
-        /// ocupa a ponta, o T vai para depois do pé dela (até 2,4 m); se não couber, fica sem.
+        /// ocupa a ponta, o T vai para depois do pé dela (até 3,6 m); se não couber, fica sem.
         /// </summary>
         void LaneMarks(Transform root, Material material, PoolRoom room, List<Bounds> obstacles)
         {
@@ -2263,7 +2266,8 @@ namespace BackRooms.World
             {
                 float line = end == 0 ? startLine : endLine;
                 Vector3 toEnd = end == 0 ? -axis : axis;
-                for (float gap = LaneMarkGap; gap <= 2.4f + 1e-3f; gap += 0.3f)
+                // Até 3,6 m da ponta: passa do pé de uma escada de 11 degraus (3 m) que ocupe a ponta.
+                for (float gap = LaneMarkGap; gap <= 3.6f + 1e-3f; gap += 0.3f)
                 {
                     float along = line - (end == 0 ? -1f : 1f) * (gap + height * 0.5f);
                     if (end == 0 ? along + height * 0.5f > middle : along - height * 0.5f < middle) break;

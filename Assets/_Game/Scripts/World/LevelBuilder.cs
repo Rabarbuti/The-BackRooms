@@ -125,7 +125,7 @@ namespace BackRooms.World
         public Color poolLampColor = new Color(0.55f, 0.95f, 1f);
         [Tooltip("Decalques de mancha, nesta ordem: 0 limo da linha d'água, 1 escorrido de calcário, 2 mofo no rejunte, 3 ferrugem. Vazio = sem manchas.")]
         public Material[] poolStainDecals;
-        [Tooltip("Marcações pintadas, nesta ordem: 0 profundidade (1.2 M), 1 proibido mergulhar, 2 DEEP END, 3 T de fim de raia. Vazio = sem marcações.")]
+        [Tooltip("Marcações pintadas, nesta ordem: 0 profundidade (2.0 M), 1 proibido mergulhar, 2 DEEP END, 3 T de fim de raia. Vazio = sem marcações.")]
         public Material[] poolMarkDecals;
 
         [Header("Luminárias")]

@@ -10,10 +10,11 @@ Level 2 (teste)) com as etapas 1 a 7 da seção 8.1:
   galeria, corredor de janelas, túnel em abóbada, fenda, escadaria afogada, salas de poço, cisterna
   e sala da saída (seção 3.2), maciços fechados entre elas (15 a 30% do mapa) e ligações com laços.
   `PoolGenerator.Validate` confere todas as regras da seção 3 e, se reprovar, sorteia de novo.
-- **Profundidade por célula** (`LevelData.Depth`: seco +0,2 m, raso −0,4, fundo −1,2, poço −6, água em
+- **Profundidade por célula** (`LevelData.Depth`: seco +0,2 m, raso −0,4, fundo −2,0, poço −6, água em
   +0,05, `LevelData.WaterLevel`) e **escadas explícitas** com largura (`LevelData.Stairs`); desnível sem escada é borda: desce-se,
-  não se sobe (`LevelData.CanStep`). Tudo que não é poço continua alcançável a pé e de todo poço se
-  sai nadando.
+  não se sobe (`LevelData.CanStep`). A água funda (piscinas, raias, canais) não dá pé: nada-se, e
+  dela só se sai por escada. Tudo que não é poço continua alcançável (a pé ou nadando na funda), de
+  todo poço se sai nadando para a funda e o caminho do início à saída nunca exige nadar.
 - **Construção** (`LevelBuilder.Pools.cs`): paredes de 0,4 m com arcos, vãos e vigias recortados sem
   moldura, colunas-tambor, sanca, abóbada de berço, teto claro, escadas, bordas com capa, corrimãos,
   poço redondo e água só nas células molhadas.
@@ -24,12 +25,14 @@ Level 2 (teste)) com as etapas 1 a 7 da seção 8.1:
 - **Visual:** perfil de Volume próprio (`Settings/Level2_Volume.asset`); água `HDRP/Lit` transparente
   com refração e cáustica animada (`PoolWater`); texturas das folhas A, B, C e D (seção 10), com
   poucas manchas e marcações pintadas postas pela seed como decalques.
-- **Jogador:** anda mais devagar na água (85% na canela, 55% no peito, sem correr; agachado na
-  funda, a cabeça fica debaixo d'água); no poço, onde não dá pé, **afunda devagar sem tecla**, sobe e
-  fica à tona segurando Espaço e mergulha com Ctrl/C; tem 20 s de fôlego submerso e, quando o fôlego
-  acaba, se afoga e volta ao início, como na queda no buraco. Debaixo d'água a imagem fica ciano.
-- **Filmadora:** `WATER` e a barra `AIR` com a cabeça debaixo d'água; no poço, `HOLD SPACE` piscando
-  nos primeiros segundos de cada mergulho e com o fôlego no fim.
+- **Jogador:** anda mais devagar na água rasa (85% na canela; nos degraus que entram na funda, até
+  55%, sem correr); em toda água funda (piscinas, raias, canais) e no poço, onde não dá pé,
+  **nada: afunda devagar sem tecla**, sobe e fica à tona segurando Espaço e mergulha com Ctrl/C; no
+  fundo da funda (2 m) fica de pé com a cabeça debaixo d'água e pode andar por ele até uma escada;
+  tem 20 s de fôlego submerso e, quando o fôlego acaba, se afoga e volta ao início, como na queda no
+  buraco. Debaixo d'água a imagem fica ciano.
+- **Filmadora:** `WATER` e a barra `AIR` com a cabeça debaixo d'água; onde não dá pé (água funda e
+  poço), `HOLD SPACE` piscando nos primeiros segundos de cada mergulho e com o fôlego no fim.
 - **Caneta:** não risca debaixo d'água.
 - **Desempenho** (seed 1998, 1920 x 1080, Quadro T2000): mediana de 37 ms por quadro sem lanterna e
   40 ms com, contra ~106 ms da primeira versão; 45 luzes com sombra de uma face em cache.
@@ -44,8 +47,8 @@ e 7). Não foi conferida a planta entre host e cliente (dois editores) nem jogad
 
 ## 1. A ideia em uma frase
 
-**Um complexo sem fim de salas de azulejo branco, cheias de água morna até a canela, ao peito ou
-sem fundo, iluminado por um sol que não se vê.** Calmo, bonito e limpo demais. Não há monstro
+**Um complexo sem fim de salas de azulejo branco, cheias de água morna até a canela, funda de
+nadar ou sem fundo, iluminado por um sol que não se vê.** Calmo, bonito e limpo demais. Não há monstro
 caçando ninguém: o perigo é a própria água, que sobe e desce sozinha, e o que mora no fundo dos
 poços escuros.
 
@@ -206,8 +209,14 @@ piscava.
 |---|---|---|---|
 | **Seco** | +0,2 m | normal | patamares, deques, ilhas |
 | **Rasa** (canela) | −0,4 m | 85% | a maior parte da área molhada |
-| **Funda** (peito) | −1,2 m | 55%, não corre | raias, piscinas, canais |
+| **Funda** (2,05 m de água) | −2,0 m | **nada**, como no poço; no fundo, de pé com a cabeça debaixo d'água | raias, piscinas, canais; sai-se só por escada |
 | **Poço** | −6 m | **nada**; sem tecla afunda devagar (0,5 m/s), segurando Espaço fica à tona | fôlego (seção 4.2), escuro, o ralo |
+
+Até 15/11/2026 a funda tinha piso a −1,2 m (água no peito, andava-se a 55%) e só o poço era de nadar.
+Jogando, "o jogador passa por piscinas fundas, ele deveria estar constantemente nadando": a funda
+desceu para −2,0 m (dez azulejos), onde a água cobre o jogador (1,8 m) e a mesma regra de nado do poço
+vale sozinha (mais de 1,3 m de água acima dos pés). As escadas que entram nela ficaram mais longas:
+do raso, 8 degraus (2,4 m); do seco, 11 (3,3 m).
 
 **Escada ou borda.** Numa divisa aberta entre duas alturas, ou há escada (degraus de 20 x 30 cm, da
 largura do vão, e aí se anda nos dois sentidos) ou é uma **borda**: cai-se na água por ela, mas não
@@ -218,8 +227,13 @@ se encontram em meia-esquadria: na ponta do seco (capa em dois lados da célula)
 piscina (a água faz a ponta e o seco a contorna, com a peça de canto na célula da diagonal). Borda
 entre dois pisos molhados (raso e fundo) não tem capa: fica debaixo d'água. A piscina afundada tem
 borda em volta e escada só em um ou dois lugares, como uma piscina de verdade. Regra do gerador, no espírito de "buraco nunca isola": **toda célula com piso que
-não é poço continua alcançável a pé** (mesma altura ou escada), e **de todo poço se sai nadando** — por
-uma célula funda vizinha ou por uma escada que desce até 1,6 m abaixo da água, com corrimão.
+não é poço continua alcançável** (mesma altura ou escada; entre fundas, nadando), então **de toda
+área funda se sai por uma escada** que sobe para o raso ou o seco (a pé, nos dois sentidos), e **de
+todo poço se sai nadando** para uma célula funda vizinha e dela para a escada. Quem boia (pés a
+−1,35 m) pega o degrau de −1,2 m com o pé e sobe; quem afundou anda pelo fundo até a escada e sobe
+os degraus andando. A escada própria do poço (descendo até 1,6 m abaixo da água) deixou de caber: a
+funda em volta já é mais funda que o pé dela. E **o caminho do início à saída nunca exige nadar**
+(`PoolGenerator.FootPath`, só seco e raso): a água funda é atalho ou desvio.
 
 O **poço redondo** é um furo de 3,2 m de diâmetro no fundo de uma área funda, com uma grade de ralo
 no fundo; o ralo (seção 5) mora ali. Só fica redondo o poço sem escada cujas vizinhas abertas são
@@ -258,8 +272,12 @@ das células. Depois da árvore mínima de ligações entram mais 30% de ligaç�
 túnel e fenda ligam exatamente duas salas e nunca dois seguidos; beco só na saída, nas salas de poço
 e na cisterna. De 70 a 85% das divisas na borda das salas são parede cega. Orçamentos: 30 a 70
 células com claraboia (até 48 luzes de claraboia, seção 3.4), 3 a 8 células de poço, até 24 lâmpadas e
-até 48 janelas. O caminho a pé do início à saída
-tem pelo menos 60% de seco e raso e nunca mais de três células fundas seguidas.
+até 48 janelas. O caminho do início à saída passa só por
+seco e raso (até 15/11/2026, quando a funda ainda dava pé, bastavam 60% de seco e raso e no máximo três
+células fundas seguidas). Exigir isso custa pouco: em 500 seeds de 16 x 16, sem a regra 96,8% já a
+cumpriam; com ela, 3,7 tentativas em média (3,4 antes da funda de nado), nenhuma na reserva. No salão
+com a raia funda de parede a parede, as duas escadas (uma para cada lado) ficam em células vizinhas:
+opostas na mesma célula, as de 8 degraus não cabem.
 
 Ainda sem lugar na grade (ficam para depois): corredor curvo em S, escada em caracol, mezanino, teto
 inclinado, sala octogonal, tobogã e as casas de máquinas do objetivo.
@@ -337,16 +355,19 @@ principal, sem uso, então salas, água, escadas, colunas e lâmpadas de cada se
 ### 4.2 Como se joga
 
 - **Lentidão e barulho** pela profundidade (seção 3.1). Nada quem tem mais de 1,3 m de água acima dos
-  pés (`swimDepth`; na área funda são 1,25 m, então lá se anda; agachado ali, os olhos ficam 25 cm
-  debaixo d'água e o fôlego corre).
-- **Nado** (só no poço): a água não segura ninguém. Sem tecla, o jogador **afunda devagar**
-  (`sinkSpeed`, 0,5 m/s) até o fundo; **segurando Espaço** sobe (`swimVerticalSpeed`, 1,6 m/s) e fica
-  à tona com os pés 1,4 m abaixo da superfície (`floatDepth`) e os olhos 25 cm acima dela; Ctrl/C
-  mergulha a 1,6 m/s. A velocidade vertical muda aos poucos (`swimAcceleration`, 3 m/s²; uma queda
-  rápida a água freia três vezes mais forte). WASD nada na horizontal a 45% da caminhada. Sai-se
-  do poço segurando Espaço e nadando para uma célula funda vizinha (o piso dela fica 15 cm acima
-  dos pés de quem está à tona) ou pela escada do poço. Quem está se afogando só afunda. Nada disso
-  vai pela rede: o movimento é do dono e os outros veem o corpo subir e descer pela posição.
+  pés (`swimDepth`): em toda a área funda (2,05 m) e no poço. No raso e nos degraus que entram na
+  funda anda-se mais devagar quanto mais funda a água.
+- **Nado** (na água funda e no poço): a água não segura ninguém. Sem tecla, o jogador **afunda
+  devagar** (`sinkSpeed`, 0,5 m/s) até o fundo; **segurando Espaço** sobe (`swimVerticalSpeed`, 1,6 m/s)
+  e fica à tona com os pés 1,4 m abaixo da superfície (`floatDepth`) e os olhos 25 cm acima dela;
+  Ctrl/C mergulha a 1,6 m/s. A velocidade vertical muda aos poucos (`swimAcceleration`, 3 m/s²; uma
+  queda rápida a água freia três vezes mais forte). WASD nada na horizontal a 45% da caminhada. No
+  fundo da área funda o jogador fica de pé com a cabeça debaixo d'água e anda (devagar, perdendo
+  fôlego) até uma escada. **Sai-se da água funda só por escada:** à tona, o degrau de −1,2 m fica 15
+  cm acima dos pés e a escada pega o pé de quem boia; do fundo, sobe-se os degraus andando. Borda
+  sem escada não se sobe. Do poço sai-se nadando para a funda vizinha e dela pela escada. Quem está
+  se afogando só afunda. Nada disso vai pela rede: o movimento é do dono e os outros veem o corpo
+  subir e descer pela posição.
 - **Fôlego:** com a cabeça debaixo d'água o jogador tem 20 s; fora d'água volta inteiro em 3 s
   (`airRefillSeconds`). O painel da filmadora mostra `AIR` e uma barra (vermelha piscando no último
   quarto) e, onde não dá pé, `HOLD SPACE` piscando abaixo dela nos primeiros 4 s de cada mergulho e
@@ -378,7 +399,7 @@ Não há monstro andando atrás de ninguém — a wiki e o POOLS acertaram nisso
 fase das outras duas. Há **o ralo**: os poços têm, no fundo, uma grade grande e escura. Ninguém
 sabe o que tem atrás dela.
 
-- **Ouve espirro:** passos na água rasa e quem corre na funda fazem barulho (a mesma conta de
+- **Ouve espirro:** passos na água rasa e quem nada na funda fazem barulho (a mesma conta de
   ruído do `EntityBrain`). Barulho perto de um poço "acorda" o ralo daquele poço.
 - **Acordado, ele puxa:** por 8 s a água do poço e das células vizinhas gira e arrasta para a
   grade, mais forte quanto mais perto. Quem está nadando no poço é puxado para baixo; quem está na
@@ -470,10 +491,12 @@ início). Até lá, a saída é a sala seca da seção 3.2.
   System do HDRP. Física no `PlayerController`, pela altura do jogador em relação à superfície.
 - **Montagem da cena** pelo `Level0Setup.SceneOptions`, com perfil de Volume próprio
   (`Level2Setup`), mais `LevelCatalog` (índice 2) e a lista de cenas da build.
-- **Conferência e fotos:** `Level2Setup.BatchCheck` (5 seeds), `Level2PlayTest.BatchRun` (em Play; no
-  poço, com um teclado virtual: segurando Espaço fica à tona sem perder fôlego, sem tecla afunda e se
-  afoga sozinho, debaixo d'água sobe e sai nadando para a funda; agachado na funda, a cabeça vai para
-  debaixo d'água e o fôlego corre; no fim, um anoitecer encurtado: a luz das claraboias e janelas desce sem voltar a subir até zero, as
+- **Conferência e fotos:** `Level2Setup.BatchCheck` (5 seeds), `Level2PlayTest.BatchRun` (em Play,
+  com um teclado virtual: o caminho até a saída sem nadar; no poço, segurando Espaço fica à tona sem
+  perder fôlego, sem tecla afunda e se afoga sozinho, debaixo d'água sobe e sai nadando para a funda,
+  à tona; na água funda, desce uma escada segurando Espaço e passa a nadar, atravessa à tona, solta e
+  afunda até o fundo (2 m), sobe, volta e sai subindo a escada, e do outro jeito afunda, anda pelo
+  fundo e sobe os degraus andando; no fim, um anoitecer encurtado: a luz das claraboias e janelas desce sem voltar a subir até zero, as
   lâmpadas submersas ficam acesas e a luz volta à do dia), `Level2Preview.BatchCapture` (planta, salas e
   closes, `Logs/Previews/level2_*.png`) e `Level2Preview.BatchCloseups` (`-seed N`: só os closes do
   acabamento, como tijolo de vidro, janelão, poço redondo, teto de vidro, degrau na linha d'água,
@@ -481,7 +504,10 @@ início). Até lá, a saída é a sala seca da seção 3.2.
   `Logs/Previews/level2_s{seed}_*.png`, sem apagar as outras fotos; com `-so borda`, só o grupo da
   capa: as quatro orientações de borda reta, a ponta do seco, o canto da piscina, o encontro com uma
   escada, o fim contra uma parede, a borda sob arco (nenhuma das seeds de conferência tem) e a volta de
-  uma piscina e de um canal, `level2_s{seed}_borda_*.png`) e `Level2Preview.BatchCeilings`
+  uma piscina e de um canal, `level2_s{seed}_borda_*.png`; com `-so fundo`, só a água funda: a piscina
+  do deque, boiando e debaixo d'água, a escada mais longa do seco e a do raso para a funda (de cima, de
+  quem boia e de lado debaixo d'água), a raia funda e o poço redondo, `level2_s{seed}_fundo_*.png`) e
+  `Level2Preview.BatchCeilings`
   (sem `-seed`: 1998 e 7; o teto como o jogador o vê, olhando 30° para cima de uma ponta e de um canto
   de cada salão, raia, piscina, galeria, canal, escadaria, patamar, saída e corredor de janelas, sem a
   filmadora, em `Logs/Previews/level2_s{seed}_teto_*.png`).
@@ -554,7 +580,7 @@ o `Level2Setup` lê dali e grava o que deriva (recolorido, máscaras, materiais)
 | | sup. dir. | `Stain_Limescale` | escorrido de calcário do alto da parede |
 | | inf. esq. | `Stain_GroutMold` | mofo no rejunte e no teto das salas sem claraboia |
 | | inf. dir. | `Stain_Rust` | ferrugem embaixo das lâmpadas submersas |
-| D — marcações (fundo transparente) | sup. esq. | `Mark_Depth` "1.2 M" | no deque junto à área funda ou na parede dela |
+| D — marcações (fundo transparente) | sup. esq. | `Mark_Depth` "1.2 M" | **não vai à fase**: a água funda tem 2 m; o `Level2Setup` remonta dela o "2.0 M" (`Art/Level2/Mark_Depth_2m.png`: o 2, o ponto e o M recortados da fonte, o 0 pintado em código no mesmo traço), no deque junto à área funda ou na parede dela |
 | | sup. dir. | `Mark_NoDiving` | em parede de sala com água rasa |
 | | inf. esq. | `Mark_DeepEnd` | em parede de sala com poço |
 | | inf. dir. | `Mark_LaneEnd` | o T no fundo, nas pontas das raias |
@@ -571,9 +597,9 @@ claraboia). Parede só cheia (nada sobre arco, vão, vigia, janela ou a porta de
 e nenhuma encosta em escada, coluna, lâmpada ou outro decalque.
 
 **Marcações** (folha D): decalques também (`Art/Level2/Decal_Mark_*.mat`, campo `poolMarkDecals`, na
-ordem 0 "1.2 M", 1 NO DIVING, 2 DEEP END, 3 T de fim de raia), postos por `BuildPoolMarks` depois das
+ordem 0 "2.0 M", 1 NO DIVING, 2 DEEP END, 3 T de fim de raia), postos por `BuildPoolMarks` depois das
 manchas e desviando delas e das escadas, colunas e lâmpadas:
-- **"1.2 M"**, 1 ou 2 por piscina, raia ou canal (no máximo 6 no mapa): no piso do deque seco, com o
+- **"2.0 M"**, 1 ou 2 por piscina, raia ou canal (no máximo 6 no mapa): no piso do deque seco, com o
   pé do desenho a 0,35 m da borda de uma célula funda aberta para ele (nunca de poço redondo), ou na
   parede cheia de uma célula funda, logo acima da água (e da faixa azul, se a sala tem).
 - **NO DIVING**, no máximo 4: em parede cheia de célula seca ou rasa, a 1,6 m, em patamar, escadaria,
@@ -582,7 +608,7 @@ manchas e desviando delas e das escadas, colunas e lâmpadas:
 - **DEEP END**: em toda sala que tem célula de poço, numa parede cheia a 1,5 m, sorteada entre as três
   mais perto do poço.
 - **T de raia**, no fundo das áreas fundas: na fileira funda mais longa de cada piscina, raia ou canal,
-  um em cada ponta, a 0,6 m da borda (até 2,4 m, se a escada ocupa a ponta).
+  um em cada ponta, a 0,6 m da borda (até 3,6 m, se a escada ocupa a ponta).
 
 Na seed 1998 são 10 manchas e 14 marcações; na seed 7, 10 e 15.
 

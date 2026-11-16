@@ -13,14 +13,17 @@ namespace BackRooms.EditorTools
 {
     /// <summary>
     /// Teste em Play do Level 2 de teste (Scenes/Level2_Test.unity, As Piscinas): hospeda,
-    /// confere que o jogador nasce no seco da sala inicial, anda o caminho a pé até a saída
-    /// (descendo e subindo escadas, passando pela água), depois entra num poço: segurando Espaço
-    /// (teclado virtual), fica com a cabeça fora d'água sem perder fôlego; soltando, afunda sozinho
-    /// até acabar o fôlego (encurtado), afoga e volta à sala inicial; de volta ao poço, debaixo
-    /// d'água, sobe segurando Espaço e nada até uma área funda vizinha e fica de pé nela; ali,
-    /// agachado, põe a cabeça debaixo d'água e o fôlego corre. Por fim, passa por um anoitecer
-    /// encurtado: a luz das claraboias e janelas desce sem voltar a subir até zero, as lâmpadas
-    /// submersas continuam acesas e a luz volta ao valor do dia.
+    /// confere que o jogador nasce no seco da sala inicial, anda o caminho a pé até a saída sem
+    /// nadar (descendo e subindo escadas, passando pelo raso), depois entra num poço: segurando
+    /// Espaço (teclado virtual), fica com a cabeça fora d'água sem perder fôlego; soltando, afunda
+    /// sozinho até acabar o fôlego (encurtado), afoga e volta à sala inicial; de volta ao poço,
+    /// debaixo d'água, sobe segurando Espaço e sai nadando para a área funda vizinha, à tona (lá
+    /// também não dá pé). Depois, na água funda: desce por uma escada segurando Espaço, passa a
+    /// nadar e atravessa a área funda à tona; solta e afunda até o fundo (2 m); sobe; volta à tona
+    /// e sai subindo a escada; e, do outro jeito, sem Espaço afunda, anda pelo fundo até a escada
+    /// e sobe os degraus andando. Por fim, passa por um anoitecer encurtado: a luz das claraboias e
+    /// janelas desce sem voltar a subir até zero, as lâmpadas submersas continuam acesas e a luz
+    /// volta ao valor do dia.
     ///
     /// Linha de comando: -executeMethod BackRooms.EditorTools.Level2PlayTest.BatchRun (sai com 0
     /// se passou, 3 se falhou; o editor fecha com o Level 0 aberto). Menu: BackRooms > Testar
@@ -55,7 +58,6 @@ namespace BackRooms.EditorTools
         static InputSettings.EditorInputBehaviorInPlayMode _editorInputBefore;
         static float _sinkStart, _sinkLowest;
         static bool _wentUnder;
-        static int _crouchStep;
         const float HoldSeconds = 4f;
 
         [MenuItem("BackRooms/Testar Level 2 (Play)")]
@@ -158,10 +160,30 @@ namespace BackRooms.EditorTools
                     break;
 
                 case 8:
-                    CrouchInDeep();
+                    PickStair();
                     break;
 
                 case 9:
+                    DownTheStair(dt);
+                    break;
+
+                case 10:
+                    SinkToBottom();
+                    break;
+
+                case 11:
+                    RiseAgain();
+                    break;
+
+                case 12:
+                    SwimUpTheStair(dt);
+                    break;
+
+                case 13:
+                    WalkUpFromBottom(dt);
+                    break;
+
+                case 14:
                     Dusk(session);
                     break;
             }
@@ -191,7 +213,7 @@ namespace BackRooms.EditorTools
             }
 
             _path = PoolGenerator.FootPath(d);
-            if (_path.Count < 2) { Finish(false, "não há caminho a pé até a saída"); return; }
+            if (_path.Count < 2) { Finish(false, "não há caminho a pé (sem nadar) até a saída"); return; }
 
             _target = 0;
             _best = float.MaxValue;
@@ -210,7 +232,7 @@ namespace BackRooms.EditorTools
             _lastPosition = position;
             _lowest = Mathf.Min(_lowest, position.y);
 
-            if (_controller.IsSwimming) { Finish(false, $"começou a nadar no caminho a pé, na célula {CellOf(position)}"); return; }
+            if (_controller.IsSwimming) { Finish(false, $"começou a nadar no caminho a pé (que não passa pela água funda), na célula {CellOf(position)}"); return; }
 
             int cell = _path[_target];
             Vector3 goal = _level.CellCenter(cell % _level.Data.Width, cell / _level.Data.Width);
@@ -378,74 +400,302 @@ namespace BackRooms.EditorTools
             Next();
         }
 
-        // Segurando Espaço, nada do poço para a área funda vizinha e tem de ficar de pé nela, fora do nado.
+        // Segurando Espaço, nada do poço para a área funda vizinha: lá também não dá pé, então
+        // continua nadando à tona (cabeça fora d'água).
         static void SwimOut(float dt)
         {
             Vector3 position = _local.transform.position;
             Vector2Int cell = CellOf(position);
             Vector3 goal = _level.CellCenter(_deepX, _deepZ);
+            float surface = PoolWater.Current.SurfaceY;
 
-            if (cell.x == _deepX && cell.y == _deepZ && !_controller.IsSwimming && _body.isGrounded && Mathf.Abs(position.y - goal.y) < 0.15f)
+            if (cell.x == _deepX && cell.y == _deepZ && Flat(goal - position).magnitude < 1f && _controller.IsSwimming && !_controller.IsUnderwater)
             {
-                Notes.Add($"debaixo d'água no poço, subiu segurando Espaço, saiu nadando e ficou de pé na área funda (piso a {goal.y:F1} m, água no peito) em {InStage:F1} s");
-                Press();
-                _crouchStep = 0;
+                Notes.Add($"debaixo d'água no poço, subiu segurando Espaço e saiu nadando para a área funda vizinha, à tona (pés a {position.y - surface:F2} m da superfície, " +
+                          $"piso a {goal.y:F1} m) em {InStage:F1} s");
                 Next();
                 return;
             }
 
             if (InStage > 15.0)
             {
-                Finish(false, $"não conseguiu sair do poço para a área funda: célula {cell}, pés a {position.y:F2} m, nadando={_controller.IsSwimming}");
+                Finish(false, $"não conseguiu sair do poço nadando para a área funda: célula {cell}, pés a {position.y:F2} m, nadando={_controller.IsSwimming}, " +
+                              $"cabeça debaixo d'água={_controller.IsUnderwater}");
                 return;
             }
 
-            // Primeiro sobe (até a cabeça sair da água); depois anda para a funda, ainda com Espaço.
+            // Primeiro sobe (até a cabeça sair da água); depois nada para a funda, ainda com Espaço.
             if (InStage < 1.0 || _controller.IsUnderwater && cell.x == _wellX && cell.y == _wellZ) return;
             Vector3 toGoal = Flat(goal - position);
             if (toGoal.magnitude > 0.2f) _body.Move(toGoal.normalized * 1.5f * dt);
         }
 
-        // Na área funda (dá pé), agachar põe a cabeça debaixo d'água e o fôlego corre; de pé, volta.
-        static void CrouchInDeep()
+        // ---------------------------------------------------------------- Água funda e escada
+
+        static PoolStair _stair;
+        static int _upperX, _upperZ;
+        static List<Vector2Int> _swim;          // células fundas, da célula da escada até a mais longe
+        static List<Vector3> _route;
+        static int _routeIndex;
+        static bool _wasSwimming;
+        static float _deepestFeet;
+
+        // Escolhe uma escada que sobe da água funda para o seco ou o raso, com água funda sem escada
+        // em volta para atravessar nadando (a mais longa, de 11 degraus, se houver; entre as de mesmo
+        // tamanho, a da travessia mais longa), e põe o jogador no piso de cima, segurando Espaço.
+        static void PickStair()
         {
-            switch (_crouchStep)
+            LevelData d = _level.Data;
+            WallSide[] sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
+            var withStair = new HashSet<int>();
+            foreach (PoolStair s in d.Stairs) withStair.Add(s.X + s.Z * d.Width);
+
+            List<Vector2Int> best = null;
+            foreach (PoolStair s in d.Stairs)
             {
-                case 0:
-                    // De pé: a cabeça fora d'água. Agacha.
-                    if (InStage < 0.5) return;
-                    if (_controller.IsUnderwater) { Finish(false, "de pé na área funda a cabeça ficou debaixo d'água"); return; }
-                    _controller.RefillAir();
-                    Press(Key.LeftCtrl);
-                    _crouchStep = 1;
-                    _stageStart = Now;
-                    return;
-
-                case 1:
-                    // Agachado 2 s: cabeça debaixo d'água, sem nadar, fôlego descendo. Levanta.
-                    if (InStage < 2.0) return;
-                    if (!_controller.IsUnderwater || _controller.Air01 > 0.95f || _controller.IsSwimming)
+                if (d.Depth[s.X, s.Z] != PoolDepth.Deep || !d.Neighbor(s.X, s.Z, s.Side, out int ux, out int uz)) continue;
+                if (d.Depth[ux, uz] != PoolDepth.Dry && d.Depth[ux, uz] != PoolDepth.Shallow) continue;
+                // Caminho mais longo (em células) pela água funda sem outra escada, a partir da célula da escada.
+                var previous = new Dictionary<int, int> { [s.X + s.Z * d.Width] = -1 };
+                var queue = new Queue<int>();
+                queue.Enqueue(s.X + s.Z * d.Width);
+                int last = s.X + s.Z * d.Width;
+                while (queue.Count > 0)
+                {
+                    int i = queue.Dequeue(), x = i % d.Width, z = i / d.Width;
+                    last = i;
+                    foreach (WallSide side in sides)
                     {
-                        Finish(false, $"agachado na área funda: cabeça debaixo d'água={_controller.IsUnderwater}, fôlego={_controller.Air01:F2}, nadando={_controller.IsSwimming}");
-                        return;
+                        if (!d.CanStep(x, z, side)) continue;
+                        d.Neighbor(x, z, side, out int nx, out int nz);
+                        int n = nx + nz * d.Width;
+                        if (d.Depth[nx, nz] != PoolDepth.Deep || withStair.Contains(n) || previous.ContainsKey(n)) continue;
+                        previous[n] = i;
+                        queue.Enqueue(n);
                     }
-                    Notes.Add($"agachado na área funda a cabeça foi para debaixo d'água e o fôlego desceu a {_controller.Air01:P0} em {InStage:F1} s");
-                    Press();
-                    _crouchStep = 2;
-                    _stageStart = Now;
-                    return;
-
-                default:
-                    // De pé de novo: a cabeça sai da água.
-                    if (_controller.IsUnderwater)
-                    {
-                        if (InStage > 2.0) Finish(false, "levantou na área funda e a cabeça continuou debaixo d'água");
-                        return;
-                    }
-                    ReleaseKeyboard();
-                    Next();
-                    return;
+                }
+                var path = new List<Vector2Int>();
+                for (int i = last; i != -1; i = previous[i]) path.Add(new Vector2Int(i % d.Width, i / d.Width));
+                path.Reverse();
+                if (path.Count > 5) path.RemoveRange(5, path.Count - 5);   // travessia de até 4 células
+                if (path.Count >= 2 && (best == null || s.Steps > _stair.Steps || s.Steps == _stair.Steps && path.Count > best.Count))
+                {
+                    best = path;
+                    _stair = s;
+                    _upperX = ux;
+                    _upperZ = uz;
+                }
             }
+            if (best == null) { Finish(false, $"a seed {SessionState.GetInt(SeedKey, 1998)} não tem escada da água funda com outra célula funda para atravessar"); return; }
+            _swim = best;
+
+            _controller.airSeconds = 20f;
+            _controller.RefillAir();
+            Vector3 top = _level.CellCenter(_upperX, _upperZ);
+            _controller.Teleport(top, 0f);
+            // Desce pelo eixo da escada até passar do último degrau (sair pelo lado é cair da escada).
+            _route = new List<Vector3> { top, _level.CellCenter(_stair.X, _stair.Z) };
+            _route.AddRange(FootToNext());
+            for (int k = 2; k < _swim.Count; k++) _route.Add(_level.CellCenter(_swim[k].x, _swim[k].y));
+            _routeIndex = 0;
+            _best = float.MaxValue;
+            _lastProgress = Now;
+            _wasSwimming = false;
+            Press(Key.Space);
+            Next();
+        }
+
+        // Meio metro além do pé da escada, no eixo dela, dentro da célula de baixo.
+        static Vector3 StairFoot()
+        {
+            Vector3 toUpper = _stair.Side == WallSide.South ? Vector3.back : _stair.Side == WallSide.North ? Vector3.forward
+                            : _stair.Side == WallSide.West ? Vector3.left : Vector3.right;
+            Vector3 edge = _level.CellCenter(_stair.X, _stair.Z) + toUpper * (LevelBuilder.Cell * 0.5f);
+            float run = (_stair.Steps - 1) * 0.3f;   // 30 cm de piso por degrau
+            return edge - toUpper * Mathf.Min(run + 0.5f, LevelBuilder.Cell - 0.3f);
+        }
+
+        // Do pé da escada até a célula seguinte da travessia: se ela fica ao lado (e não em frente),
+        // primeiro em linha reta para o lado, na altura do pé, para não passar por cima dos degraus.
+        static List<Vector3> FootToNext()
+        {
+            Vector3 foot = StairFoot();
+            var points = new List<Vector3> { foot };
+            Vector3 next = _level.CellCenter(_swim[1].x, _swim[1].y), here = _level.CellCenter(_stair.X, _stair.Z);
+            Vector3 toNext = Flat(next - here), toFoot = Flat(foot - here);
+            if (Mathf.Abs(Vector3.Dot(toNext.normalized, toFoot.normalized)) < 0.5f) points.Add(next + toFoot);
+            points.Add(next);
+            return points;
+        }
+
+        // Segue a rota (centros de célula) a 1,5 m/s; verdadeiro ao chegar ao fim. Falha se parar de avançar.
+        static bool FollowRoute(float dt, string what)
+        {
+            Vector3 position = _local.transform.position;
+            while (_routeIndex < _route.Count)
+            {
+                Vector3 toGoal = Flat(_route[_routeIndex] - position);
+                float distance = toGoal.magnitude;
+                if (distance < Reach)
+                {
+                    _routeIndex++;
+                    _best = float.MaxValue;
+                    _lastProgress = Now;
+                    continue;
+                }
+                if (distance < _best - 0.05f) { _best = distance; _lastProgress = Now; }
+                else if (Now - _lastProgress > 4.0)
+                {
+                    Vector2Int cell = CellOf(position);
+                    Finish(false, $"{what}: travou na célula {cell}, a {distance:F2} m do ponto {_routeIndex} da rota, pés a {position.y:F2} m, nadando={_controller.IsSwimming}");
+                    return false;
+                }
+                _body.Move(toGoal.normalized * Mathf.Min(1.5f * dt, distance));
+                return false;
+            }
+            return true;
+        }
+
+        // Desce a escada segurando Espaço: onde deixa de dar pé passa a nadar, e atravessa a água
+        // funda à tona até a célula mais longe, sempre com a cabeça fora d'água e o fôlego cheio.
+        static void DownTheStair(float dt)
+        {
+            if (InStage < 0.5) return;
+            float surface = PoolWater.Current.SurfaceY;
+            if (_controller.IsSwimming) _wasSwimming = true;
+            if (_wasSwimming && InStage > 1.0 && (_controller.IsUnderwater || _controller.Air01 < 0.999f))
+            {
+                Finish(false, $"nadando à tona na água funda com Espaço, a cabeça foi para debaixo d'água (pés a {_local.transform.position.y - surface:F2} m da superfície, " +
+                              $"célula {CellOf(_local.transform.position)})");
+                return;
+            }
+            if (InStage > 40.0) { Finish(false, "a travessia da água funda demorou mais de 40 s"); return; }
+            if (!FollowRoute(dt, "descendo a escada e nadando na água funda")) return;
+            if (InStage < 2.0) return;
+
+            float feet = _local.transform.position.y;
+            if (!_controller.IsSwimming || Mathf.Abs(feet - (surface - _controller.floatDepth)) > 0.3f)
+            {
+                Finish(false, $"no fim da travessia não estava boiando: nadando={_controller.IsSwimming}, pés a {feet - surface:F2} m da superfície");
+                return;
+            }
+            Notes.Add($"desceu a escada de {_stair.Steps} degraus ({_stair.X},{_stair.Z}) segurando Espaço, passou a nadar e atravessou {_swim.Count - 1} célula(s) de água funda à tona " +
+                      $"(pés a {feet - surface:F2} m da superfície, cabeça fora, fôlego cheio) em {InStage:F1} s");
+            Press();
+            _deepestFeet = feet;
+            Next();
+        }
+
+        // Sem tecla: afunda até ficar de pé no fundo (2 m), com a cabeça debaixo d'água.
+        static void SinkToBottom()
+        {
+            float feet = _local.transform.position.y;
+            _deepestFeet = Mathf.Min(_deepestFeet, feet);
+            float floor = LevelData.DepthFloor(PoolDepth.Deep);
+            if (_body.isGrounded && Mathf.Abs(feet - floor) < 0.1f && InStage > 0.5)
+            {
+                if (!_controller.IsUnderwater || !_controller.IsSwimming)
+                {
+                    Finish(false, $"no fundo da água funda: cabeça debaixo d'água={_controller.IsUnderwater}, nadando={_controller.IsSwimming}");
+                    return;
+                }
+                Notes.Add($"sem tecla afundou até o fundo da água funda (pés a {feet:F2} m, cabeça debaixo d'água) em {InStage:F1} s");
+                Press(Key.Space);
+                Next();
+                return;
+            }
+            if (InStage > 10.0) Finish(false, $"sem tecla não chegou ao fundo da água funda em 10 s: pés a {feet:F2} m (piso a {floor:F1}), no chão={_body.isGrounded}");
+        }
+
+        // Segurando Espaço, volta à tona.
+        static void RiseAgain()
+        {
+            float surface = PoolWater.Current.SurfaceY;
+            float feet = _local.transform.position.y;
+            if (!_controller.IsUnderwater && Mathf.Abs(feet - (surface - _controller.floatDepth)) < 0.15f)
+            {
+                Notes.Add($"segurando Espaço voltou à tona do fundo em {InStage:F1} s");
+                // Volta pela mesma travessia até a escada e sobe por ela, à tona.
+                _route = new List<Vector3>();
+                for (int k = _swim.Count - 1; k >= 2; k--) _route.Add(_level.CellCenter(_swim[k].x, _swim[k].y));
+                List<Vector3> back = FootToNext();
+                back.Reverse();
+                _route.AddRange(back);
+                _route.Add(_level.CellCenter(_stair.X, _stair.Z));
+                _route.Add(_level.CellCenter(_upperX, _upperZ));
+                _routeIndex = 0;
+                _best = float.MaxValue;
+                _lastProgress = Now;
+                Next();
+                return;
+            }
+            if (InStage > 8.0) Finish(false, $"segurando Espaço não voltou à tona do fundo em 8 s: pés a {feet - surface:F2} m da superfície");
+        }
+
+        // Nadando à tona (Espaço), volta até a escada e sobe por ela: o primeiro degrau ao alcance
+        // pega o pé de quem boia.
+        static bool OnUpperFloor()
+        {
+            Vector3 position = _local.transform.position;
+            Vector2Int cell = CellOf(position);
+            return cell.x == _upperX && cell.y == _upperZ && !_controller.IsSwimming && _body.isGrounded &&
+                   Mathf.Abs(position.y - _level.Data.FloorHeight(_upperX, _upperZ)) < 0.15f;
+        }
+
+        static void SwimUpTheStair(float dt)
+        {
+            if (InStage > 40.0) { Finish(false, "nadando à tona não saiu pela escada em 40 s"); return; }
+            if (!FollowRoute(dt, "nadando à tona de volta e subindo a escada")) return;
+            if (!OnUpperFloor())
+            {
+                if (InStage > 30.0) Finish(false, $"chegou ao fim da rota mas não está de pé no piso de cima da escada (pés a {_local.transform.position.y:F2} m, nadando={_controller.IsSwimming})");
+                return;
+            }
+            Notes.Add($"nadando à tona voltou e saiu da água funda subindo a escada de {_stair.Steps} degraus em {InStage:F1} s");
+
+            // Agora o outro jeito: do fundo, sem Espaço, andando pelo fundo e subindo os degraus.
+            Vector2Int start = _swim[1];
+            Vector3 center = _level.CellCenter(start.x, start.y);
+            _controller.RefillAir();
+            _controller.Teleport(new Vector3(center.x, PoolWater.Current.SurfaceY - _controller.floatDepth, center.z), 0f);
+            Press();
+            _route = FootToNext();
+            _route.RemoveAt(_route.Count - 1);   // já está na célula seguinte
+            _route.Reverse();
+            _route.Add(_level.CellCenter(_swim[0].x, _swim[0].y));
+            _route.Add(_level.CellCenter(_upperX, _upperZ));
+            _routeIndex = 0;
+            _best = float.MaxValue;
+            _lastProgress = Now;
+            Next();
+        }
+
+        // Sem tecla: afunda até o fundo e anda por ele até a escada; os degraus pegam o pé e ele
+        // sobe andando até o piso de cima, com fôlego de sobra.
+        static void WalkUpFromBottom(float dt)
+        {
+            if (InStage > 30.0) { Finish(false, "andando pelo fundo não saiu pela escada em 30 s"); return; }
+            float floor = LevelData.DepthFloor(PoolDepth.Deep);
+            if (_routeIndex == 0 && _best == float.MaxValue)
+            {
+                // Primeiro afunda até o fundo, sem andar.
+                if (!(_body.isGrounded && Mathf.Abs(_local.transform.position.y - floor) < 0.1f))
+                {
+                    if (InStage > 10.0) Finish(false, $"sem tecla não chegou ao fundo em 10 s (pés a {_local.transform.position.y:F2} m)");
+                    return;
+                }
+                _lastProgress = Now;
+            }
+            if (_controller.IsReturning) { Finish(false, "andando pelo fundo até a escada, afogou"); return; }
+            if (!FollowRoute(dt, "andando pelo fundo até a escada e subindo")) return;
+            if (!OnUpperFloor())
+            {
+                if (InStage > 25.0) Finish(false, $"andou pelo fundo até a escada mas não ficou de pé no piso de cima (pés a {_local.transform.position.y:F2} m, nadando={_controller.IsSwimming})");
+                return;
+            }
+            Notes.Add($"sem Espaço afundou até o fundo, andou por ele até a escada e subiu os degraus andando em {InStage:F1} s (fôlego em {_controller.Air01:P0})");
+            ReleaseKeyboard();
+            Next();
         }
 
         // ---------------------------------------------------------------- Anoitecer

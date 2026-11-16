@@ -961,9 +961,11 @@ namespace BackRooms.World
                 for (int v = vs; v <= ve; v++) SkyLocal(c, i, lu, v, SlotAlong(i));
                 if (full)
                 {
+                    // Uma escada para cada lado, em células vizinhas: as duas, de 8 degraus (2,4 m),
+                    // não cabem opostas na mesma célula.
                     int vc = lh / 2;
                     StairLocal(c, i, lu, vc, WallSide.West, 2.4f);
-                    StairLocal(c, i, lu, vc, WallSide.East, 2.4f);
+                    StairLocal(c, i, lu, vc - 1, WallSide.East, 2.4f);
                 }
                 else
                 {
@@ -1069,7 +1071,9 @@ namespace BackRooms.World
             Shuffle(stairs, r);
             PlaceSameSideStairs(c, i, stairs, 1 + r.Next(2), r.NextDouble() < 0.5 ? 4f : 2.4f);
 
-            // Escada de sair do poço nadando (os degraus somem na água escura).
+            // Escada de sair do poço nadando (os degraus somem na água escura). Com a água funda a
+            // -2,0 m ela não cabe mais (o piso da funda em volta é mais baixo que o pé dela,
+            // LevelData.WellStairFoot) e TryStair recusa; o sorteio continua, para não mudar o resto.
             if (r.NextDouble() < 0.5)
             {
                 (int wu, int wv) = wells[r.Next(wells.Count)];
@@ -2603,7 +2607,11 @@ namespace BackRooms.World
 
         // ================================================================ Andar
 
-        /// <summary>Verdadeiro se toda célula com piso que não é poço é alcançável a pé a partir da sala inicial.</summary>
+        /// <summary>
+        /// Verdadeiro se toda célula com piso que não é poço é alcançável a partir da sala inicial,
+        /// a pé ou nadando na água funda (<see cref="FootReach"/>). Como a passagem vale nos dois
+        /// sentidos, toda área funda tem uma escada que sobe dela.
+        /// </summary>
         public static bool AllReachableOnFoot(LevelData d)
         {
             bool[] seen = FootReach(d, d.SpawnX, d.SpawnZ);
@@ -2613,7 +2621,10 @@ namespace BackRooms.World
             return true;
         }
 
-        /// <summary>Células alcançáveis a pé (mesma altura ou escada, sem poço) a partir de (x, z).</summary>
+        /// <summary>
+        /// Células alcançáveis a partir de (x, z) por <see cref="LevelData.CanStep"/>: mesma altura ou
+        /// escada, sem poço. Entre células fundas passa-se nadando (ali não dá pé).
+        /// </summary>
         public static bool[] FootReach(LevelData d, int x0, int z0)
         {
             var seen = new bool[d.Width * d.Height];
@@ -2638,9 +2649,14 @@ namespace BackRooms.World
             return seen;
         }
 
-        /// <summary>Caminho mais curto a pé da sala inicial até a saída, célula por célula (x + z * Width).</summary>
+        /// <summary>
+        /// Caminho mais curto a pé, SEM NADAR (só seco e raso), da sala inicial até a saída, célula
+        /// por célula (x + z * Width). Vazio se a saída só se alcança passando pela água funda.
+        /// </summary>
         public static List<int> FootPath(LevelData d)
         {
+            bool Wading(int x, int z) => d.Depth[x, z] == PoolDepth.Dry || d.Depth[x, z] == PoolDepth.Shallow;
+            if (!Wading(d.SpawnX, d.SpawnZ) || !Wading(d.ExitX, d.ExitZ)) return new List<int>();
             int total = d.Width * d.Height, start = d.SpawnX + d.SpawnZ * d.Width, goal = d.ExitX + d.ExitZ * d.Width;
             var previous = new int[total];
             for (int i = 0; i < total; i++) previous[i] = -2;
@@ -2656,6 +2672,7 @@ namespace BackRooms.World
                 {
                     if (!d.CanStep(x, z, side)) continue;
                     d.Neighbor(x, z, side, out int nx, out int nz);
+                    if (!Wading(nx, nz)) continue;
                     int n = nx + nz * d.Width;
                     if (previous[n] != -2) continue;
                     previous[n] = i;
@@ -3051,7 +3068,10 @@ namespace BackRooms.World
                         else if (q != PoolDepth.Well) Add(p, "poço aberto para seco ou raso");
                     }
                     if (wellDone[x + z * w]) continue;
-                    // Grupo de poços ligados: precisa de uma saída nadando.
+                    // Grupo de poços ligados: precisa de uma saída nadando, uma célula funda aberta
+                    // para ele. A funda, por sua vez, alcança uma escada que sobe para o raso ou o
+                    // seco (é o que AllReachableOnFoot garante, nos dois sentidos). Escada saindo do
+                    // próprio poço não cabe mais (LevelData.WellStairFoot).
                     bool exitFound = false;
                     var queue = new Queue<int>();
                     queue.Enqueue(x + z * w);
@@ -3059,7 +3079,6 @@ namespace BackRooms.World
                     while (queue.Count > 0)
                     {
                         int i = queue.Dequeue(), cx = i % w, cz = i / w;
-                        foreach (PoolStair s in d.Stairs) if (s.X == cx && s.Z == cz) exitFound = true;
                         foreach (WallSide s in Sides)
                         {
                             if (!d.Neighbor(cx, cz, s, out int nx, out int nz) || !Passable(d.EdgeAt(cx, cz, s)) || d.Solid[nx, nz]) continue;
@@ -3193,24 +3212,9 @@ namespace BackRooms.World
                 }
             }
 
-            // ---------------- Caminho a pé
-            if (reachOk && exitIn)
-            {
-                List<int> path = FootPath(d);
-                if (path.Count < 2) Add(p, "não há caminho a pé até a saída");
-                else
-                {
-                    int easy = 0, run = 0, maxRun = 0;
-                    foreach (int i in path)
-                    {
-                        PoolDepth q = d.Depth[i % w, i / w];
-                        if (q == PoolDepth.Dry || q == PoolDepth.Shallow) { easy++; run = 0; }
-                        else { run++; maxRun = Math.Max(maxRun, run); }
-                    }
-                    if (easy < 0.6 * path.Count) Add(p, "caminho com menos de 60% de seco ou raso");
-                    if (maxRun > 3) Add(p, "caminho com mais de 3 células fundas seguidas");
-                }
-            }
+            // ---------------- Caminho a pé: do início à saída sem nadar (só seco e raso). A água
+            // funda é atalho ou desvio, nunca obrigatória.
+            if (reachOk && exitIn && FootPath(d).Count < 2) Add(p, "não há caminho sem nadar até a saída");
         }
 
         // ================================================================ Resumo e mapa em texto
