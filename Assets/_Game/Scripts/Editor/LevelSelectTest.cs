@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BackRooms.Audio;
 using BackRooms.Net;
 using BackRooms.Player;
 using BackRooms.World;
@@ -53,6 +54,7 @@ namespace BackRooms.EditorTools
         static double _began, _stageStart, _lastTry;
         static GameSession _previous;
         static bool _switched;
+        static float _musicPlayed;
 
         [MenuItem("BackRooms/Testar seletor de fase")]
         public static void RunFromMenu() { Run(Solo); }
@@ -145,6 +147,9 @@ namespace BackRooms.EditorTools
                     if (!Switched(session, 1)) { if (StageTimedOut(30)) Finish(false, "a troca para o Level 1 não terminou"); return; }
                     if (!OneSession(out string sessions)) { Finish(false, "duas sessões depois de trocar para o Level 1: " + sessions); return; }
                     Notes.Add("trocou para o Level 1 com uma sessão só");
+                    if (!MusicOk(true, out string music1)) { Finish(false, "música do menu depois de trocar para o Level 1: " + music1); return; }
+                    _musicPlayed = MenuMusic.Instance.Played;
+                    Notes.Add("a música do menu seguiu na troca de fase, sem recomeçar nem duplicar");
                     session.Host(localOnly: true);
                     Next();
                     break;
@@ -185,6 +190,8 @@ namespace BackRooms.EditorTools
                     if (!OneSession(out string pools)) { Finish(false, "duas sessões no Level 2: " + pools); return; }
                     if (PoolWater.Current == null) { Finish(false, "o Level 2 começou sem água"); return; }
                     Notes.Add("a porta do Level 1 zerou a fase e levou ao Level 2, já hospedando");
+                    if (!MusicOk(false, out string music2)) { Finish(false, "música do menu jogando o Level 2: " + music2); return; }
+                    Notes.Add("em jogo a música do menu fica calada");
 
                     // Mergulha num poço.
                     var builder = Object.FindFirstObjectByType<LevelBuilder>();
@@ -243,6 +250,13 @@ namespace BackRooms.EditorTools
                 case 8:
                     if (!Switched(session, 0)) { if (StageTimedOut(30)) Finish(false, "a troca de volta para o Level 0 não terminou"); return; }
                     if (!OneSession(out string again)) { Finish(false, "duas sessões depois de voltar ao Level 0: " + again); return; }
+                    // Zerou a última fase e voltou ao menu: a música voltou, do ponto em que parou.
+                    if (!MusicOk(true, out string music0) || MenuMusic.Instance.Played <= _musicPlayed)
+                    {
+                        Finish(false, $"música do menu de volta ao menu e ao Level 0: {music0} (antes {_musicPlayed:F1}s)");
+                        return;
+                    }
+                    Notes.Add("de volta ao menu a música voltou, sem recomeçar (" + music0 + ")");
                     session.Host(localOnly: true);
                     Next();
                     break;
@@ -559,6 +573,20 @@ namespace BackRooms.EditorTools
             GameSession[] sessions = Object.FindObjectsByType<GameSession>(FindObjectsSortMode.None);
             names = $"{managers.Length} NetworkManager, {sessions.Length} GameSession";
             return managers.Length == 1 && sessions.Length == 1;
+        }
+
+        // Música do menu (MenuMusic): um dono só, que sobreviveu às trocas de cena sem recomeçar
+        // (Starts == 1); no menu quer tocar; jogando, calada e em pausa. Confere o estado do
+        // componente, não o isPlaying da fonte (sem dispositivo de áudio ele nunca é verdadeiro).
+        static bool MusicOk(bool menu, out string why)
+        {
+            MenuMusic music = MenuMusic.Instance;
+            int found = Object.FindObjectsByType<MenuMusic>(FindObjectsSortMode.None).Length;
+            why = music == null ? "sem dono da música"
+                : $"donos={MenuMusic.Alive} achados={found} quer_tocar={music.Wanted} nivel={music.Level:F2} " +
+                  $"pausa={music.Paused} comecos={music.Starts} tocado={music.Played:F1}s";
+            if (music == null || music.clip == null || MenuMusic.Alive != 1 || found != 1 || music.Starts != 1) return false;
+            return menu ? music.Wanted && !music.Paused : !music.Wanted && music.Level <= 0f && music.Paused;
         }
 
         static string Describe(GameSession session)

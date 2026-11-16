@@ -46,7 +46,10 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 17;
+        public const int ContentVersion = 18;
+
+        /// <summary>Música da tela inicial (cópia do arquivo mandado pelo usuário; não é gerada).</summary>
+        public const string MenuMusicPath = "Assets/_Game/Audio/Musica/Menu_Tema.mp3";
 
         [MenuItem("BackRooms/Montar Level 0 (sala de teste)")]
         public static void Build()
@@ -233,6 +236,12 @@ namespace BackRooms.EditorTools
             ambience.AddComponent<AudioSource>().playOnAwake = false;
             ambience.AddComponent<FluorescentHum>();
 
+            // Música do menu: um objeto na raiz de cada cena; em Play o primeiro sobrevive às
+            // trocas de fase e os outros se apagam (MenuMusic).
+            var music = new GameObject("MusicaDoMenu");
+            music.AddComponent<AudioSource>().playOnAwake = false;
+            music.AddComponent<MenuMusic>().clip = EnsureMenuMusic();
+
             // Tintas da caneta, na ordem das cores (PenTool.ColorNames).
             Material[] inks =
             {
@@ -393,6 +402,41 @@ namespace BackRooms.EditorTools
             var pass = volume.AddPassOfType<CamcorderPass>();
             pass.name = "VHS";
             pass.material = material;
+        }
+
+        // A música do menu é longa (2,5 min): sai do disco aos poucos (Streaming), em Vorbis,
+        // estéreo e na taxa original. Decompress On Load ocuparia ~50 MB de memória.
+        static AudioClip EnsureMenuMusic()
+        {
+            if (!File.Exists(MenuMusicPath))
+            {
+                Debug.LogWarning("[BackRooms] Música do menu não encontrada em " + MenuMusicPath + ": o menu fica sem música.");
+                return null;
+            }
+
+            AssetDatabase.ImportAsset(MenuMusicPath);
+            if (AssetImporter.GetAtPath(MenuMusicPath) is AudioImporter importer)
+            {
+                AudioImporterSampleSettings settings = importer.defaultSampleSettings;
+                bool changed = settings.loadType != AudioClipLoadType.Streaming ||
+                               settings.compressionFormat != AudioCompressionFormat.Vorbis ||
+                               !Mathf.Approximately(settings.quality, 0.7f) ||
+                               settings.sampleRateSetting != AudioSampleRateSetting.PreserveSampleRate ||
+                               importer.forceToMono || !importer.loadInBackground;
+                if (changed)
+                {
+                    settings.loadType = AudioClipLoadType.Streaming;
+                    settings.compressionFormat = AudioCompressionFormat.Vorbis;
+                    settings.quality = 0.7f;
+                    settings.sampleRateSetting = AudioSampleRateSetting.PreserveSampleRate;
+                    importer.defaultSampleSettings = settings;
+                    importer.forceToMono = false;
+                    importer.loadInBackground = true;
+                    importer.SaveAndReimport();
+                }
+            }
+
+            return AssetDatabase.LoadAssetAtPath<AudioClip>(MenuMusicPath);
         }
 
         static PanelSettings EnsurePanelSettings()
