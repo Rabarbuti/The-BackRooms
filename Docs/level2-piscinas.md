@@ -41,7 +41,9 @@ Level 2 (teste)) com as etapas 1 a 7 da seção 8.1:
 som e as anomalias; do vocabulário de formas, corredor curvo em S, escada em caracol, mezanino, teto
 inclinado, tobogã e claraboia em sala de abóbada; os modelos do Blender (escadinha de metal, grade
 de ralo, válvula). No visual, a cáustica ilumina até o fundo do poço, que devia ser escuro (seções 4.1
-e 7). Não foi conferida a planta entre host e cliente (dois editores) nem jogada à mão.
+e 7), e a água funda de 2 m não parece mais funda que a de 1,2 m de antes: a cor vem da pastilha do
+fundo (medida na foto sem filmadora, #1A7B60 a #266E56, já mais escura que a referência #0A9872) e a
+cáustica não diminui com a profundidade; o que dá a fundura hoje é a escada longa e o corrimão. Não foi conferida a planta entre host e cliente (dois editores) nem jogada à mão.
 
 ---
 
@@ -252,7 +254,7 @@ escadaria e sala de poço de canto caem para 4,8 m quando o mapa já tem salas a
 | Salão de pilares (`Hall`) | 4 x 4 a 6 x 6 | 3,6 ou 4,8 | raso; às vezes uma raia funda cortando | o espaço dominante; perde-se a direção |
 | Átrio da claraboia (`Atrium`) | 3 x 3 | 12 | anel raso, ilha seca no meio, 2 a 4 escadas | marco e ponto de encontro |
 | Piscina com deque (`Basin`) | 5 x 5 ou 5 x 6 | 4,8 | deque seco, fundo dentro, 1 ou 2 escadas do mesmo lado; às vezes um poço | o lugar "normal", e por isso estranho |
-| Canal (`Canal`) | 3 x 4–6 | 3,6 ou 4,8 | passeio seco (ou raso), fundo no meio | gargalo; vira nado na maré alta |
+| Canal (`Canal`) | 3 x 4–6 | 3,6 ou 4,8 | passeio seco (ou raso), fundo no meio | gargalo; o meio é de nadar e, na maré alta, o passeio raso também |
 | Raia longa (`Lane`) | 3 x 8–10 | 3,6 ou 4,8 | raso, fundo, raso, claraboia contínua, colunas em fila | o eixo de vista de 30 a 40 m |
 | Galeria (`Gallery`) | 2 x 4–6 | 3,6 | raso ou seco, pilares quadrados na linha do meio | corredor largo de arcos |
 | Corredor de janelas (`WindowGallery`) | 1–2 x 4–8 | 3,6 | raso | frestas ou vigias acesas em série na parede de fora |
@@ -383,7 +385,7 @@ O nível da água de cada região **sobe e desce sozinho**, junto em todas as m�
 `GameSession.SessionSeconds` (a mesma regra do apagão). Ciclo de 90 s: 60 s parada, 15 s subindo
 até +0,9 m, 15 s descendo.
 
-- Na maré alta, o raso vira fundo e o fundo vira poço: corredores que eram passagem viram nado, e
+- Na maré alta, o raso vira água de nadar (1,35 m acima dos pés) e a funda passa de 2,9 m: corredores rasos que eram passagem viram nado, e
   quem estava num patamar baixo fica ilhado. O seco (+0,2 m) também fica com 0,75 m de água: se ele
   continua sendo refúgio é a decisão 5 da seção 9.
 - **Aviso:** 10 s antes, os ralos borbulham e a água começa a puxar levemente para eles; o som
@@ -552,8 +554,9 @@ início). Até lá, a saída é a sala seca da seção 3.2.
    com 0,7 m de água e deixa de ser refúgio. Saídas (da pesquisa de level design): (a) uma altura nova,
    "alto" a +1,2 m, para patamares-refúgio, só encostando em seco e com escada (regras novas no
    `Validate`); (b) maré por região, com fases defasadas, para sempre haver uma região vizinha baixa.
-   Nos dois casos, todo ponto do caminho a pé a no máximo três células de um refúgio; e canal, raia e
-   cisterna, que viram nado, precisam de um laço mais longo e mais seco quando estão no caminho.
+   Nos dois casos, todo ponto do caminho a pé a no máximo três células de um refúgio; e o caminho a
+   pé, que hoje passa só por seco e raso, precisa continuar sem nado na maré alta (o raso vira nado):
+   um laço mais longo e mais seco onde ele corre pelo raso.
 
 ---
 
