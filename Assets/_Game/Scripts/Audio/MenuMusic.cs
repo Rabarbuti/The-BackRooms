@@ -106,7 +106,9 @@ namespace BackRooms.Audio
                 // sair quando o jogador aparece; uma conexão que falha volta ao menu sem corte.
             }
 
-            float dt = Time.unscaledDeltaTime;
+            // Passo por quadro limitado: a montagem do mapa ou do jogador dá quadros de um segundo
+            // bem na hora do fade, e sem o limite a entrada ou a saída viraria um corte.
+            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f);
             float rate = Wanted ? dt / Mathf.Max(0.01f, fadeInSeconds) : -dt / Mathf.Max(0.01f, fadeOutSeconds);
             Level = Mathf.Clamp01(Level + rate);
 
@@ -118,7 +120,7 @@ namespace BackRooms.Audio
             // áudio a fonte nunca diz que está tocando, e a música recomeçaria a cada quadro.
             if (Level > 0f)
             {
-                Played += dt;
+                Played += Time.unscaledDeltaTime;
                 if (!_started)
                 {
                     _started = true;
