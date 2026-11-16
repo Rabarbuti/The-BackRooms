@@ -653,6 +653,9 @@ MonoBehaviour:
   swimVerticalSpeed: 1.6
   sinkSpeed: 0.5
   swimAcceleration: 3
+  climbMaxAboveSurface: 0.45
+  climbReach: 0.3
+  climbSeconds: 0.55
   standingHeight: 1.8
   crouchingHeight: 1.1
   standingEyeHeight: 1.65

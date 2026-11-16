@@ -219,6 +219,10 @@ namespace BackRooms.UI
             if (body != null && body.IsSwimming && underwater && !body.IsReturning && (body.UnderwaterSeconds < SwimHintSeconds || air < 0.35f))
                 swimHint = "HOLD SPACE";
 
+            // Nadando à tona de frente para uma borda baixa: dá para subir nela.
+            if (prompt == null && cover == null && body != null && body.CanClimb && !body.IsClimbing && !body.IsReturning)
+                prompt = "W - CLIMB";
+
             Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f, tape, prompt, footer, cover, underwater, air, swimHint);
         }
 

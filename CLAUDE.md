@@ -98,7 +98,8 @@ risca, E abre a porta
 de saída (ou solta, se já estava esperando os outros), F9 grava a tela, Esc solta o mouse. No menu: H hospeda,
 J entra; a lista "Fase" troca de nível (no editor todas ficam liberadas). Na água funda das
 Piscinas (piscinas, raias, canais e poços: não dá pé), segurar Espaço sobe e fica à tona; sem tecla,
-afunda devagar até o fundo; Ctrl ou C mergulha; da água funda só se sai por escada.
+afunda devagar até o fundo; Ctrl ou C mergulha; da água funda sai-se por escada ou, à tona,
+empurrando contra uma borda baixa (W, ou Espaço encostado e de frente): sobe nela.
 
 ## Conteúdo gerado: não editar à mão
 
@@ -193,10 +194,14 @@ velho. Mudança só de código não precisa. A cena do Level 1 não tem versão:
   curvo (arco, coluna, abóbada, poço) usa `MeshCollider` da mesma malha; enfeite sem colisor
   (sanca, cáustica, corrimão) entra por nome na lista do `Level0ColliderCheck`.
 - **Nas Piscinas, toda célula com piso que não é poço se alcança (a pé, ou nadando na água funda),
-  de toda água funda se sai por escada, de todo poço se sai nadando para a funda e o caminho do
+  de toda água funda se sai por escada ou pela borda, de todo poço se sai nadando para a funda e o caminho do
   início à saída nunca exige nadar** (`PoolGenerator.FootPath`, só seco e raso). A funda (piso a
-  −2,0 m) não dá pé. Divisa aberta entre alturas diferentes sem `PoolStair` é borda: desce-se, não
-  se sobe (`LevelData.CanStep`). Regra nova de planta entra no `PoolGenerator.Validate`, que sorteia de novo
+  −2,0 m) não dá pé. Divisa aberta entre alturas diferentes sem `PoolStair` é borda: andando, desce-se
+  e não se sobe (`LevelData.CanStep`); nadando à tona, sobe-se (`PlayerController.TryStartClimb`, topo
+  até 45 cm acima da água: deque seco e piso raso, nunca parede). Toda região de água funda e poço
+  tem escada ou borda própria (`PoolGenerator.EveryDeepRegionHasExit`). A garantia do grafo não prova
+  que o jogador sai: mudou água, jogador, borda ou escada, rode o `Level2EscapeTest` (um softlock
+  assim já chegou ao jogador). Regra nova de planta entra no `PoolGenerator.Validate`, que sorteia de novo
   até passar; coluna nunca fica a menos de (raio + 0,6 m) das linhas de centro das células.
 - **A fase das Piscinas não tem luminária:** a luz vem de claraboias e janelas (luz de caixa
   inclinada, sempre para o mesmo lado, sombra de uma face em cache) e o perfil de Volume é o dela.
@@ -270,7 +275,7 @@ e rode `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`.
 ## Como testar
 
 No editor, pelo menu **BackRooms**: Abrir Level 0, Abrir Level 1 (teste), Testar Level 0
-(fumaça), Testar Level 1 (Play), Conferir Level 1, Abrir Level 2 (teste), Testar Level 2 (Play),
+(fumaça), Testar Level 1 (Play), Conferir Level 1, Abrir Level 2 (teste), Testar Level 2 (Play), Testar fuga da água funda,
 Conferir Level 2, Fotografar Level 2, Conferir colisores do Level 0, Gerar mapa 2D,
 Capturar prévia, Capturar prévia do Capitão, Móveis do Level 1 > Atualizar e fotografar,
 Testar passos do Level 2, Exportar sons (entidade e passos) (WAV em `Logs/Sons`, para ouvir e
@@ -341,7 +346,15 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   até a saída (sem nadar) pelas escadas e arcos, fica à tona num poço segurando Espaço, afunda e se
   afoga sem tecla, sobe e sai nadando para a área funda; desce uma escada para a água funda e passa
   a nadar, atravessa à tona, afunda até o fundo (2 m), sobe e sai subindo a escada; do fundo, sem
-  Espaço, anda até a escada e sobe os degraus andando; por fim, o anoitecer.
+  Espaço, anda até a escada e sobe os degraus andando; sobe na borda nadando à tona (para o deque
+  seco e para o piso raso; do fundo só com W e à tona contra uma parede não sobe) e, andando no raso
+  contra uma borda, não sobe no seco; por fim, o anoitecer.
+- `Level2EscapeTest.BatchRun` (`-seed N` ou `-seeds A,B,C`; menu Testar fuga da água funda) — para
+  cada região de água funda e poço, põe o jogador no fundo (na célula mais longe da escada, numa do
+  meio e numa de poço) e, só com o teclado virtual, sobe à tona e nada até a escada mais próxima e,
+  noutra tentativa, até a borda mais próxima; passa se todas saem (de pé no seco ou no raso). Fôlego
+  sem fim e tempo de jogo acelerado (12 seeds em poucos minutos); cada tentativa em
+  `Logs/Fuga/fuga.txt`, fotos de quem ficou preso em `Logs/Fuga`. Linha `[BackRooms] Teste de fuga`.
 - `Level0ColliderCheck.BatchRunLevel2` — colisores contra a malha visível na cena das Piscinas.
 - `Level2SoundTest.BatchRun` (`-seed N`) — passos por superfície nas Piscinas, em Play com teclado
   virtual: anda no azulejo seco e na água rasa, cai de 1,2 m na água (um espirro só), nada à tona
@@ -363,7 +376,8 @@ pode abrir numa cena vazia; o `Level0AutoUpdate` troca para a cena do jogo.
 Mudança em jogador, item, fase ou rede só está pronta depois do teste de fumaça sozinho; mudança
 em rede, depois do teste com dois editores; mudança no Level 2 (ou na água, no jogador, no
 `LevelBuilder`, no `PoolGenerator` ou no `Level2Setup`), depois de `Level2Setup.BatchCheck`,
-`Level2PlayTest.BatchRun`, `Level0ColliderCheck.BatchRunLevel2` e `LevelSelectTest.BatchRun` (a
+`Level2PlayTest.BatchRun`, `Level2EscapeTest.BatchRun` (nas seeds de conferência),
+`Level0ColliderCheck.BatchRunLevel2` e `LevelSelectTest.BatchRun` (a
 porta do Level 1 leva às Piscinas); mudança no Level 1 (ou no `LevelBuilder`, no gerador
 ou nos modelos), depois de `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`; mudança nos
 passos (`Footsteps`), depois do teste de fumaça e de `Level2SoundTest.BatchRun`. Diga no resumo o

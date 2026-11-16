@@ -2650,6 +2650,47 @@ namespace BackRooms.World
         }
 
         /// <summary>
+        /// Toda região de água funda e poço (células fundas e de poço ligadas por divisa que se
+        /// passa, o que se atravessa nadando) tem, nela mesma, uma saída para o seco ou o raso: uma
+        /// escada que sobe dela ou uma borda (divisa que se passa, sem escada, de uma célula funda
+        /// para uma seca ou rasa), em que quem nada à tona sobe (<c>PlayerController</c>). Sem isso
+        /// quem cai na água ficaria preso, mesmo que o grafo de <see cref="AllReachableOnFoot"/>
+        /// (que já exige uma escada) passasse por outro lado.
+        /// </summary>
+        public static bool EveryDeepRegionHasExit(LevelData d)
+        {
+            int w = d.Width, h = d.Height;
+            bool Wet(int x, int z) => !d.IsSolid(x, z) && (d.Depth[x, z] == PoolDepth.Deep || d.Depth[x, z] == PoolDepth.Well);
+            bool Dryish(int x, int z) => !d.IsSolid(x, z) && (d.Depth[x, z] == PoolDepth.Dry || d.Depth[x, z] == PoolDepth.Shallow);
+            var seen = new bool[w * h];
+            for (int z0 = 0; z0 < h; z0++)
+                for (int x0 = 0; x0 < w; x0++)
+                {
+                    if (!Wet(x0, z0) || seen[x0 + z0 * w]) continue;
+                    bool exit = false;
+                    var queue = new Queue<int>();
+                    queue.Enqueue(x0 + z0 * w);
+                    seen[x0 + z0 * w] = true;
+                    while (queue.Count > 0)
+                    {
+                        int i = queue.Dequeue(), x = i % w, z = i / w;
+                        foreach (WallSide s in Sides)
+                        {
+                            if (!d.Neighbor(x, z, s, out int nx, out int nz) || !Passable(d.EdgeAt(x, z, s))) continue;
+                            if (Wet(nx, nz))
+                            {
+                                if (!seen[nx + nz * w]) { seen[nx + nz * w] = true; queue.Enqueue(nx + nz * w); }
+                            }
+                            else if (Dryish(nx, nz) && (d.Depth[x, z] == PoolDepth.Deep || d.StairAt(x, z, s, out _)))
+                                exit = true;
+                        }
+                    }
+                    if (!exit) return false;
+                }
+            return true;
+        }
+
+        /// <summary>
         /// Caminho mais curto a pé, SEM NADAR (só seco e raso), da sala inicial até a saída, célula
         /// por célula (x + z * Width). Vazio se a saída só se alcança passando pela água funda.
         /// </summary>
@@ -3094,6 +3135,7 @@ namespace BackRooms.World
                 }
             if (wellCount < MinWells || wellCount > MaxWells) Add(p, "poços fora de 3 a 8 células");
             if (!anyDeepExit) Add(p, "nenhum poço com vizinha funda aberta");
+            if (!EveryDeepRegionHasExit(d)) Add(p, "região de água funda sem escada nem borda para sair");
 
             // ---------------- Colunas
             for (int k = 0; k < d.Columns.Count; k++)

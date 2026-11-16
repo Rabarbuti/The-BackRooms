@@ -184,6 +184,18 @@ namespace BackRooms.EditorTools
                     break;
 
                 case 14:
+                    ClimbEdge(PoolDepth.Dry);
+                    break;
+
+                case 15:
+                    ClimbEdge(PoolDepth.Shallow);
+                    break;
+
+                case 16:
+                    NoClimb();
+                    break;
+
+                case 17:
                     Dusk(session);
                     break;
             }
@@ -694,7 +706,198 @@ namespace BackRooms.EditorTools
                 return;
             }
             Notes.Add($"sem Espaço afundou até o fundo, andou por ele até a escada e subiu os degraus andando em {InStage:F1} s (fôlego em {_controller.Air01:P0})");
+            Press();
+            _edgeStep = 0;
+            Next();
+        }
+
+        // ---------------------------------------------------------------- Subir na borda nadando
+
+        static int _edgeStep, _climbsBefore;
+        static Vector2Int _edgeLow, _edgeHigh;
+        static Vector3 _edgeFace;
+        static double _climbBegan, _climbEnded;
+
+        // Divisa aberta, sem escada, de uma célula de profundidade low para uma vizinha de profundidade high.
+        static bool FindEdge(PoolDepth low, PoolDepth high, out Vector2Int lower, out Vector2Int upper)
+        {
+            LevelData d = _level.Data;
+            lower = upper = default;
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                {
+                    if (d.IsSolid(x, z) || d.Depth[x, z] != low || LevelBuilder.IsRoundWell(d, x, z)) continue;
+                    foreach (WallSide side in new[] { WallSide.South, WallSide.North, WallSide.West, WallSide.East })
+                    {
+                        if (!d.IsOpen(x, z, side) || !d.Neighbor(x, z, side, out int nx, out int nz) || d.IsSolid(nx, nz) || d.Depth[nx, nz] != high) continue;
+                        if (d.StairAt(x, z, side, out _)) continue;
+                        lower = new Vector2Int(x, z);
+                        upper = new Vector2Int(nx, nz);
+                        return true;
+                    }
+                }
+            return false;
+        }
+
+        static Vector3 EdgeMiddle(Vector2Int lower, Vector2Int upper)
+        {
+            Vector3 a = _level.CellCenter(lower.x, lower.y), b = _level.CellCenter(upper.x, upper.y);
+            return Flat((a + b) * 0.5f);
+        }
+
+        static void Face(Vector3 target)
+        {
+            Vector3 to = Flat(target - _local.transform.position);
+            if (to.sqrMagnitude > 1e-4f) _local.transform.rotation = Quaternion.LookRotation(to.normalized, Vector3.up);
+        }
+
+        // Na água funda, encostado numa borda sem escada (deque seco ou piso raso): do fundo, só com
+        // W, não sobe (a cabeça está debaixo d'água); segurando Espaço e W, sobe à tona e, à tona,
+        // sobe na borda num movimento curto e fica de pé no piso de cima. Encostado numa parede, à
+        // tona, não sobe.
+        static void ClimbEdge(PoolDepth high)
+        {
+            string name = high == PoolDepth.Dry ? "deque seco" : "piso raso";
+            LevelData d = _level.Data;
+            Vector3 position = _local.transform.position;
+            switch (_edgeStep)
+            {
+                case 0:
+                {
+                    if (!FindEdge(PoolDepth.Deep, high, out _edgeLow, out _edgeHigh))
+                    {
+                        Finish(false, $"a seed {SessionState.GetInt(SeedKey, 1998)} não tem borda sem escada da água funda para {name}");
+                        return;
+                    }
+                    _edgeFace = EdgeMiddle(_edgeLow, _edgeHigh);
+                    Vector3 inward = Flat(_level.CellCenter(_edgeHigh.x, _edgeHigh.y) - _level.CellCenter(_edgeLow.x, _edgeLow.y)).normalized;
+                    Vector3 start = _edgeFace - inward * 1.1f;
+                    start.y = LevelData.DepthFloor(PoolDepth.Deep) + 0.05f;
+                    _controller.RefillAir();
+                    _controller.Teleport(start, Quaternion.LookRotation(inward).eulerAngles.y);
+                    _climbsBefore = _controller.Climbs;
+                    Press(Key.W);
+                    _edgeStep = 1;
+                    _stageStart = Now;
+                    return;
+                }
+                case 1:
+                    // Do fundo, empurrando a borda sem Espaço: não sobe.
+                    Face(_level.CellCenter(_edgeHigh.x, _edgeHigh.y));
+                    if (_controller.Climbs != _climbsBefore || _controller.IsClimbing)
+                    {
+                        Finish(false, $"no fundo da água funda, com a cabeça debaixo d'água, empurrando a borda para o {name}, subiu nela (pés a {position.y:F2} m)");
+                        return;
+                    }
+                    if (InStage < 2.5) return;
+                    if (CellOf(position) != _edgeLow) { Finish(false, $"do fundo, só com W, saiu da célula funda {_edgeLow} para {CellOf(position)}"); return; }
+                    Press(Key.Space, Key.W);
+                    _climbBegan = _climbEnded = -1;
+                    _edgeStep = 2;
+                    _stageStart = Now;
+                    return;
+                case 2:
+                {
+                    Face(_level.CellCenter(_edgeHigh.x, _edgeHigh.y));
+                    if (_controller.IsClimbing && _climbBegan < 0) _climbBegan = Now;
+                    if (_climbBegan >= 0 && !_controller.IsClimbing && _climbEnded < 0) _climbEnded = Now;
+                    float floor = d.FloorHeight(_edgeHigh.x, _edgeHigh.y);
+                    if (CellOf(position) == _edgeHigh && !_controller.IsSwimming && _body.isGrounded && Mathf.Abs(position.y - floor) < 0.1f && _climbEnded >= 0)
+                    {
+                        double climb = _climbEnded - _climbBegan;
+                        if (_controller.Climbs != _climbsBefore + 1) { Finish(false, $"subiu no {name} com {_controller.Climbs - _climbsBefore} subidas na borda (esperada 1)"); return; }
+                        if (climb < 0.3 || climb > 1.2) { Finish(false, $"a subida no {name} levou {climb:F2} s (esperado entre 0,3 e 1,2)"); return; }
+                        Notes.Add($"do fundo, só com W, não subiu na borda para o {name}; segurando Espaço e W subiu à tona e subiu na borda ({climb:F2} s) até ficar de pé no piso a {floor:F1} m em {InStage:F1} s");
+                        if (high == PoolDepth.Shallow) { _edgeStep = 3; _stageStart = Now; return; }
+                        _edgeStep = 0;
+                        Next();
+                        return;
+                    }
+                    if (InStage > 10.0)
+                        Finish(false, $"segurando Espaço e W contra a borda para o {name} não subiu em 10 s: pés a {position.y:F2} m, célula {CellOf(position)}, nadando={_controller.IsSwimming}, " +
+                                      $"subindo={_controller.IsClimbing}, subidas={_controller.Climbs - _climbsBefore}");
+                    return;
+                }
+                case 3:
+                {
+                    // À tona, encostado numa parede da água funda: não sobe.
+                    bool found = false;
+                    for (int z = 0; z < d.Height && !found; z++)
+                        for (int x = 0; x < d.Width && !found; x++)
+                        {
+                            if (d.IsSolid(x, z) || d.Depth[x, z] != PoolDepth.Deep || LevelBuilder.IsRoundWell(d, x, z)) continue;
+                            foreach (WallSide side in new[] { WallSide.South, WallSide.North, WallSide.West, WallSide.East })
+                            {
+                                if (d.IsOpen(x, z, side) || !d.Neighbor(x, z, side, out int nx, out int nz)) continue;
+                                _edgeLow = new Vector2Int(x, z);
+                                _edgeHigh = new Vector2Int(nx, nz);
+                                found = true;
+                                break;
+                            }
+                        }
+                    if (!found) { Finish(false, "não há parede na água funda para conferir que nela não se sobe"); return; }
+                    _edgeFace = EdgeMiddle(_edgeLow, _edgeHigh);
+                    Vector3 inward = Flat(_edgeFace - _level.CellCenter(_edgeLow.x, _edgeLow.y)).normalized;
+                    Vector3 start = _edgeFace - inward * 1.0f;
+                    start.y = PoolWater.Current.SurfaceY - _controller.floatDepth;
+                    _controller.Teleport(start, Quaternion.LookRotation(inward).eulerAngles.y);
+                    _climbsBefore = _controller.Climbs;
+                    Press(Key.Space, Key.W);
+                    _edgeStep = 4;
+                    _stageStart = Now;
+                    return;
+                }
+                case 4:
+                    Face(_edgeFace);
+                    if (_controller.Climbs != _climbsBefore || _controller.IsClimbing)
+                    {
+                        Finish(false, $"à tona, empurrando a parede da célula funda {_edgeLow}, subiu nela (pés a {position.y:F2} m)");
+                        return;
+                    }
+                    if (InStage < 3.0) return;
+                    if (!_controller.IsSwimming || _controller.IsUnderwater) { Finish(false, $"à tona contra a parede, deixou de boiar (nadando={_controller.IsSwimming}, debaixo d'água={_controller.IsUnderwater})"); return; }
+                    Notes.Add("à tona, empurrando uma parede da água funda com Espaço e W, não subiu");
+                    _edgeStep = 0;
+                    Next();
+                    return;
+            }
+        }
+
+        // Andando no raso contra uma borda sem escada para o seco: não sobe (desce-se, não se sobe).
+        static void NoClimb()
+        {
+            Vector3 position = _local.transform.position;
+            if (_edgeStep == 0)
+            {
+                if (!FindEdge(PoolDepth.Shallow, PoolDepth.Dry, out _edgeLow, out _edgeHigh))
+                {
+                    Notes.Add("a seed não tem borda sem escada do raso para o seco (conferência de andar contra a borda pulada)");
+                    ReleaseKeyboard();
+                    Next();
+                    return;
+                }
+                _edgeFace = EdgeMiddle(_edgeLow, _edgeHigh);
+                Vector3 inward = Flat(_level.CellCenter(_edgeHigh.x, _edgeHigh.y) - _level.CellCenter(_edgeLow.x, _edgeLow.y)).normalized;
+                Vector3 start = _edgeFace - inward * 1.2f;
+                start.y = LevelData.DepthFloor(PoolDepth.Shallow) + 0.05f;
+                _controller.Teleport(start, Quaternion.LookRotation(inward).eulerAngles.y);
+                _climbsBefore = _controller.Climbs;
+                Press(Key.W);
+                _edgeStep = 1;
+                _stageStart = Now;
+                return;
+            }
+
+            Face(_level.CellCenter(_edgeHigh.x, _edgeHigh.y));
+            if (_controller.Climbs != _climbsBefore || _controller.IsClimbing || CellOf(position) == _edgeHigh)
+            {
+                Finish(false, $"andando no raso contra a borda sem escada, subiu no seco (célula {CellOf(position)}, pés a {position.y:F2} m)");
+                return;
+            }
+            if (InStage < 3.0) return;
+            Notes.Add($"andando no raso contra uma borda sem escada, não subiu no seco (pés a {position.y:F2} m)");
             ReleaseKeyboard();
+            _edgeStep = 0;
             Next();
         }
 

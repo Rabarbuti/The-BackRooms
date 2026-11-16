@@ -11,10 +11,11 @@ Level 2 (teste)) com as etapas 1 a 7 da seção 8.1:
   e sala da saída (seção 3.2), maciços fechados entre elas (15 a 30% do mapa) e ligações com laços.
   `PoolGenerator.Validate` confere todas as regras da seção 3 e, se reprovar, sorteia de novo.
 - **Profundidade por célula** (`LevelData.Depth`: seco +0,2 m, raso −0,4, fundo −2,0, poço −6, água em
-  +0,05, `LevelData.WaterLevel`) e **escadas explícitas** com largura (`LevelData.Stairs`); desnível sem escada é borda: desce-se,
-  não se sobe (`LevelData.CanStep`). A água funda (piscinas, raias, canais) não dá pé: nada-se, e
-  dela só se sai por escada. Tudo que não é poço continua alcançável (a pé ou nadando na funda), de
-  todo poço se sai nadando para a funda e o caminho do início à saída nunca exige nadar.
+  +0,05, `LevelData.WaterLevel`) e **escadas explícitas** com largura (`LevelData.Stairs`); desnível sem escada é borda: andando,
+  desce-se e não se sobe (`LevelData.CanStep`). A água funda (piscinas, raias, canais) não dá pé: nada-se, e
+  dela se sai por escada ou **subindo na borda nadando à tona** (seção 4.2). Tudo que não é poço continua alcançável (a pé ou nadando na funda), de
+  todo poço se sai nadando para a funda, toda região de água funda tem escada ou borda própria
+  (`PoolGenerator.EveryDeepRegionHasExit`) e o caminho do início à saída nunca exige nadar.
 - **Construção** (`LevelBuilder.Pools.cs`): paredes de 0,4 m com arcos, vãos e vigias recortados sem
   moldura, colunas-tambor, sanca, abóbada de berço, teto claro, escadas, bordas com capa, corrimãos,
   poço redondo e água só nas células molhadas.
@@ -27,12 +28,14 @@ Level 2 (teste)) com as etapas 1 a 7 da seção 8.1:
   poucas manchas e marcações pintadas postas pela seed como decalques.
 - **Jogador:** anda mais devagar na água rasa (85% na canela; nos degraus que entram na funda, até
   55%, sem correr); em toda água funda (piscinas, raias, canais) e no poço, onde não dá pé,
-  **nada: afunda devagar sem tecla**, sobe e fica à tona segurando Espaço e mergulha com Ctrl/C; no
+  **nada: afunda devagar sem tecla**, sobe e fica à tona segurando Espaço e mergulha com Ctrl/C; à
+  tona, empurrando contra uma borda baixa (deque seco ou piso raso), **sobe nela**; no
   fundo da funda (2 m) fica de pé com a cabeça debaixo d'água e pode andar por ele até uma escada;
   tem 20 s de fôlego submerso e, quando o fôlego acaba, se afoga e volta ao início, como na queda no
   buraco. Debaixo d'água a imagem fica ciano.
 - **Filmadora:** `WATER` e a barra `AIR` com a cabeça debaixo d'água; onde não dá pé (água funda e
-  poço), `HOLD SPACE` piscando nos primeiros segundos de cada mergulho e com o fôlego no fim.
+  poço), `HOLD SPACE` piscando nos primeiros segundos de cada mergulho e com o fôlego no fim; à tona
+  de frente para uma borda em que dá para subir, `W - CLIMB` no meio da tela.
 - **Caneta:** não risca debaixo d'água.
 - **Desempenho** (seed 1998, 1920 x 1080, Quadro T2000): mediana de 37 ms por quadro sem lanterna e
   40 ms com, contra ~106 ms da primeira versão; 45 luzes com sombra de uma face em cache.
@@ -211,7 +214,7 @@ piscava.
 |---|---|---|---|
 | **Seco** | +0,2 m | normal | patamares, deques, ilhas |
 | **Rasa** (canela) | −0,4 m | 85% | a maior parte da área molhada |
-| **Funda** (2,05 m de água) | −2,0 m | **nada**, como no poço; no fundo, de pé com a cabeça debaixo d'água | raias, piscinas, canais; sai-se só por escada |
+| **Funda** (2,05 m de água) | −2,0 m | **nada**, como no poço; no fundo, de pé com a cabeça debaixo d'água | raias, piscinas, canais; sai-se por escada ou subindo na borda à tona |
 | **Poço** | −6 m | **nada**; sem tecla afunda devagar (0,5 m/s), segurando Espaço fica à tona | fôlego (seção 4.2), escuro, o ralo |
 
 Até 15/11/2026 a funda tinha piso a −1,2 m (água no peito, andava-se a 55%) e só o poço era de nadar.
@@ -221,8 +224,9 @@ vale sozinha (mais de 1,3 m de água acima dos pés). As escadas que entram nela
 do raso, 8 degraus (2,4 m); do seco, 11 (3,3 m).
 
 **Escada ou borda.** Numa divisa aberta entre duas alturas, ou há escada (degraus de 20 x 30 cm, da
-largura do vão, e aí se anda nos dois sentidos) ou é uma **borda**: cai-se na água por ela, mas não
-se sobe. Quando o lado de cima é seco, a borda tem **capa**: uma faixa de pedra de 30 cm rente ao
+largura do vão, e aí se anda nos dois sentidos) ou é uma **borda**: andando, desce-se (cai-se na
+água) e não se sobe; **nadando à tona, sobe-se** (seção 4.2), como em toda piscina de verdade. Quem
+está no raso não sobe no seco pela borda: precisa de escada (o desnível continua obstáculo). Quando o lado de cima é seco, a borda tem **capa**: uma faixa de pedra de 30 cm rente ao
 piso, com a aresta arredondada sempre do lado da água e a textura correndo ao longo da borda (UV por
 trecho, `LevelBuilder.AddCoping`); a escada interrompe a capa só na largura dela. Nos cantos as faixas
 se encontram em meia-esquadria: na ponta do seco (capa em dois lados da célula) e no canto da
@@ -231,9 +235,13 @@ entre dois pisos molhados (raso e fundo) não tem capa: fica debaixo d'água. A 
 borda em volta e escada só em um ou dois lugares, como uma piscina de verdade. Regra do gerador, no espírito de "buraco nunca isola": **toda célula com piso que
 não é poço continua alcançável** (mesma altura ou escada; entre fundas, nadando), então **de toda
 área funda se sai por uma escada** que sobe para o raso ou o seco (a pé, nos dois sentidos), e **de
-todo poço se sai nadando** para uma célula funda vizinha e dela para a escada. Quem boia (pés a
+todo poço se sai nadando** para uma célula funda vizinha e dela para a escada ou a borda. Quem boia (pés a
 −1,35 m) pega o degrau de −1,2 m com o pé e sobe; quem afundou anda pelo fundo até a escada e sobe
-os degraus andando. A escada própria do poço (descendo até 1,6 m abaixo da água) deixou de caber: a
+os degraus andando. E, de forma explícita, **toda região de água funda e poço** (células fundas e de
+poço ligadas por divisa que se passa) **tem, nela mesma, uma escada que sobe ou uma borda** para o
+seco ou o raso (`PoolGenerator.EveryDeepRegionHasExit`, no `Validate`). Até 16/11/2026 a borda não se
+subia nem nadando, e numa piscina de 9 a 16 células com uma escada só, a até 7 células de distância, o
+jogador que caía longe dela achava que tinha ficado preso. A escada própria do poço (descendo até 1,6 m abaixo da água) deixou de caber: a
 funda em volta já é mais funda que o pé dela. E **o caminho do início à saída nunca exige nadar**
 (`PoolGenerator.FootPath`, só seco e raso): a água funda é atalho ou desvio.
 
@@ -365,11 +373,21 @@ principal, sem uso, então salas, água, escadas, colunas e lâmpadas de cada se
   Ctrl/C mergulha a 1,6 m/s. A velocidade vertical muda aos poucos (`swimAcceleration`, 3 m/s²; uma
   queda rápida a água freia três vezes mais forte). WASD nada na horizontal a 45% da caminhada. No
   fundo da área funda o jogador fica de pé com a cabeça debaixo d'água e anda (devagar, perdendo
-  fôlego) até uma escada. **Sai-se da água funda só por escada:** à tona, o degrau de −1,2 m fica 15
-  cm acima dos pés e a escada pega o pé de quem boia; do fundo, sobe-se os degraus andando. Borda
-  sem escada não se sobe. Do poço sai-se nadando para a funda vizinha e dela pela escada. Quem está
-  se afogando só afunda. Nada disso vai pela rede: o movimento é do dono e os outros veem o corpo
-  subir e descer pela posição.
+  fôlego) até uma escada. **Sai-se da água funda por escada ou pela borda:** à tona, o degrau de −1,2 m
+  fica 15 cm acima dos pés e a escada pega o pé de quem boia; do fundo, sobe-se os degraus andando.
+- **Subir na borda nadando** (`PlayerController.TryStartClimb`): à tona (cabeça fora d'água, pés a
+  menos de 25 cm de onde boia, sem Ctrl/C), empurrando com o direcional contra uma borda (ou só com
+  Espaço, encostado nela e de frente) cujo topo fica entre o alcance do degrau e 45 cm acima da água
+  (`climbMaxAboveSurface`; o deque seco, +0,2, e o piso raso, −0,4, servem; parede não), o jogador
+  sai da água rente à face e avança até ficar de pé no piso de cima em ~0,55 s (`climbSeconds`), pelo
+  `CharacterController` (se algo barrar a subida, desiste e volta a nadar). Antes confere com a
+  cápsula do jogador que há lugar no topo, acima de onde está e no meio do caminho, e que não há
+  parede logo acima da borda; os raios descartam o próprio jogador. Do fundo não vale (primeiro sobe
+  à tona); andando (fora d'água ou no raso) borda continua sem se subir. A face é procurada até 30 cm
+  além do corpo (`climbReach`); de frente para uma assim, o painel mostra `W - CLIMB`. Do poço
+  sai-se nadando para a funda vizinha e dela pela escada ou pela borda. Quem está se afogando só
+  afunda. Nada disso vai pela rede: o movimento é do dono (a subida é um movimento contínuo, que o
+  `NetworkTransform` interpola) e os outros veem o corpo subir e descer pela posição.
 - **Fôlego:** com a cabeça debaixo d'água o jogador tem 20 s; fora d'água volta inteiro em 3 s
   (`airRefillSeconds`). O painel da filmadora mostra `AIR` e uma barra (vermelha piscando no último
   quarto) e, onde não dá pé, `HOLD SPACE` piscando abaixo dela nos primeiros 4 s de cada mergulho e

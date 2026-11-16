@@ -59,6 +59,14 @@ namespace BackRooms.Player
         [Tooltip("Quanto a velocidade vertical na água muda por segundo (m/s²): a inércia do nado. Uma queda rápida a água freia três vezes mais forte.")]
         public float swimAcceleration = 3f;
 
+        [Header("Subir na borda nadando")]
+        [Tooltip("Nadando à tona, sobe numa borda cujo topo fica até esta altura acima da superfície (m). Andando, borda não se sobe.")]
+        public float climbMaxAboveSurface = 0.45f;
+        [Tooltip("Até onde, além do corpo, a borda pode estar para o jogador subir empurrando contra ela (m).")]
+        public float climbReach = 0.3f;
+        [Tooltip("Duração da subida: sai da água e avança até ficar de pé no piso de cima (s).")]
+        public float climbSeconds = 0.55f;
+
         [Header("Corpo (metros)")]
         public float standingHeight = 1.8f;
         public float crouchingHeight = 1.1f;
@@ -168,6 +176,15 @@ namespace BackRooms.Player
         /// <summary>Quantas vezes este jogador se afogou nesta sessão (também contam em <see cref="Falls"/>).</summary>
         public int Drownings { get; private set; }
 
+        /// <summary>Verdadeiro durante a subida numa borda, saindo da água (uns 0,5 s).</summary>
+        public bool IsClimbing { get; private set; }
+
+        /// <summary>Quantas vezes este jogador subiu numa borda nadando nesta sessão.</summary>
+        public int Climbs { get; private set; }
+
+        /// <summary>Nadando à tona, de frente para uma borda em que dá para subir (pista do painel).</summary>
+        public bool CanClimb { get; private set; }
+
         /// <summary>Verdadeiro enquanto o jogador está dentro de um esconderijo.</summary>
         public bool IsHidden => _hidingSpots > 0;
 
@@ -194,6 +211,10 @@ namespace BackRooms.Player
         float _fallTimer;
         bool _lockedCursor;
         float _air;
+        Vector3 _climbFrom, _climbTo;
+        float _climbTime, _climbRetryAt;
+        static readonly RaycastHit[] RayHits = new RaycastHit[16];
+        static readonly Collider[] Overlaps = new Collider[16];
 
         void Awake()
         {
@@ -252,6 +273,7 @@ namespace BackRooms.Player
             _horizontalVelocity = Vector3.zero;
             _verticalVelocity = 0f;
             _lastSafePosition = position;
+            IsClimbing = false;
         }
 
         void Update()
@@ -357,6 +379,17 @@ namespace BackRooms.Player
             PoolWater water = PoolWater.Current;
             Submersion = water != null ? Mathf.Max(0f, water.SurfaceY - transform.position.y) : 0f;
             IsSwimming = water != null && Submersion > swimDepth;
+            CanClimb = false;
+
+            // Subindo numa borda: o movimento é só a subida, até ficar de pé no piso de cima.
+            if (IsClimbing)
+            {
+                IsSprinting = false;
+                UpdateStamina(dt);
+                UpdateClimb(dt);
+                UpdateSteps(dt, false);
+                return;
+            }
 
             IsSprinting = _sprint.IsPressed() && movingForward && !IsCrouching && !_exhausted && _stamina > 0f && Submersion < 0.8f;
             UpdateStamina(dt);
@@ -384,6 +417,14 @@ namespace BackRooms.Player
                 if (grounded && _verticalVelocity < -sinkSpeed) _verticalVelocity = -sinkSpeed;
                 float rate = Mathf.Abs(_verticalVelocity) > swimVerticalSpeed ? swimAcceleration * 3f : swimAcceleration;
                 _verticalVelocity = Mathf.MoveTowards(_verticalVelocity, vertical, rate * dt);
+
+                // À tona, empurrando contra uma borda baixa (ou de frente para ela, encostado, com
+                // Espaço): sobe nela. Andando, borda não se sobe; do fundo, primeiro sobe à tona.
+                if (TryStartClimb(water, input, floatY))
+                {
+                    UpdateSteps(dt, false);
+                    return;
+                }
             }
             else if (grounded)
             {
@@ -403,6 +444,137 @@ namespace BackRooms.Player
             if ((flags & CollisionFlags.Above) != 0 && _verticalVelocity > 0f) _verticalVelocity = 0f;
 
             UpdateSteps(dt, grounded);
+        }
+
+        // ---------------------------------------------------------------- Subir na borda nadando
+
+        bool TryStartClimb(PoolWater water, Vector2 input, float floatY)
+        {
+            // Só à tona: a cabeça fora d'água e os pés perto de onde boia; não mergulhando nem voltando.
+            if (IsReturning || IsUnderwater || _crouch.IsPressed() || transform.position.y < floatY - 0.25f) return false;
+            // Uma subida barrada no caminho só se tenta de novo depois de um instante.
+            if (Time.time < _climbRetryAt) return false;
+
+            Vector3 look = transform.forward;
+            look.y = 0f;
+            look.Normalize();
+            Vector3 push = transform.right * input.x + transform.forward * input.y;
+            push.y = 0f;
+            bool pushing = push.magnitude > 0.3f;
+            Vector3 direction = pushing ? push.normalized : look;
+
+            if (!FindLedge(water, direction, out Vector3 landing, out float gap, out Vector3 inward)) return false;
+            CanClimb = true;
+
+            // Empurrando contra a borda (o direcional) ou, só com Espaço, encostado nela e de frente.
+            bool start = pushing || _jump.IsPressed() && gap <= 0.1f && Vector3.Dot(look, inward) >= 0.7f;
+            if (!start) return false;
+
+            IsClimbing = true;
+            Climbs++;
+            _climbFrom = transform.position;
+            _climbTo = landing;
+            _climbTime = 0f;
+            _horizontalVelocity = Vector3.zero;
+            _verticalVelocity = 0f;
+            return true;
+        }
+
+        /// <summary>
+        /// Procura, na direção dada, uma borda em que quem nada à tona pode subir: uma face logo à
+        /// frente (até <see cref="climbReach"/> além do corpo), com topo plano entre o alcance do
+        /// degrau e <see cref="climbMaxAboveSurface"/> acima da água, sem parede em cima dela e com
+        /// lugar para ficar de pé (a cápsula do CharacterController) no topo, acima de onde está e
+        /// no meio do caminho. Os raios descartam o próprio jogador (ver PenTool.TryAim).
+        /// </summary>
+        bool FindLedge(PoolWater water, Vector3 direction, out Vector3 landing, out float gap, out Vector3 inward)
+        {
+            landing = inward = Vector3.zero;
+            gap = 0f;
+            Vector3 feet = transform.position;
+            float radius = _controller.radius, step = _controller.stepOffset;
+
+            // A face: um pouco acima do que o degrau já sobe sozinho.
+            if (!CastIgnoringSelf(feet + Vector3.up * (step + 0.03f), direction, radius + climbReach, out RaycastHit face)) return false;
+            inward = -face.normal;
+            inward.y = 0f;
+            if (inward.sqrMagnitude < 0.5f) return false;
+            inward.Normalize();
+            if (Vector3.Dot(inward, direction) < 0.6f) return false;
+            gap = face.distance - radius;
+
+            // O topo: plano, logo além da face, nem alto demais (parede) nem ao alcance do degrau.
+            float maxTop = water.SurfaceY + climbMaxAboveSurface;
+            Vector3 probe = face.point + inward * 0.3f;
+            probe.y = maxTop + 0.4f;
+            if (!CastIgnoringSelf(probe, Vector3.down, probe.y - (feet.y + step), out RaycastHit top) || top.normal.y < 0.7f) return false;
+            float topY = top.point.y;
+            if (topY > maxTop || topY < feet.y + step) return false;
+
+            // Nada logo acima da borda (o topo de uma parede baixa com parede por cima não conta).
+            if (CastIgnoringSelf(new Vector3(feet.x, topY + 0.15f, feet.z), inward, face.distance + radius + 0.2f, out _)) return false;
+
+            landing = face.point + inward * (radius + 0.12f);
+            landing.y = topY + 0.02f;
+            Vector3 raised = new Vector3(feet.x, topY + 0.04f, feet.z);
+            return CapsuleFree(landing) && CapsuleFree(raised) && CapsuleFree((raised + landing) * 0.5f);
+        }
+
+        // Sai da água (sobe rente à face) e avança até ficar de pé no piso de cima, pelo
+        // CharacterController: se algo barrar a subida, desiste e volta a nadar.
+        void UpdateClimb(float dt)
+        {
+            if (IsReturning)
+            {
+                IsClimbing = false;
+                return;
+            }
+
+            _climbTime += dt;
+            float t = _climbTime / Mathf.Max(0.1f, climbSeconds);
+            float up = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t / 0.6f));
+            float forward = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((t - 0.4f) / 0.6f));
+            Vector3 desired = new Vector3(Mathf.Lerp(_climbFrom.x, _climbTo.x, forward), Mathf.Lerp(_climbFrom.y, _climbTo.y, up),
+                                          Mathf.Lerp(_climbFrom.z, _climbTo.z, forward));
+            _controller.Move(desired - transform.position);
+
+            Vector3 now = transform.position;
+            bool blocked = desired.y - now.y > 0.3f;
+            Vector2 left = new Vector2(_climbTo.x - now.x, _climbTo.z - now.z);
+            if (blocked || t >= 1f && (left.magnitude < 0.15f || _climbTime > climbSeconds + 0.25f))
+            {
+                IsClimbing = false;
+                _horizontalVelocity = Vector3.zero;
+                _verticalVelocity = blocked ? 0f : -2f;
+                if (blocked) _climbRetryAt = Time.time + 0.5f;
+            }
+        }
+
+        bool CastIgnoringSelf(Vector3 origin, Vector3 direction, float distance, out RaycastHit nearest)
+        {
+            nearest = default;
+            int count = Physics.RaycastNonAlloc(origin, direction, RayHits, distance, ~0, QueryTriggerInteraction.Ignore);
+            float best = float.MaxValue;
+            Transform self = transform.root;
+            for (int i = 0; i < count; i++)
+            {
+                if (RayHits[i].collider.transform.root == self || RayHits[i].distance >= best) continue;
+                best = RayHits[i].distance;
+                nearest = RayHits[i];
+            }
+            return best < float.MaxValue;
+        }
+
+        // Cabe o jogador de pé com os pés em <paramref name="feet"/>? (Descarta o próprio colisor.)
+        bool CapsuleFree(Vector3 feet)
+        {
+            float radius = _controller.radius * 0.95f;
+            Vector3 bottom = feet + Vector3.up * (radius + 0.03f), top = feet + Vector3.up * (standingHeight - radius);
+            int count = Physics.OverlapCapsuleNonAlloc(bottom, top, radius, Overlaps, ~0, QueryTriggerInteraction.Ignore);
+            Transform self = transform.root;
+            for (int i = 0; i < count; i++)
+                if (Overlaps[i].transform.root != self) return false;
+            return true;
         }
 
         void UpdateFall(float dt)
