@@ -19,8 +19,10 @@ namespace BackRooms.EditorTools
     /// fica bloqueado; no modo desenvolvedor troca para ele, hospeda e abre a porta, que zera
     /// e leva ao Level 2 já hospedando; nada num poço e abre a porta das Piscinas (a última
     /// fase), que zera e acaba no menu; volta ao Level 0, confere que nada da água sobrou e
-    /// passa pela porta dele até o Level 1. Em cada fase confere que só existe uma sessão (um
-    /// NetworkManager). O progresso salvo nesta máquina é restaurado no fim.
+    /// passa pela porta dele até o Level 1, onde sai da partida para o menu. Em cada fase confere
+    /// que só existe uma sessão (um NetworkManager), a música do menu e o zumbido das lâmpadas
+    /// (calado no menu, no volume de jogo jogando e calado de novo ao sair). O progresso salvo
+    /// nesta máquina é restaurado no fim.
     ///
     /// Dois editores (o segundo numa cópia do projeto): <see cref="BatchHostLevel1"/> troca para
     /// o Level 1 e hospeda; <see cref="BatchJoinFromLevel0"/> entra a partir do Level 0 e tem de
@@ -55,6 +57,7 @@ namespace BackRooms.EditorTools
         static GameSession _previous;
         static bool _switched;
         static float _musicPlayed;
+        static bool _humNoted;
 
         [MenuItem("BackRooms/Testar seletor de fase")]
         public static void RunFromMenu() { Run(Solo); }
@@ -127,6 +130,8 @@ namespace BackRooms.EditorTools
             {
                 case 0:
                     if (!InMenu(session, 0)) { if (StageTimedOut(20)) Finish(false, "o Level 0 não abriu no menu"); return; }
+                    if (!HumMuted(out string hum0)) { Finish(false, "zumbido das lâmpadas no menu do Level 0: " + hum0); return; }
+                    Notes.Add("no menu do Level 0 o zumbido fica calado");
 
                     // Guarda o progresso desta máquina e começa do zero.
                     SessionState.SetInt(SavedKey, PlayerPrefs.GetInt(LevelProgress.ClearedKey, -1));
@@ -150,6 +155,7 @@ namespace BackRooms.EditorTools
                     if (!MusicOk(true, out string music1)) { Finish(false, "música do menu depois de trocar para o Level 1: " + music1); return; }
                     _musicPlayed = MenuMusic.Instance.Played;
                     Notes.Add("a música do menu seguiu na troca de fase, sem recomeçar nem duplicar");
+                    if (!HumMuted(out string hum1)) { Finish(false, "zumbido das lâmpadas no menu do Level 1: " + hum1); return; }
                     session.Host(localOnly: true);
                     Next();
                     break;
@@ -165,6 +171,19 @@ namespace BackRooms.EditorTools
                     break;
 
                 case 3:
+                {
+                    // O zumbido entra em fade: espera chegar ao volume de jogo antes da porta.
+                    if (!HumFull(out string humFull1))
+                    {
+                        if (StageTimedOut(10)) Finish(false, "o zumbido não chegou ao volume de jogo no Level 1: " + humFull1);
+                        return;
+                    }
+                    if (!_humNoted)
+                    {
+                        _humNoted = true;
+                        Notes.Add("jogando o Level 1 o zumbido entrou em fade até o volume de jogo");
+                    }
+
                     // Só chegar perto não zera mais: é preciso abrir a porta (tecla E).
                     LevelExit door = LevelExit.Instance;
                     if (door == null || !door.LocalInReach)
@@ -177,6 +196,7 @@ namespace BackRooms.EditorTools
                     if (!door.Interact()) { Finish(false, "a porta do Level 1 não aceitou a interação"); return; }
                     Next();
                     break;
+                }
 
                 case 4:
                 {
@@ -192,6 +212,7 @@ namespace BackRooms.EditorTools
                     Notes.Add("a porta do Level 1 zerou a fase e levou ao Level 2, já hospedando");
                     if (!MusicOk(false, out string music2)) { Finish(false, "música do menu jogando o Level 2: " + music2); return; }
                     Notes.Add("em jogo a música do menu fica calada");
+                    if (Object.FindObjectsByType<FluorescentHum>(FindObjectsSortMode.None).Length != 0) { Finish(false, "o Level 2 tem zumbido de lâmpada fluorescente"); return; }
 
                     // Mergulha num poço.
                     var builder = Object.FindFirstObjectByType<LevelBuilder>();
@@ -257,6 +278,7 @@ namespace BackRooms.EditorTools
                         return;
                     }
                     Notes.Add("de volta ao menu a música voltou, sem recomeçar (" + music0 + ")");
+                    if (!HumMuted(out string humBack)) { Finish(false, "zumbido das lâmpadas no menu de volta ao Level 0: " + humBack); return; }
                     session.Host(localOnly: true);
                     Next();
                     break;
@@ -265,6 +287,8 @@ namespace BackRooms.EditorTools
                 {
                     if (!Playing(session)) { if (StageTimedOut(40)) Finish(false, "não começou a partida no Level 0 depois de voltar"); return; }
                     if (!StageTimedOut(1.5)) return;
+                    FluorescentHum playingHum = Object.FindFirstObjectByType<FluorescentHum>();
+                    if (playingHum == null || !playingHum.Wanted || playingHum.Level <= 0f) { Finish(false, "zumbido das lâmpadas jogando o Level 0: " + DescribeHum()); return; }
 
                     // A água das Piscinas não pode sobrar no Level 0.
                     PlayerController controller = PlayerNetwork.Local.controller;
@@ -308,6 +332,32 @@ namespace BackRooms.EditorTools
                     if (!LevelProgress.IsCleared(0)) { Finish(false, "passou pela porta do Level 0 e a fase não foi zerada"); return; }
                     if (!OneSession(out string after)) { Finish(false, "duas sessões depois de passar pela porta: " + after); return; }
                     Notes.Add("a porta do Level 0 levou ao Level 1, já hospedando");
+                    Next();
+                    break;
+
+                case 12:
+                    // A fase aberta pela porta nasce conectando e o zumbido dela, calado: entra em
+                    // fade até o volume de jogo. Depois sai da partida e confere que ele cala de novo.
+                    if (!HumFull(out string humFull))
+                    {
+                        if (StageTimedOut(10)) Finish(false, "o zumbido não chegou ao volume de jogo no Level 1 depois da porta: " + humFull);
+                        return;
+                    }
+                    session.Leave();
+                    Next();
+                    break;
+
+                case 13:
+                    if (session == null || session.Phase != SessionPhase.Menu) { Finish(false, $"sair da partida não voltou ao menu (fase da sessão={session?.Phase})"); return; }
+                    if (!HumMuted(out string humLeft))
+                    {
+                        // Um quadro de folga para o componente ver a sessão no menu.
+                        FluorescentHum leaving = Object.FindFirstObjectByType<FluorescentHum>();
+                        if (StageTimedOut(0.5) && (leaving == null || leaving.Wanted)) { Finish(false, "de volta ao menu o zumbido ainda quer soar: " + humLeft); return; }
+                        if (StageTimedOut(10)) Finish(false, "de volta ao menu o zumbido não calou: " + humLeft);
+                        return;
+                    }
+                    Notes.Add($"de volta ao menu o zumbido saiu em fade e calou ({Now - _stageStart:F1}s)");
                     Finish(true, string.Join("; ", Notes));
                     break;
             }
@@ -587,6 +637,32 @@ namespace BackRooms.EditorTools
                   $"pausa={music.Paused} comecos={music.Starts} tocado={music.Played:F1}s";
             if (music == null || music.clip == null || MenuMusic.Alive != 1 || found != 1 || music.Starts != 1) return false;
             return menu ? music.Wanted && !music.Paused : !music.Wanted && music.Level <= 0f && music.Paused;
+        }
+
+        // Zumbido das lâmpadas (FluorescentHum), um por cena nos Levels 0 e 1: no menu, calado
+        // (não quer soar e o nível do fade está em zero); jogando, no volume de jogo. Confere a
+        // conta do componente, não a fonte (sem dispositivo de áudio ela não toca).
+        static bool HumMuted(out string why)
+        {
+            why = DescribeHum();
+            FluorescentHum[] hums = Object.FindObjectsByType<FluorescentHum>(FindObjectsSortMode.None);
+            return hums.Length == 1 && !hums[0].Wanted && hums[0].Level <= 0f && hums[0].CurrentVolume <= 0f;
+        }
+
+        static bool HumFull(out string why)
+        {
+            why = DescribeHum();
+            FluorescentHum[] hums = Object.FindObjectsByType<FluorescentHum>(FindObjectsSortMode.None);
+            return hums.Length == 1 && hums[0].Wanted && hums[0].Level >= 0.999f &&
+                   Mathf.Abs(hums[0].CurrentVolume - hums[0].volume) < 0.001f;
+        }
+
+        static string DescribeHum()
+        {
+            FluorescentHum[] hums = Object.FindObjectsByType<FluorescentHum>(FindObjectsSortMode.None);
+            if (hums.Length != 1) return $"{hums.Length} zumbido(s) na cena";
+            FluorescentHum hum = hums[0];
+            return $"quer_soar={hum.Wanted} nivel={hum.Level:F2} volume={hum.CurrentVolume:F3} (de jogo {hum.volume:F2})";
         }
 
         static string Describe(GameSession session)

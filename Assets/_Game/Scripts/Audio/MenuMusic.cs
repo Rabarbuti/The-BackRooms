@@ -6,7 +6,8 @@ namespace BackRooms.Audio
     /// <summary>
     /// Música da tela inicial (Audio/Musica/Menu_Tema.mp3). Toca em laço enquanto o menu está na
     /// tela, entra e sai suave, e some quando a partida começa. Só observa a sessão
-    /// (<see cref="GameSession.Phase"/>): no menu, toca; jogando, silencia; conectando, ou entre
+    /// (<see cref="GameSession.Phase"/>, pelo <see cref="MenuOnScreen"/>, que o zumbido das
+    /// lâmpadas também segue): no menu, toca; jogando, silencia; conectando, ou entre
     /// duas cenas (sem sessão), mantém o que estava fazendo. Assim, ao hospedar, a música vai
     /// sumindo até o jogador aparecer no mapa, e na passagem pela porta de saída a fase seguinte
     /// já abre conectando e ela continua calada.
@@ -95,16 +96,26 @@ namespace BackRooms.Audio
             if (Instance == this) Instance = null;
         }
 
-        void Update()
+        /// <summary>
+        /// O critério de menu × jogo que o som segue (esta música e o zumbido das lâmpadas,
+        /// <see cref="FluorescentHum"/>): verdadeiro com a sessão no menu, falso jogando e nulo
+        /// conectando ou entre duas cenas (sem sessão), quando cada um mantém o que estava fazendo.
+        /// </summary>
+        public static bool? MenuOnScreen()
         {
             GameSession session = GameSession.Instance;
-            if (session != null)
-            {
-                if (session.Phase == SessionPhase.Menu) Wanted = true;
-                else if (session.Phase == SessionPhase.Playing) Wanted = false;
-                // Conectando: mantém. Hospedar já tira o menu da tela, mas a música só termina de
-                // sair quando o jogador aparece; uma conexão que falha volta ao menu sem corte.
-            }
+            if (session == null) return null;
+            if (session.Phase == SessionPhase.Menu) return true;
+            if (session.Phase == SessionPhase.Playing) return false;
+            // Conectando: mantém. Hospedar já tira o menu da tela, mas a música só termina de
+            // sair quando o jogador aparece; uma conexão que falha volta ao menu sem corte.
+            return null;
+        }
+
+        void Update()
+        {
+            bool? menu = MenuOnScreen();
+            if (menu.HasValue) Wanted = menu.Value;
 
             // Passo por quadro limitado: a montagem do mapa ou do jogador dá quadros de um segundo
             // bem na hora do fade, e sem o limite a entrada ou a saída viraria um corte.
