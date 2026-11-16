@@ -3,7 +3,8 @@
 Jogo de terror 3D em co-op no estilo Backrooms, feito em Unity. Hoje existe o Level 0
 jogável por IP, com interface de filmadora VHS, o primeiro item (caneta de riscar), buracos
 com faixas de travessia, apagões periódicos, a primeira entidade, que caça os jogadores pelo
-barulho, e gravação da tela em vídeo (F9). Os dois inimigos (a entidade e o Capitão) são
+barulho, gravação da tela em vídeo (F9), música na tela inicial e passos que mudam com o piso e a
+água (carpete, azulejo, água rasa, nado, debaixo d'água). Os dois inimigos (a entidade e o Capitão) são
 esculpidos no Blender e vestidos sobre juntas montadas em código (seção "Inimigos esculpidos"). A segunda fase, o **Level 1 — O Mostruário**, tem
 projeto, uma versão de teste jogável mobiliada com modelos feitos no Blender e o corpo do
 inimigo dela, o Capitão (seção "Level 1: onde parou e como continuar"). A terceira, o
@@ -41,8 +42,15 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   `PoolGenerator` (planta por salas, C# puro, com `Validate`), `PoolData` (divisas, claraboias,
   salas, colunas, lâmpadas), `LevelBuilder.Pools.cs` (a geometria, parte do `LevelBuilder`) e
   `PoolWater` (ondulação, cáustica, debaixo d'água, anoitecer, salas escuras).
-- `Scripts/Player` — `PlayerController` (movimento, queda e captura), `Flashlight`, `Footsteps`,
-  `PlayerBody` (o traje que os outros veem) e `ItemHand` (a mão em primeira pessoa).
+- `Scripts/Player` — `PlayerController` (movimento, queda e captura), `Flashlight`, `Footsteps`
+  (passos sintetizados por superfície: carpete sem água na fase; nas Piscinas, azulejo seco, água
+  rasa, nado à tona, debaixo d'água e um espirro ao cruzar a linha d'água depressa; dos outros
+  jogadores, calculado aqui pela altura deles e a água local; `NoiseOf` dá o barulho de cada
+  superfície para um inimigo que ouça a água), `PlayerBody` (o traje que os outros veem) e
+  `ItemHand` (a mão em primeira pessoa).
+- `Scripts/Audio` — `FluorescentHum` (zumbido das luminárias) e `MenuMusic` (música da tela
+  inicial, `Audio/Musica/Menu_Tema.mp3`: toca em laço no menu, some ao começar a jogar; um dono
+  só, que sobrevive à troca de fase pela lista do menu sem recomeçar).
 - `Scripts/Network` — `GameSession` (host, cliente, envio da seed e do relógio da sessão) e
   `PlayerNetwork` (o que cada jogador publica: olhar, agachar, lanterna, esconderijo, item na mão).
 - `Scripts/Items` — `PenTool` (entrada e mira) e `DrawingBoard` (malhas dos riscos e sincronização).
@@ -103,6 +111,10 @@ gerados pelo `Level0Setup`, que os lê com `GlbReader` (sem pacote de glTF) e as
 a malha já encaixada e as texturas do HDRP (`ImportedModels`). Apagar um GLB volta à peça antiga.
 `Art/Fontes/Texturas` guarda texturas geradas por IA já emendáveis, com o nome da textura que
 substituem; o `Level0Setup.EnsureTexture` usa o arquivo de lá no lugar da pintura em código.
+
+Outra exceção: `Audio/Musica/Menu_Tema.mp3` (música do menu) é um arquivo mandado pelo usuário, não
+gerado; o `Level0Setup` só acerta a importação (Streaming, Vorbis 0,7, estéreo) e põe o objeto
+`MusicaDoMenu` nas três cenas.
 
 A cena `Scenes/Level1_Test.unity` é **gerada** por `Level1Setup` (menu BackRooms > Montar Level 1
 (teste)), com o mesmo montador do Level 0 (`Level0Setup.SceneOptions`).
@@ -261,8 +273,10 @@ No editor, pelo menu **BackRooms**: Abrir Level 0, Abrir Level 1 (teste), Testar
 (fumaça), Testar Level 1 (Play), Conferir Level 1, Abrir Level 2 (teste), Testar Level 2 (Play),
 Conferir Level 2, Fotografar Level 2, Conferir colisores do Level 0, Gerar mapa 2D,
 Capturar prévia, Capturar prévia do Capitão, Móveis do Level 1 > Atualizar e fotografar,
-Exportar sons da entidade (WAV em `Logs/Sons`, para ouvir e ajustar os sons sintetizados sem
-precisar jogar).
+Testar passos do Level 2, Exportar sons (entidade e passos) (WAV em `Logs/Sons`, para ouvir e
+ajustar os sons sintetizados sem precisar jogar: os da entidade, `passo_carpete_*`,
+`passo_azulejo_*`, `passo_agua_rasa_*`, `nado_bracada_*`, `debaixo_dagua_*` e `espirro_entrada_*`;
+em lote, `EntitySounds.BatchExport`).
 
 Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo projeto):
 
@@ -294,8 +308,10 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   restos da água, e a porta do Level 0 leva ao Level 1 já hospedando. Dois editores:
   `LevelSelectTest.BatchHostLevel1` + `BatchJoinFromLevel0` (o cliente tem de ser levado ao
   Level 1 e montar a mesma mobília) e `BatchHostDoor` + `BatchJoinDoor` (o cliente abre a porta
-  e espera; quando o host abre, os dois passam para o Level 1 e o cliente reconecta). Restaura o
-  progresso salvo; linha `[BackRooms] Teste do seletor de fase`.
+  e espera; quando o host abre, os dois passam para o Level 1 e o cliente reconecta). Confere
+  também a música do menu (`MenuMusic`): um dono só depois de cada troca, nunca recomeça, calada
+  em jogo e de volta (do mesmo ponto) no menu. Restaura o progresso salvo; linha
+  `[BackRooms] Teste do seletor de fase`.
 - `CharacterModels.BatchDumpSkeletons` — grava os esqueletos dos inimigos para o Blender
   (`Tools/Blender/personagens/esqueleto_*.json`).
 - `Level0Preview.BatchCaptureHud` — só o painel da filmadora, em 1920 x 1080, de frente para a
@@ -327,6 +343,12 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   a nadar, atravessa à tona, afunda até o fundo (2 m), sobe e sai subindo a escada; do fundo, sem
   Espaço, anda até a escada e sobe os degraus andando; por fim, o anoitecer.
 - `Level0ColliderCheck.BatchRunLevel2` — colisores contra a malha visível na cena das Piscinas.
+- `Level2SoundTest.BatchRun` (`-seed N`) — passos por superfície nas Piscinas, em Play com teclado
+  virtual: anda no azulejo seco e na água rasa, cai de 1,2 m na água (um espirro só), nada à tona
+  num poço e numa célula funda comum, mergulha e desce uma escada do seco para a água andando (sem
+  espirro) e correndo (um espirro); em cada lugar confere a superfície escolhida (`Footsteps.Surface`) e que o som
+  dela tocou, e nenhum passo de carpete. Sai com 0 se passou, 3 se falhou; linha
+  `[BackRooms] Teste de som do Level 2`. Ouvir de verdade é com gente: exporte os WAV (acima).
 - `Level1Models.BatchUpdateAndCapture` — cria os materiais dos lotes, reimporta os modelos,
   escreve as medidas no log e salva fotos em `Logs/Previews/moveis_*.png` (todos, ou só os de
   `-moveis Nome1,Nome2`), além da vitrine de jantar, da loja e da sala dos sofás.
@@ -343,7 +365,8 @@ em rede, depois do teste com dois editores; mudança no Level 2 (ou na água, no
 `LevelBuilder`, no `PoolGenerator` ou no `Level2Setup`), depois de `Level2Setup.BatchCheck`,
 `Level2PlayTest.BatchRun`, `Level0ColliderCheck.BatchRunLevel2` e `LevelSelectTest.BatchRun` (a
 porta do Level 1 leva às Piscinas); mudança no Level 1 (ou no `LevelBuilder`, no gerador
-ou nos modelos), depois de `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`. Diga no resumo o
+ou nos modelos), depois de `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`; mudança nos
+passos (`Footsteps`), depois do teste de fumaça e de `Level2SoundTest.BatchRun`. Diga no resumo o
 que foi testado por máquina e o que não foi testado à mão.
 
 ## Git
@@ -359,7 +382,7 @@ que foi testado por máquina e o que não foi testado à mão.
   fique com qualquer lado e rode o gerador de novo. `Docs/historico.md` junta as duas entradas
   sozinho (`merge=union` no `.gitattributes`).
 - O PR diz o que passou por máquina e o que não foi testado à mão.
-- **PNG e FBX vão direto no Git** (`binary` no `.gitattributes`): a conta está sem orçamento de
-  LFS. Os outros binários continuam em LFS; evite adicionar áudio, `.blend` ou vídeo sem
-  combinar antes.
+- **PNG, FBX e MP3 vão direto no Git** (`binary` no `.gitattributes`): a conta está sem orçamento
+  de LFS. O único MP3 é a música do menu (~1,7 MB). Os outros binários continuam em LFS; evite
+  adicionar áudio, `.blend` ou vídeo sem combinar antes.
 - Todo arquivo novo em `Assets/` vai com o `.meta` correspondente.

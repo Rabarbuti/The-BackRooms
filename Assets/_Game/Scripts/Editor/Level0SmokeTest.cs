@@ -1123,6 +1123,14 @@ namespace BackRooms.EditorTools
             {
                 ok &= moved > 0.5f && _steps > 0 && inkPoints >= 5;
                 report += $" andou={moved:F2}m passos={_steps} pico_do_clipe_de_passo={stepPeak:F2} riscos={strokes} pontos={inkPoints}";
+
+                // No Level 0 (sem água) todo passo é no carpete, com o som de sempre.
+                var feet = _local.GetComponent<Footsteps>();
+                bool carpet = feet != null && feet.Surface == StepSurface.Carpet && feet.PlayedOn(StepSurface.Carpet) > 0 &&
+                              feet.PlayedOn(StepSurface.Tile) + feet.PlayedOn(StepSurface.Wade) + feet.PlayedOn(StepSurface.Swim) +
+                              feet.PlayedOn(StepSurface.Underwater) == 0 && feet.Splashes == 0;
+                ok &= carpet;
+                report += $" passos_no_carpete={carpet} [sons_de_passo={(feet != null ? feet.PlayedOn(StepSurface.Carpet) : 0)}]";
                 if (_role == HostRole) ok &= players >= 2;
             }
 
