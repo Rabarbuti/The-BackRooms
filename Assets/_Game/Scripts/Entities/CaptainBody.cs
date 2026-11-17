@@ -87,6 +87,35 @@ namespace BackRooms.Entities
         /// <summary>Verdadeiro enquanto o corpo segura a pose porque o Capitão está congelado.</summary>
         public bool Holding { get; private set; }
 
+        [Header("Os olhos seguem (pista para separar do totem)")]
+        [Tooltip("Até onde a cabeça acompanha um jogador, em metros.")]
+        public float lookRange = 10f;
+        [Tooltip("Quanto a cabeça vira, no máximo, para o jogador, em graus.")]
+        public float lookMaxAngle = 40f;
+        [Tooltip("Quão depressa a cabeça vira (maior = mais rápido).")]
+        public float lookSpeed = 2.5f;
+
+        /// <summary>Onde a perna de pau bate no chão agora (debaixo da canela dela, no chão).</summary>
+        public Vector3 PegFloorPoint
+        {
+            get
+            {
+                Transform shin = _shin[PegLeg];
+                Vector3 at = shin != null ? shin.position : transform.position;
+                return new Vector3(at.x, transform.position.y, at.z);
+            }
+        }
+
+        /// <summary>Ângulo, no plano, entre para onde a cabeça olha e o ponto dado. Para os testes.</summary>
+        public float HeadAngleTo(Vector3 point)
+        {
+            if (_headJoint == null) return 180f;
+            Vector3 forward = _headJoint.forward, to = point - _headJoint.position;
+            forward.y = 0f;
+            to.y = 0f;
+            return Vector3.Angle(forward, to);
+        }
+
         // A perna de pau é a esquerda (índice 1; 0 é a direita, em +X).
         const int PegLeg = 1;
 
@@ -117,12 +146,15 @@ namespace BackRooms.Entities
         float _phase;
         bool _built;
         CaptainBrain _brain;
+        Quaternion _headBase = Quaternion.identity;
+        Quaternion _look = Quaternion.identity;
 
         void Awake()
         {
             Build();
             _lastPosition = transform.position;
             _brain = GetComponent<CaptainBrain>();
+            if (_headJoint != null) _headBase = _headJoint.localRotation;
         }
 
         void Update()
@@ -137,7 +169,12 @@ namespace BackRooms.Entities
             // Congelado: nada se mexe, nem a respiração. A velocidade guardada fica para a
             // retomada sair do mesmo passo.
             Holding = _brain != null && _brain.IsSpawned && _brain.Frozen;
-            if (Holding) return;
+            if (Holding)
+            {
+                // Congelado, só os olhos (a cabeça) ainda seguem quem está perto: o totem não faz isso.
+                FollowWithHead(dt);
+                return;
+            }
 
             float speed = moved.magnitude / dt;
             if (speed > 14f) speed = 0f;
@@ -153,6 +190,42 @@ namespace BackRooms.Entities
 
             float still = Mathf.Clamp01(1f - _speed / 0.3f);
             Pose(_phase, _speed, still, 0f, Time.time);
+            if (_headJoint != null) _headBase = _headJoint.localRotation;
+            FollowWithHead(dt);
+        }
+
+        // A cabeça vira devagar (até lookMaxAngle) para o jogador mais perto, a até lookRange,
+        // por cima da pose: andando ou congelado. Sem ninguém perto, volta ao lugar.
+        void FollowWithHead(float dt)
+        {
+            if (_headJoint == null) return;
+
+            Vector3 target = Vector3.zero;
+            float best = lookRange;
+            foreach (BackRooms.Net.PlayerNetwork player in BackRooms.Net.PlayerNetwork.All)
+            {
+                if (player == null || !player.IsSpawned || !player.InGame || player.playerCamera == null) continue;
+                if (player.Hiding == BackRooms.Player.HideKind.Wardrobe) continue;
+                Vector3 eye = player.playerCamera.transform.position;
+                float distance = Vector3.Distance(eye, _headJoint.position);
+                if (distance >= best) continue;
+                best = distance;
+                target = eye;
+            }
+
+            Quaternion desired = Quaternion.identity;
+            if (best < lookRange)
+            {
+                Transform parent = _headJoint.parent;
+                Vector3 to = parent.InverseTransformDirection(target - _headJoint.position).normalized;
+                Vector3 forward = _headBase * Vector3.forward;
+                Quaternion full = Quaternion.FromToRotation(forward, to);
+                float angle = Quaternion.Angle(Quaternion.identity, full);
+                desired = angle > lookMaxAngle ? Quaternion.Slerp(Quaternion.identity, full, lookMaxAngle / angle) : full;
+            }
+
+            _look = Quaternion.Slerp(_look, desired, 1f - Mathf.Exp(-lookSpeed * dt));
+            _headJoint.localRotation = _look * _headBase;
         }
 
         // ---------------------------------------------------------------- Pose

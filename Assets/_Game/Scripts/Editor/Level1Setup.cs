@@ -312,6 +312,7 @@ namespace BackRooms.EditorTools
 
             var problems = new List<string>();
             var lines = new List<string>();
+            int repeats = 0;
 
             try
             {
@@ -344,11 +345,25 @@ namespace BackRooms.EditorTools
                     string isolated = Isolated(d: builder.Data);
                     if (isolated != null) problems.Add($"seed {seed}: a barricada isolou {isolated}");
 
+                    // Conjunto repetido: as três células com a mesma mobília, no mesmo lugar dentro
+                    // de cada uma, até o giro de cada cadeira.
+                    if (props.RepeatCells.Count == 3)
+                    {
+                        string first = CellSignature(root, props.RepeatCells[0]);
+                        for (int k = 1; k < 3; k++)
+                            if (CellSignature(root, props.RepeatCells[k]) != first)
+                                problems.Add($"seed {seed}: o conjunto repetido saiu diferente na célula {props.RepeatCells[k]}");
+                        if (first.Length == 0) problems.Add($"seed {seed}: o conjunto repetido está vazio");
+                        repeats++;
+                    }
+
                     lines.Add($"seed {seed}: {count} móveis, sala dos sofás no bloco {props.SofaRoomBlock}, {blocked.Count} passagens bloqueadas, " +
                               $"{props.Barricades} barricadas, {props.Totems} totens, {props.BubbleSheets} plásticos-bolha, {props.HideSpots} esconderijos " +
                               $"({HideCount(root, BackRooms.Player.HideKind.Wardrobe)} guarda-roupas, {HideCount(root, BackRooms.Player.HideKind.Table)} mesas), " +
                               $"{props.Anomalies} anomalias, {props.ZoneSigns} placas penduradas");
                 }
+
+                lines.Add($"conjunto repetido em {repeats} de {CheckSeeds.Length} seeds");
 
                 builder.seed = CheckSeeds[0];
                 builder.Rebuild();
@@ -400,6 +415,23 @@ namespace BackRooms.EditorTools
         {
             v.y = 0f;
             return v;
+        }
+
+        // A mobília de uma célula, relativa a ela: nome, posição (mm) e giro de cada móvel cujo pé
+        // fica nela, em ordem. Duas células com a mesma assinatura têm a mesma mobília.
+        static string CellSignature(Transform root, Vector2Int cell)
+        {
+            var items = new List<string>();
+            float cx = cell.x * LevelBuilder.Cell, cz = cell.y * LevelBuilder.Cell;
+            foreach (Transform item in root)
+            {
+                Vector3 p = item.localPosition;
+                if (Mathf.FloorToInt(p.x / LevelBuilder.Cell) != cell.x || Mathf.FloorToInt(p.z / LevelBuilder.Cell) != cell.y) continue;
+                if (item.name.StartsWith("Piso") || item.name == "PlacaCurvaDireita" || item.name == "PlacaCurvaEsquerda") continue;
+                items.Add($"{item.name}:{Mathf.RoundToInt((p.x - cx) * 1000f)},{Mathf.RoundToInt(p.y * 1000f)},{Mathf.RoundToInt((p.z - cz) * 1000f)}:{Mathf.RoundToInt(item.localEulerAngles.y * 10f)}");
+            }
+            items.Sort(StringComparer.Ordinal);
+            return string.Join(";", items);
         }
 
         static int HideCount(Transform root, BackRooms.Player.HideKind kind)
@@ -571,6 +603,19 @@ namespace BackRooms.EditorTools
                     camera.transform.localRotation = Quaternion.Euler(-35f, 0f, 0f);
                     Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_totem_de_baixo.png"));
                     shots += 2;
+                }
+
+                // O conjunto repetido, visto de trás da primeira célula, ao longo das três.
+                if (props.RepeatCells.Count == 3)
+                {
+                    Vector3 a = builder.CellCenter(props.RepeatCells[0].x, props.RepeatCells[0].y);
+                    Vector3 b = builder.CellCenter(props.RepeatCells[2].x, props.RepeatCells[2].y);
+                    Vector3 along = (b - a).normalized;
+                    Vector3 eye = a - along * 1.6f;
+                    rig.transform.SetPositionAndRotation(new Vector3(eye.x, 0f, eye.z), Quaternion.LookRotation(along, Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(8f, 0f, 0f);
+                    Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_conjunto_repetido.png"));
+                    shots++;
                 }
 
                 // A primeira etiqueta vermelha, de frente, a 1,5 m.

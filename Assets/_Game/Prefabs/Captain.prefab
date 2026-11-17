@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 2852120289481340632}
   - component: {fileID: 6856387560544111922}
   - component: {fileID: 6743212971098163172}
+  - component: {fileID: 8230547609384976067}
   - component: {fileID: 3644013700829471322}
   - component: {fileID: 745256700298754636}
   - component: {fileID: 1468715029361481325}
@@ -132,6 +133,9 @@ MonoBehaviour:
   - {fileID: 2100000, guid: 8429da80f07b2e648b01308925f69061, type: 2}
   - {fileID: 2100000, guid: fbfcbefad8c096647bdeb687c1231da4, type: 2}
   - {fileID: 2100000, guid: 3bbfe5d8433900045a199da9bab089fb, type: 2}
+  lookRange: 10
+  lookMaxAngle: 40
+  lookSpeed: 2.5
 --- !u!114 &6743212971098163172
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -148,6 +152,21 @@ MonoBehaviour:
   range: 26
   jingleRange: 16
   jingleVolume: 0.45
+--- !u!114 &8230547609384976067
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6309207181140427283}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 13917dfdab9b67248a1b3c2e194fcf5d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Entities.PegMarks
+  markMaterial: {fileID: 2100000, guid: da278d67aaae24a41a9edaf38766369d, type: 2}
+  maxMarks: 60
+  size: 0.09
 --- !u!114 &3644013700829471322
 MonoBehaviour:
   m_ObjectHideFlags: 0

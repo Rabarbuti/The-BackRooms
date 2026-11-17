@@ -18,9 +18,8 @@ com os lotes de 17/11/2026; o sorteio é um carro num beco sem saída), com plac
 nome da zona e anomalias longe do início (mesa no teto, móvel atravessando a parede, guarda-roupa
 de frente para a parede, batente solto). A mobília sai igual no host e no cliente (conferido em dois
 editores).
-**Falta:** jogar à mão e ajustar; o conjunto repetido em três salas e a cama no corredor
-(anomalias); a porta da doca (a saída continua a corta-fogo com EXIT); o teto a 3,4 m não muda a
-iluminação das luminárias.
+**Falta:** jogar à mão e ajustar. A saída continua a porta corta-fogo com EXIT, não a porta da
+doca da seção 6 (decidido em 17/11/2026). O teto a 3,4 m não muda a iluminação das luminárias.
 
 ---
 
@@ -313,9 +312,10 @@ comprida no amarelo das salas; de perto, o que fica é o **branco dos olhos** e 
 ### 5.4 Regras
 
 Todas as regras estão feitas (`CaptainBrain`, que herda do `EntityBrain`; testes em
-`Level1CaptainTest` e `Level1ShelterTest`). Da regra 5, as pistas "olhos seguem" e "perna de pau
-marca o carpete" ainda não existem: separam-se o totem e o Capitão pela base preta, pela placa de
-OFERTA e pelo brilho de fibra de vidro. Os números ficam no prefab (`CaptainPreview.CreatePrefab`) e no `CaptainBrain`.
+`Level1CaptainTest` e `Level1ShelterTest`). Da regra 5, os "olhos seguem" são a cabeça dele, que
+vira devagar para o jogador mais perto (até 40°, a até 10 m, mesmo congelado; os olhos fazem
+parte da malha do rosto), e a perna de pau marca o carpete com decalques redondos a cada passo
+dela (`PegMarks`, as 60 mais novas ficam). O totem não vira a cabeça nem anda. Os números ficam no prefab (`CaptainPreview.CreatePrefab`) e no `CaptainBrain`.
 
 1. **Ouve como a entidade do Level 0** — mesmo cálculo de barulho do `EntityBrain`, com o
    plástico-bolha valendo como corrida (quando existir). Também vê como ela: 22 m à frente, olho a
@@ -388,7 +388,7 @@ o Capitão.
 | 6 | Totens e troca no apagão | 3, 5 (**feito**: `Totem`, `CaptainBrain.TrySwap`) |
 | 7 | Guarda-roupa como `HidingSpot`, plástico-bolha | 3 (**feito**: `HideSpot` com a tecla E, também a mesa; `BubbleWrap`) |
 | 8 | Etiquetas de LIQUIDAÇÃO, teclado, porta da doca | 3 (**feito**: `ExitLock`; a porta continua a corta-fogo com EXIT) |
-| 9 | Anomalias, barricadas, carro, vitrine de verão | 3 (**feito**: barricadas, sorteio com o carro, zona de verão, quatro das seis anomalias) |
+| 9 | Anomalias, barricadas, carro, vitrine de verão | 3 (**feito**: barricadas, sorteio com o carro, zona de verão e as anomalias; só a mesa no teto e o batente vieram como variação, o resto como o projeto descreve) |
 | 10 | Som: jingle desafinado, perna de pau, música de loja | 5 (**feito**: `CaptainAudio`, `ShopMusic`; piso por zona com passos próprios) |
 
 Os passos 2 e 4 não dependem um do outro e podem andar em paralelo.

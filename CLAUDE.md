@@ -281,7 +281,8 @@ são postos, o Capitão e as regras dele, objetivo, som, ordem de construção e
   carro num beco sem saída fora do caminho, que vira obstáculo como uma barricada). Placas de
   papelão penduradas com o nome da zona e PROIBIDO ENTRAR nas barricadas. Longe do início,
   anomalias: mesa de cabeça para baixo no teto, móvel atravessando a parede pela metade,
-  guarda-roupa de frente para a parede, batente de porta solto.
+  guarda-roupa de frente para a parede, batente de porta solto, cama no corredor e um conjunto
+  repetido em três salas seguidas (a mesma mobília, idêntica até a cadeira torta).
 - **O Capitão na fase** (`CaptainBrain`, regras em `level1-mostruario.md`, seção 5.4): aparece pelo
   `EntityDirector` quando alguém chega a 8 células da sala inicial; ouve e vê como a entidade;
   congela quando algum jogador o tem na tela, sem parede no meio, **e** ele está iluminado
@@ -289,7 +290,9 @@ são postos, o Capitão e as regras dele, objetivo, som, ordem de construção e
   crescer e, aos 9 s, deixa de valer como vigia; manca a 1,7 m/s e, no apagão, caçando, dá
   arrancadas de 5,2 m/s; pega como a entidade (NO SIGNAL). Som: "TOC… arrasta" da perna de pau e,
   perto, o jingle da loja numa caixinha (mais alto, rápido e desafinado de perto; mudo congelado).
-  No apagão, com chance de 50%, troca de lugar com um totem que ninguém vê.
+  No apagão, com chance de 50%, troca de lugar com um totem que ninguém vê. As pistas para
+  separá-lo de um totem: a cabeça vira devagar para o jogador mais perto (até 40°, mesmo
+  congelado) e a perna de pau deixa marcas redondas no chão (`PegMarks`, decalques).
 - **Abrigo e perigo** (`PropLayer`, pela seed): guarda-roupa e mesa de jantar de esconder (mira + E;
   na mesa, só agachado; o guarda-roupa esconde sempre, a mesa só fora do cone do inimigo, até 6 m;
   dentro, a tela vira a fresta da porta e o jogador não vigia o Capitão); totens (6 a 10: o corpo
@@ -309,10 +312,8 @@ são postos, o Capitão e as regras dele, objetivo, som, ordem de construção e
   publicar, ver a decisão em aberto 4 de `level1-mostruario.md` (direitos autorais).
 
 **Próximos passos:** jogar à mão (sozinho e em grupo) e ajustar os números (velocidades do
-Capitão, quantidade de barricadas, totens e plástico-bolha, distância das etiquetas). Do projeto
-ainda não existem: o conjunto repetido em três salas seguidas e a cama no corredor (anomalias), a
-porta da doca no lugar da porta corta-fogo e as pistas "olhos seguem" e "perna de pau marca o
-carpete" do Capitão.
+Capitão, quantidade de barricadas, totens e plástico-bolha, distância das etiquetas). A saída
+continua a porta corta-fogo com EXIT (decidido em 17/11/2026: sem a porta da doca do projeto).
 
 **Modelos novos:** escreva um lote em `Tools/Blender/lotes/` (ou peça a agentes, um por lote,
 com o modelo Sonnet; o roteiro do pedido está em `Docs/modelos-blender.md`, seção 6), rode-o
