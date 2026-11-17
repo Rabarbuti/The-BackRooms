@@ -91,6 +91,8 @@ namespace BackRooms.EditorTools
                     props.laminateMaterial = FaseMaterial("PisoLaminado", Color.white, 0.45f, FloorTexture("PisoLaminado", PaintLaminate));
                     props.vinylMaterial = FaseMaterial("PisoVinilico", Color.white, 0.35f, FloorTexture("PisoVinilico", PaintVinyl));
                     props.shopMusic = true;
+                    // Placas penduradas com texto e anomalias longe do início.
+                    props.zoneSigns = true;
                 },
             });
             Debug.Log($"[BackRooms] Level 1 de teste montado com {models.Length} modelos: abra {ScenePath}, aperte Play e hospede (H).");
@@ -317,7 +319,8 @@ namespace BackRooms.EditorTools
 
                     lines.Add($"seed {seed}: {count} móveis, sala dos sofás no bloco {props.SofaRoomBlock}, {blocked.Count} passagens bloqueadas, " +
                               $"{props.Barricades} barricadas, {props.Totems} totens, {props.BubbleSheets} plásticos-bolha, {props.HideSpots} esconderijos " +
-                              $"({HideCount(root, BackRooms.Player.HideKind.Wardrobe)} guarda-roupas, {HideCount(root, BackRooms.Player.HideKind.Table)} mesas)");
+                              $"({HideCount(root, BackRooms.Player.HideKind.Wardrobe)} guarda-roupas, {HideCount(root, BackRooms.Player.HideKind.Table)} mesas), " +
+                              $"{props.Anomalies} anomalias, {props.ZoneSigns} placas penduradas");
                 }
 
                 builder.seed = CheckSeeds[0];

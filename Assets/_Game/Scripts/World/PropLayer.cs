@@ -68,6 +68,12 @@ namespace BackRooms.World
         [Tooltip("A música de loja baixinha, do teto, que some antes do apagão.")]
         public bool shopMusic;
 
+        [Header("Placas e anomalias (level1-mostruario.md, seções 3 e 4)")]
+        [Tooltip("Placas de papelão penduradas com o nome da zona e PROIBIDO ENTRAR nas barricadas.")]
+        public bool zoneSigns;
+        [Tooltip("Chance, nas células gastas (longe do início), de uma anomalia: mesa no teto, móvel atravessando a parede, guarda-roupa de frente para a parede, batente solto.")]
+        [Range(0f, 1f)] public float anomalyChance = 0.14f;
+
         /// <summary>Quantos móveis foram postos na última construção.</summary>
         public int Count { get; private set; }
 
@@ -85,6 +91,12 @@ namespace BackRooms.World
 
         /// <summary>Móveis em que dá para se esconder (guarda-roupas e mesas de jantar).</summary>
         public int HideSpots { get; private set; }
+
+        /// <summary>Anomalias postas na última construção.</summary>
+        public int Anomalies { get; private set; }
+
+        /// <summary>Placas penduradas com texto (zona e PROIBIDO ENTRAR).</summary>
+        public int ZoneSigns { get; private set; }
 
         /// <summary>Etiquetas vermelhas de LIQUIDAÇÃO postas (o objetivo pede 3).</summary>
         public int Tags { get; private set; }
@@ -122,7 +134,8 @@ namespace BackRooms.World
         Transform _root;
         readonly HashSet<int> _totemCells = new HashSet<int>();
         bool _barricading;
-        int _hideSpots, _sheets;
+        int _hideSpots, _sheets, _anomalies, _signs;
+        bool _anomaly;
         int _seed;
         int _count;
         int _hash;
@@ -158,6 +171,8 @@ namespace BackRooms.World
             FloorZones.Clear();
             _hideSpots = 0;
             _sheets = 0;
+            _anomalies = 0;
+            _signs = 0;
 
             _arrowFaces.Clear();
             foreach (Decoration mark in _data.Decorations)
@@ -186,6 +201,8 @@ namespace BackRooms.World
             Totems = Totem.All.Count;
             BubbleSheets = _sheets;
             HideSpots = _hideSpots;
+            Anomalies = _anomalies;
+            ZoneSigns = _signs;
             int barricades = 0;
             for (int z = 0; z < _data.Height; z++)
                 for (int x = 0; x < _data.Width; x++)
@@ -329,6 +346,20 @@ namespace BackRooms.World
             {
                 _barricading = false;
             }
+
+            // PROIBIDO ENTRAR pendurada na passagem para a primeira vizinha aberta.
+            if (zoneSigns && labelMaterial != null)
+                for (int s = 0; s < 4; s++)
+                {
+                    WallSide side = Sides[s];
+                    if (!_data.CanWalk(x, z, side, false) || !_data.Neighbor(x, z, side, out int nx, out int nz)) continue;
+                    if (_data.IsBarricade(nx, nz)) continue;
+                    Vector3 middle = origin + new Vector3(Cell * 0.5f, 0f, Cell * 0.5f);
+                    Vector3 toward = new Vector3(nx - x, 0f, nz - z);
+                    HangSign(middle + toward * (Cell * 0.5f), Mathf.Atan2(toward.x, toward.z) * Mathf.Rad2Deg, "PROIBIDO ENTRAR",
+                             new Color32(250, 246, 236, 255), new Color32(176, 28, 22, 255));
+                    break;
+                }
 
             unchecked { _hash = _hash * 31 + 977 + x * 101 + z; }
         }
@@ -546,6 +577,237 @@ namespace BackRooms.World
             var renderer = card.GetComponent<MeshRenderer>();
             renderer.sharedMaterial = material;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+
+        // ---------------------------------------------------------------- Placas e anomalias
+
+        // Placa de papelão pendurada do teto por dois fios, com o texto dos dois lados, acima da
+        // cabeça (a borda de baixo fica a ~2,7 m). Sem colisor, como as placas penduradas do Blender.
+        void HangSign(Vector3 at, float yaw, string text, Color32 ink, Color32 paper)
+        {
+            const int w = 128, h = 28;
+            var pixels = new Color32[w * h];
+            for (int i = 0; i < pixels.Length; i++) pixels[i] = paper;
+            int scale = BackRooms.UI.PixelFont.Measure(text, 2) <= w - 8 ? 2 : 1;
+            BackRooms.UI.PixelFont.Draw(pixels, w, h, (w - BackRooms.UI.PixelFont.Measure(text, scale)) / 2, (h - 7 * scale) / 2, text, scale, ink);
+            var texture = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, name = "Placa_" + text };
+            texture.SetPixels32(pixels);
+            texture.Apply(false);
+            var material = new Material(labelMaterial) { name = "Placa_" + text };
+            material.SetTexture("_BaseColorMap", texture);
+            material.SetColor("_BaseColor", Color.white);
+
+            float width = 1.3f, height = width * h / w;
+            float bottom = Mathf.Max(2.35f, _ceiling - 0.7f);
+            var root = new GameObject("PlacaZona");
+            root.transform.SetParent(_root, false);
+            root.transform.localPosition = new Vector3(at.x, bottom + height * 0.5f, at.z);
+            root.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
+
+            for (int face = 0; face < 2; face++)
+            {
+                var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                DestroyColliderOf(quad);
+                quad.transform.SetParent(root.transform, false);
+                quad.transform.localRotation = Quaternion.Euler(0f, face * 180f, 0f);
+                quad.transform.localPosition = new Vector3(0f, 0f, face == 0 ? -0.004f : 0.004f);
+                quad.transform.localScale = new Vector3(width, height, 1f);
+                var renderer = quad.GetComponent<MeshRenderer>();
+                renderer.sharedMaterial = material;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+
+            // Os dois fios até o teto.
+            float rope = _ceiling - (bottom + height);
+            for (int i = -1; i <= 1; i += 2)
+            {
+                var string_ = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                DestroyColliderOf(string_);
+                string_.transform.SetParent(root.transform, false);
+                string_.transform.localPosition = new Vector3(i * width * 0.4f, height * 0.5f + rope * 0.5f, 0f);
+                string_.transform.localScale = new Vector3(0.006f, rope, 0.006f);
+                var renderer = string_.GetComponent<MeshRenderer>();
+                renderer.sharedMaterial = material;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+
+            _signs++;
+            unchecked { _hash = _hash * 31 + Fnv(text) + Mathf.RoundToInt(at.x * 100f) * 3 + Mathf.RoundToInt(at.z * 100f); }
+        }
+
+        static void DestroyColliderOf(GameObject go)
+        {
+            Collider c = go.GetComponent<Collider>();
+            if (c == null) return;
+            if (Application.isPlaying) Destroy(c); else DestroyImmediate(c);
+        }
+
+        // Uma das anomalias da seção 4, regra 4 do projeto, numa parede ou canto livre da célula.
+        void PlaceAnomaly(int x, int z, Vector3 origin, bool[] closed, bool[] signWall, bool[] used, int[][] cornersOfSide,
+                          bool[] pillar, float gapW, float gapE, float gapS, float gapN, System.Random rng)
+        {
+            int kind = rng.Next(4);
+            bool placed = false;
+            _anomaly = true;
+            try
+            {
+                switch (kind)
+                {
+                    case 0:
+                    {
+                        // Mesa de jantar de cabeça para baixo, pregada no teto, no meio da célula.
+                        GameObject table = Get("MesaDeJantar");
+                        if (table == null) break;
+                        float height = BoundsOf(table).size.y;
+                        var center = new Rect(Cell * 0.5f - 1.2f, Cell * 0.5f - 1.2f, 2.4f, 2.4f);
+                        placed = Put("MesaDeJantar", center, new Vector2(0.5f, 0.5f), rng.Next(2) * 90f, Quaternion.Euler(0f, 0f, 180f),
+                                     origin, rng, _ceiling - height, collider: false) != null;
+                        break;
+                    }
+                    case 1:
+                    case 2:
+                    {
+                        // Numa parede livre: móvel atravessando a parede pela metade (1) ou
+                        // guarda-roupa virado para a parede (2).
+                        for (int side = 0; side < 4 && !placed; side++)
+                        {
+                            int[] corners = cornersOfSide[side];
+                            if (!closed[side] || signWall[side] || used[corners[0]] || used[corners[1]]) continue;
+                            Rect strip = WallStrip(side, pillar[corners[0]], pillar[corners[1]], gapW, gapE, gapS, gapN);
+                            Vector2 anchor = WallAnchor(side, 0.5f);
+                            float yaw = WallYaw(side);
+                            if (kind == 2)
+                            {
+                                placed = Put("GuardaRoupa", strip, anchor, yaw + 180f, Quaternion.identity, origin, rng) != null;
+                            }
+                            else
+                            {
+                                placed = HalfThroughWall(x, z, side, origin, rng);
+                            }
+                            if (placed) used[corners[0]] = used[corners[1]] = true;
+                        }
+                        break;
+                    }
+                    default:
+                    {
+                        // Batente de porta solto, sem parede, num canto livre.
+                        for (int c = 0; c < 4 && !placed; c++)
+                        {
+                            if (used[c]) continue;
+                            bool west = c == 0 || c == 2, south = c == 0 || c == 1;
+                            float x0 = west ? (pillar[c] ? PillarGap : gapW) : Cell - Inner;
+                            float x1 = west ? Inner : Cell - (pillar[c] ? PillarGap : gapE);
+                            float z0 = south ? (pillar[c] ? PillarGap : gapS) : Cell - Inner;
+                            float z1 = south ? Inner : Cell - (pillar[c] ? PillarGap : gapN);
+                            placed = DoorFrame(origin, new Rect(x0, z0, x1 - x0, z1 - z0), rng);
+                            if (placed) used[c] = true;
+                        }
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                _anomaly = false;
+            }
+
+            if (placed)
+            {
+                _anomalies++;
+                unchecked { _hash = _hash * 31 + 1013 + kind * 17 + x * 7 + z; }
+            }
+        }
+
+        // Um móvel encostado com metade dentro da parede: a outra metade aparece na célula vizinha
+        // (se ela puder ter móvel). O colisor é cortado na face da parede (só a metade de cá).
+        bool HalfThroughWall(int x, int z, int side, Vector3 origin, System.Random rng)
+        {
+            if (!_data.Neighbor(x, z, Sides[side], out int nx, out int nz) || !Free(nx, nz) || _data.IsBarricade(nx, nz)) return false;
+
+            string[] choices = { "Sofa", "Estante", "Comoda", "SofaMarromListrado" };
+            string name = choices[rng.Next(choices.Length)];
+            GameObject model = Get(name);
+            if (model == null) return false;
+
+            Bounds local = BoundsOf(model);
+            LevelBuilder.WallFace(x, z, Sides[side], out Vector3 face, out Vector3 normal);
+            Quaternion rotation = Quaternion.LookRotation(normal, Vector3.up) * Quaternion.Euler(0f, Jitter(rng, 3f), 0f);
+            // O meio do móvel fica na face da parede: metade de cada lado.
+            Vector3 position = face - rotation * new Vector3(local.center.x, 0f, local.center.z) + normal * (Jitter(rng, 0.05f));
+            position.y = -local.min.y;
+
+            GameObject item = Instantiate(model, _root);
+            item.name = model.name;
+            item.transform.localPosition = position;
+            item.transform.localRotation = rotation;
+
+            // Colisor só da metade de cá (da face da parede para a frente).
+            var box = item.AddComponent<BoxCollider>();
+            float half = local.size.z * 0.5f;
+            box.center = new Vector3(local.center.x, local.center.y, local.center.z + half * 0.5f);
+            box.size = new Vector3(local.size.x, local.size.y, half);
+
+            if (BlocksLane(position, Rotated(new Bounds(box.center, box.size), rotation)))
+            {
+                if (Application.isPlaying) Destroy(item); else DestroyImmediate(item);
+                return false;
+            }
+
+            if (local.size.y < ShadowMinHeight)
+                foreach (Renderer part in item.GetComponentsInChildren<Renderer>())
+                    part.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+            _count++;
+            unchecked
+            {
+                _hash = _hash * 31 + Fnv(name);
+                _hash = _hash * 31 + Mathf.RoundToInt(position.x * 1000f);
+                _hash = _hash * 31 + Mathf.RoundToInt(position.z * 1000f);
+            }
+            return true;
+        }
+
+        // Batente de porta de madeira em pé, sozinho: dois montantes e a travessa, vão de 0,9 x 2,1 m.
+        bool DoorFrame(Vector3 origin, Rect region, System.Random rng)
+        {
+            if (labelMaterial == null) return false;
+            const float opening = 0.9f, tall = 2.1f, bar = 0.1f, deep = 0.15f;
+            float width = opening + bar * 2f;
+            Vector2 toCenter = new Vector2(Cell * 0.5f, Cell * 0.5f) - region.center;
+            float yaw = Mathf.Abs(toCenter.x) > Mathf.Abs(toCenter.y) ? 0f : 90f;
+            Quaternion rotation = Quaternion.Euler(0f, yaw + Jitter(rng, 10f), 0f);
+            var local = new Bounds(new Vector3(0f, (tall + bar) * 0.5f, 0f), new Vector3(width, tall + bar, deep));
+            Bounds rb = Rotated(local, rotation);
+            if (region.width < rb.size.x || region.height < rb.size.z) return false;
+
+            Vector3 position = origin + new Vector3(region.center.x, 0f, region.center.y);
+            if (BlocksLane(position, rb)) return false;
+
+            var root = new GameObject("BatenteSolto");
+            root.transform.SetParent(_root, false);
+            root.transform.localPosition = position;
+            root.transform.localRotation = rotation;
+            var wood = new Material(labelMaterial) { name = "Batente" };
+            wood.SetColor("_BaseColor", new Color(0.62f, 0.55f, 0.42f));
+            wood.SetTexture("_BaseColorMap", null);
+
+            void Piece(Vector3 center, Vector3 size)
+            {
+                var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                cube.transform.SetParent(root.transform, false);
+                cube.transform.localPosition = center;
+                cube.transform.localScale = size;
+                cube.GetComponent<MeshRenderer>().sharedMaterial = wood;
+            }
+
+            // Colisor e malha juntos: cada peça é um cubo com o próprio colisor.
+            Piece(new Vector3(-(opening + bar) * 0.5f, tall * 0.5f, 0f), new Vector3(bar, tall, deep));
+            Piece(new Vector3((opening + bar) * 0.5f, tall * 0.5f, 0f), new Vector3(bar, tall, deep));
+            Piece(new Vector3(0f, tall + bar * 0.5f, 0f), new Vector3(width, bar, deep));
+
+            _count++;
+            unchecked { _hash = _hash * 31 + Fnv("BatenteSolto") + Mathf.RoundToInt(position.x * 1000f) * 3 + Mathf.RoundToInt(position.z * 1000f); }
+            return true;
         }
 
         // ---------------------------------------------------------------- Piso
@@ -768,6 +1030,24 @@ namespace BackRooms.World
                 System.Random wrapRng = Rng(241, x, z);
                 double wrapChance = theme == Theme.Estoque ? 0.35 : theme == Theme.Vazio ? 0.0 : 0.06 * wear;
                 if (wrapRng.NextDouble() < wrapChance) PlaceBubbleWrap(origin, wrapRng);
+            }
+
+            // Anomalia: longe do início, de vez em quando, numa parede ou num canto que sobrou.
+            if (anomalyChance > 0f && wear >= 0.55f)
+            {
+                System.Random oddRng = Rng(263, x, z);
+                if (oddRng.NextDouble() < anomalyChance)
+                    PlaceAnomaly(x, z, origin, closed, signWall, used, cornersOfSide, pillar, gapW, gapE, gapS, gapN, oddRng);
+            }
+
+            // Placa da zona: uma por bloco de 2 x 2, pendurada no meio da primeira célula dele.
+            if (zoneSigns && labelMaterial != null && x % 2 == 0 && z % 2 == 0)
+            {
+                string zone = theme == Theme.Jantar ? "SALA DE JANTAR" : theme == Theme.Estar ? "SALA DE ESTAR" : theme == Theme.Estoque ? "ESTOQUE" : null;
+                System.Random signRng = Rng(269, x, z);
+                if (zone != null && signRng.NextDouble() < 0.7)
+                    HangSign(origin + new Vector3(Cell * 0.5f, 0f, Cell * 0.5f), signRng.Next(2) * 90f + Jitter(signRng, 8f), zone,
+                             new Color32(84, 52, 30, 255), new Color32(222, 206, 168, 255));
             }
 
             if (theme == Theme.Vazio) return;
@@ -1228,7 +1508,7 @@ namespace BackRooms.World
         void AddHideSpot(GameObject item, string name, Bounds local)
         {
             bool upright = Vector3.Angle(item.transform.up, _root.up) < 5f;
-            if (!upright) return;
+            if (!upright || _anomaly) return;
 
             HideSpot spot;
             if (name == "GuardaRoupa")
