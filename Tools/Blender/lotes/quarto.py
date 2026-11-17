@@ -34,8 +34,8 @@ PALETA = {
 # --------------------------------------------------------------------------- Colcha
 # Espaço do móvel: X para a direita, -Y é a frente, Z para cima, origem no chão no meio.
 
-def colcha(p, material, hw, y_foot, y_head, top, d_max, seed, thick=0.022, r=0.045, k=0.14,
-           amp=0.014, amp_fold=0.016, n_center=11, n_len=12):
+def colcha(p, material, hw, y_foot, y_head, top, d_max, seed, thick=0.022, r=0.045, k=0.09,
+           amp=0.035, amp_fold=0.026, n_center=11, n_len=12):
     """Colcha meio amarrotada jogada sobre o colchão: uma placa grossa (duas camadas fechadas
     pela borda) que cobre o topo, dobra na quina com raio r e cai d_max (medido pelo pano) nas
     duas laterais e no pé. hw e y_foot são onde a dobra começa; top é a face de cima do pano.
@@ -52,7 +52,7 @@ def colcha(p, material, hw, y_foot, y_head, top, d_max, seed, thick=0.022, r=0.0
     waves = []
     for _ in range(5):
         a = rng.uniform(0, math.pi)
-        waves.append((math.cos(a), math.sin(a), rng.uniform(4.0, 10.0), rng.uniform(0, 2 * math.pi),
+        waves.append((math.cos(a), math.sin(a), rng.uniform(6.0, 13.0), rng.uniform(0, 2 * math.pi),
                       rng.uniform(0.5, 1.0)))
     folds = [(rng.uniform(9.0, 15.0), rng.uniform(0, 2 * math.pi)) for _ in range(2)]
     total = sum(w[4] for w in waves)
@@ -252,7 +252,7 @@ def tapete(name="Tapete", seed=21):
     for sx in (-1, 1):
         for i in range(n):
             y = -body_d / 2 + 0.04 + (body_d - 0.08) * i / (n - 1)
-            ln = rng.uniform(0.042, 0.05)
+            ln = rng.uniform(0.032, 0.04)
             p.box((sx * (body_w / 2 + ln / 2 - 0.008), y, 0.0015), (ln + 0.016, 0.012, 0.003),
                   "Quarto_Franja", bevel=0.0, rot=(0, 0, rng.uniform(-7, 7)))
     return p.to_object()
