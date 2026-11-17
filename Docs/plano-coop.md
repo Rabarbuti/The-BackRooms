@@ -9,6 +9,8 @@ Como ler os documentos do projeto:
   teste. Só quando precisar entender uma decisão antiga.
 - **`level1-mostruario.md`** — projeto da segunda fase (a loja de móveis copiada, cheia de
   objetos) e do inimigo dela, o Capitão. Existe uma versão de teste jogável e o corpo do Capitão.
+- **`plano-de-acao.md`** — o que fazer a seguir, em que ordem, com os testes de cada etapa e as
+  decisões em aberto.
 - **`mecanicas.md`** — o que se faz em cada fase, em linguagem de jogador (o que existe, o que está
   planejado) e ideias novas ainda não decididas (`P0.1`, `P1.2`...).
 - **`modelos-blender.md`** — como os modelos são feitos no Blender por script e entram no Unity,
