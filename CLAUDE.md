@@ -87,7 +87,9 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
 - `Docs/` — `plano-coop.md` (estado atual e plano do jogo, arquitetura de rede; ler antes de
   mexer em rede ou em geração de fase), `historico.md` (registro cronológico de cada rodada),
   `level1-mostruario.md` (projeto do Level 1 e do Capitão), `level2-piscinas.md` (projeto do Level 2, as
-  Poolrooms: referências, salas, luz e texturas; prompts em `level2-prompts.md`), `modelos-blender.md` (modelos do
+  Poolrooms: referências, salas, luz e texturas; prompts em `level2-prompts.md`), `mecanicas.md` (as
+  mecânicas de cada fase em linguagem de jogador, do que existe ao planejado, e ideias novas não decididas,
+  `P0.1`, `P1.2`...), `modelos-blender.md` (modelos do
   Blender ao Unity e como dividir lotes entre agentes). Os outros são referência de design.
 
 ## Teclas

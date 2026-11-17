@@ -375,3 +375,6 @@ Os passos 2 e 4 não dependem um do outro e podem andar em paralelo.
    filme *Backrooms* (2026), a pedido. Para jogar entre amigos não há problema; antes de publicar
    (Steam, decisão 5 do plano), vale afastar o desenho — trocar cores da roupa, o rosto e o
    chapéu — para ele ser claramente nosso.
+5. **Ideias novas** para esta fase, ainda não decididas (a loja que se rearruma, sala de
+   segurança com monitores, alto-falante da loja, empurrar móveis para barricar):
+   `mecanicas.md`, seção 3, propostas `P1.1` a `P1.4`.

@@ -9,6 +9,8 @@ Como ler os documentos do projeto:
   teste. Só quando precisar entender uma decisão antiga.
 - **`level1-mostruario.md`** — projeto da segunda fase (a loja de móveis copiada, cheia de
   objetos) e do inimigo dela, o Capitão. Existe uma versão de teste jogável e o corpo do Capitão.
+- **`mecanicas.md`** — o que se faz em cada fase, em linguagem de jogador (o que existe, o que está
+  planejado) e ideias novas ainda não decididas (`P0.1`, `P1.2`...).
 - **`modelos-blender.md`** — como os modelos são feitos no Blender por script e entram no Unity,
   e como dividir lotes de modelos entre agentes.
 - `contexto-backrooms.md`, `prompt-fases-visual-fisica.md`, `referencia-your-happy-place.md` —
@@ -148,6 +150,8 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
 - **Itens:** pegar a caneta no cenário, tinta que acaba, borracha, pilhas, walkie-talkie, Almond
   Water. Mão em primeira pessoa só existe para a caneta.
 - **Entidade:** aproveitar o apagão, reagir à lanterna, mais de uma, vigiar esconderijos.
+- **Ideias ainda não decididas** para as três fases (um componente de objetivo comum, a entidade
+  que imita passos, o labirinto que muda no apagão, entre outras): `mecanicas.md`.
 - **Buracos:** som de queda, faixa que quebra ou balança.
 - **Opções:** gráficos, resolução e pasta da gravação.
 - **Mais níveis.** O segundo está projetado em `level1-mostruario.md`. Existe uma versão de
