@@ -38,11 +38,37 @@ namespace BackRooms.World
         [Tooltip("Chance de uma parede fechada receber um móvel encostado.")]
         [Range(0f, 1f)] public float wallChance = 0.8f;
 
+        [Header("Abrigo e perigo (level1-mostruario.md, seções 4 e 5.4)")]
+        [Tooltip("Parte das células que vira barricada (entupida do chão ao teto). Nunca isola nada.")]
+        [Range(0f, 0.1f)] public float barricadeShare = 0.025f;
+        [Tooltip("Totens do pirata no mapa: entre o mínimo e o máximo, pela seed.")]
+        public int totemsMin = 6;
+        public int totemsMax = 10;
+        [Tooltip("O modelo do Capitão (Art/Personagens/Capitao), assado como estátua nos totens.")]
+        public TextAsset totemModel;
+        public Material[] totemMaterials;
+        [Tooltip("Base preta de fibra de vidro do totem.")]
+        public Material totemBaseMaterial;
+        [Tooltip("Plástico-bolha no chão. Sem material, não há plástico-bolha.")]
+        public Material bubbleWrapMaterial;
+
         /// <summary>Quantos móveis foram postos na última construção.</summary>
         public int Count { get; private set; }
 
         /// <summary>Resumo do que foi posto (nome, posição, giro): igual em máquinas com a mesma seed.</summary>
         public int Hash { get; private set; }
+
+        /// <summary>Células que viraram barricada na última construção.</summary>
+        public int Barricades { get; private set; }
+
+        /// <summary>Totens postos na última construção.</summary>
+        public int Totems { get; private set; }
+
+        /// <summary>Folhas de plástico-bolha postas na última construção.</summary>
+        public int BubbleSheets { get; private set; }
+
+        /// <summary>Móveis em que dá para se esconder (guarda-roupas e mesas de jantar).</summary>
+        public int HideSpots { get; private set; }
 
         /// <summary>Bloco (de 2 x 2 células) que virou a sala dos sofás; (-1, -1) se nenhum coube.</summary>
         public Vector2Int SofaRoomBlock { get; private set; } = new Vector2Int(-1, -1);
@@ -72,6 +98,9 @@ namespace BackRooms.World
         LevelData _data;
         float _ceiling = LevelBuilder.DefaultWallHeight;
         Transform _root;
+        readonly HashSet<int> _totemCells = new HashSet<int>();
+        bool _barricading;
+        int _hideSpots, _sheets;
         int _seed;
         int _count;
         int _hash;
@@ -98,6 +127,15 @@ namespace BackRooms.World
 
             SofaRoomBlock = ChooseSofaBlock();
 
+            // Antes de qualquer móvel: as células entupidas (o LevelNav do inimigo já as evita) e
+            // onde ficam os totens. Cada etapa tem a própria sequência da seed.
+            ChooseBarricades();
+            ChooseTotemCells();
+            Totem.Clear();
+            BubbleWrap.Clear();
+            _hideSpots = 0;
+            _sheets = 0;
+
             _arrowFaces.Clear();
             foreach (Decoration mark in _data.Decorations)
                 if (mark.Kind == DecorationKind.Arrow) _arrowFaces.Add((mark.X, mark.Z, mark.Side));
@@ -107,8 +145,295 @@ namespace BackRooms.World
                 for (int x = 0; x < _data.Width; x++)
                     PlaceCell(x, z);
 
+            // A tecla E dos esconderijos e o estalo do plástico-bolha: um de cada por fase, só em jogo.
+            if (Application.isPlaying)
+            {
+                if (_hideSpots > 0) _root.gameObject.AddComponent<HideSpotInput>();
+                if (_sheets > 0) _root.gameObject.AddComponent<BubbleWrap>();
+            }
+
             Count = _count;
             Hash = _hash;
+            Totems = Totem.All.Count;
+            BubbleSheets = _sheets;
+            HideSpots = _hideSpots;
+            int barricades = 0;
+            for (int z = 0; z < _data.Height; z++)
+                for (int x = 0; x < _data.Width; x++)
+                    if (_data.IsBarricade(x, z)) barricades++;
+            Barricades = barricades;
+        }
+
+        // ---------------------------------------------------------------- Barricadas
+
+        // Algumas células, longe do início e fora do caminho até a saída, viram barricada. Uma
+        // de cada vez, e só se tudo o que tem piso continuar alcançável a partir da sala inicial
+        // (a mesma garantia dos buracos do Level 0: nada fica isolado).
+        void ChooseBarricades()
+        {
+            _data.Barricade = new bool[_data.Width, _data.Height];
+            if (barricadeShare <= 0f) return;
+
+            var keep = new HashSet<int>(_data.SafePathCells);
+            foreach (int cell in _data.PathCells) keep.Add(cell);
+
+            var candidates = new List<int>();
+            for (int z = 0; z < _data.Height; z++)
+            {
+                for (int x = 0; x < _data.Width; x++)
+                {
+                    if (!Free(x, z) || keep.Contains(x + z * _data.Width)) continue;
+                    if (SofaRoomBlock == new Vector2Int(x / 2, z / 2)) continue;
+                    if (LevelGenerator.WearAt(_data, x, z) < 0.25f) continue;
+                    if (NextToRoom(x, z)) continue;
+                    candidates.Add(x + z * _data.Width);
+                }
+            }
+
+            System.Random rng = Rng(211, 0, 0);
+            for (int i = candidates.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                int swap = candidates[i];
+                candidates[i] = candidates[j];
+                candidates[j] = swap;
+            }
+
+            int target = Mathf.RoundToInt(_data.Width * _data.Height * barricadeShare);
+            int made = 0;
+            foreach (int cell in candidates)
+            {
+                if (made >= target) break;
+                int x = cell % _data.Width, z = cell / _data.Width;
+                _data.Barricade[x, z] = true;
+                if (AllReachable()) made++;
+                else _data.Barricade[x, z] = false;
+            }
+        }
+
+        bool NextToRoom(int x, int z)
+        {
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int nx = x + dx, nz = z + dz;
+                    if (nx >= 0 && nz >= 0 && nx < _data.Width && nz < _data.Height && _data.InRoom(nx, nz)) return true;
+                }
+            return false;
+        }
+
+        // Toda célula com piso que não é barricada se alcança da sala inicial, sem pular buraco.
+        bool AllReachable()
+        {
+            int w = _data.Width, h = _data.Height;
+            var seen = new bool[w, h];
+            var queue = new Queue<int>();
+            queue.Enqueue(_data.SpawnX + _data.SpawnZ * w);
+            seen[_data.SpawnX, _data.SpawnZ] = true;
+
+            while (queue.Count > 0)
+            {
+                int cell = queue.Dequeue();
+                int x = cell % w, z = cell / w;
+                foreach (WallSide side in Sides)
+                {
+                    if (!_data.CanWalk(x, z, side, false)) continue;
+                    _data.Neighbor(x, z, side, out int nx, out int nz);
+                    if (seen[nx, nz] || _data.IsBarricade(nx, nz)) continue;
+                    seen[nx, nz] = true;
+                    queue.Enqueue(nx + nz * w);
+                }
+            }
+
+            for (int z = 0; z < h; z++)
+                for (int x = 0; x < w; x++)
+                    if (!_data.Pit[x, z] && !_data.IsBarricade(x, z) && !seen[x, z]) return false;
+            return true;
+        }
+
+        // Entupida do chão ao teto: móveis grandes deitados e tombados embaixo, cadeiras e caixas
+        // por cima. Um colisor só, do tamanho da célula, barra a passagem (os móveis soltos não
+        // têm colisor próprio).
+        void FillBarricade(int x, int z)
+        {
+            System.Random rng = Rng(223, x, z);
+            var origin = new Vector3(x * Cell, 0f, z * Cell);
+
+            var block = new GameObject("Barricada");
+            block.transform.SetParent(_root, false);
+            block.transform.localPosition = origin + new Vector3(Cell * 0.5f, _ceiling * 0.5f, Cell * 0.5f);
+            var box = block.AddComponent<BoxCollider>();
+            box.size = new Vector3(Cell - 0.24f, _ceiling, Cell - 0.24f);
+
+            _barricading = true;
+            try
+            {
+                string[] heavy = { "Sofa", "SofaMarromListrado", "Estante", "EstanteDeAco", "PilhaDeCaixas", "Comoda", "GuardaRoupa" };
+                string[] light = { "Cadeira", "CadeiraEncostoRipas", "CadeiraDobravel", "CaixaDePapelao", "Poltrona", "CilindroAzul" };
+
+                // Embaixo: um móvel grande em cada quarto da célula, deitado ou tombado, cobrindo
+                // as quatro passagens.
+                for (int q = 0; q < 4; q++)
+                {
+                    float qx = (q % 2 == 0 ? 0.28f : 0.72f) * Cell, qz = (q < 2 ? 0.28f : 0.72f) * Cell;
+                    var at = new Vector3(origin.x + qx + Jitter(rng, 0.25f), 0f, origin.z + qz + Jitter(rng, 0.25f));
+                    Quaternion tip = rng.NextDouble() < 0.5 ? Quaternion.Euler(90f, 0f, 0f) : Quaternion.Euler(0f, 0f, rng.NextDouble() < 0.5 ? 90f : -90f);
+                    PutAt(heavy[rng.Next(heavy.Length)], at, rng.Next(4) * 90f + Jitter(rng, 20f), rng.NextDouble() < 0.6 ? tip : Quaternion.identity, rng, 0f);
+                }
+
+                // Por cima, até perto do teto: cadeiras e caixas jogadas umas sobre as outras.
+                for (int column = 0; column < 5; column++)
+                {
+                    float cx = origin.x + Cell * (0.2f + 0.6f * (float)rng.NextDouble());
+                    float cz = origin.z + Cell * (0.2f + 0.6f * (float)rng.NextDouble());
+                    float y = 0.9f + 0.4f * (float)rng.NextDouble();
+                    while (y < _ceiling - 0.7f)
+                    {
+                        GameObject item = PutAt(light[rng.Next(light.Length)], new Vector3(cx + Jitter(rng, 0.3f), y, cz + Jitter(rng, 0.3f)),
+                                                Jitter(rng, 180f), Tipped(rng, 0.7f), rng, 0f);
+                        if (item == null) break;
+                        y = Mathf.Max(y + 0.35f, TopOf(item) - 0.05f);
+                    }
+                }
+            }
+            finally
+            {
+                _barricading = false;
+            }
+
+            unchecked { _hash = _hash * 31 + 977 + x * 101 + z; }
+        }
+
+        // ---------------------------------------------------------------- Totens
+
+        // Células dos totens: longe do início, fora das barricadas e da sala dos sofás, e a pelo
+        // menos 3 células uma da outra.
+        void ChooseTotemCells()
+        {
+            _totemCells.Clear();
+            if (totemModel == null || totemsMax <= 0) return;
+
+            var candidates = new List<int>();
+            for (int z = 0; z < _data.Height; z++)
+                for (int x = 0; x < _data.Width; x++)
+                {
+                    if (!Free(x, z) || _data.IsBarricade(x, z)) continue;
+                    if (SofaRoomBlock == new Vector2Int(x / 2, z / 2)) continue;
+                    if (Mathf.Abs(x - _data.SpawnX) + Mathf.Abs(z - _data.SpawnZ) < 5) continue;
+                    candidates.Add(x + z * _data.Width);
+                }
+
+            System.Random rng = Rng(233, 0, 0);
+            int want = totemsMin + rng.Next(Mathf.Max(1, totemsMax - totemsMin + 1));
+            while (_totemCells.Count < want && candidates.Count > 0)
+            {
+                int pick = candidates[rng.Next(candidates.Count)];
+                candidates.Remove(pick);
+                int px = pick % _data.Width, pz = pick / _data.Width;
+
+                bool apart = true;
+                foreach (int other in _totemCells)
+                    if (Mathf.Max(Mathf.Abs(other % _data.Width - px), Mathf.Abs(other / _data.Width - pz)) < 3) apart = false;
+                if (apart) _totemCells.Add(pick);
+            }
+        }
+
+        // O totem num canto da célula, virado para o meio dela: base preta, a estátua do Capitão
+        // em cima e a placa de OFERTA na frente. Um colisor só, da base à cabeça.
+        bool PlaceTotem(Rect region, Vector2 anchor, Vector3 origin, System.Random rng)
+        {
+            if (!Totem.Statue(totemModel, totemMaterials, out Mesh statue, out Material[] statueMaterials,
+                              out Vector3 statueOffset, out Quaternion statueRotation)) return false;
+
+            const float baseW = 0.9f, baseH = 0.12f, baseD = 0.6f, height = 2.95f;
+            Vector2 toCenter = new Vector2(Cell * 0.5f, Cell * 0.5f) - region.center;
+            // Virado para o eixo da célula mais à frente (sem giro diagonal: cabe em canto com pilar).
+            float yaw = Mathf.Abs(toCenter.x) > Mathf.Abs(toCenter.y) ? (toCenter.x > 0f ? 90f : 270f) : (toCenter.y > 0f ? 0f : 180f);
+            Quaternion rotation = Quaternion.Euler(0f, yaw + Jitter(rng, 6f), 0f);
+
+            var local = new Bounds(new Vector3(0f, height * 0.5f, 0f), new Vector3(baseW, height, baseD));
+            Bounds rb = Rotated(local, rotation);
+            float slackX = region.width - rb.size.x, slackZ = region.height - rb.size.z;
+            if (slackX < 0f || slackZ < 0f) return false;
+
+            var position = origin + new Vector3(region.x + slackX * anchor.x - rb.min.x, 0f, region.y + slackZ * anchor.y - rb.min.z);
+            if (BlocksLane(position, rb)) return false;
+
+            var root = new GameObject("Totem");
+            root.transform.SetParent(_root, false);
+            root.transform.localPosition = position;
+            root.transform.localRotation = rotation;
+            var box = root.AddComponent<BoxCollider>();
+            box.center = local.center;
+            box.size = local.size;
+
+            // Base preta.
+            var pedestal = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            pedestal.name = "Base";
+            if (Application.isPlaying) Destroy(pedestal.GetComponent<Collider>()); else DestroyImmediate(pedestal.GetComponent<Collider>());
+            pedestal.transform.SetParent(root.transform, false);
+            pedestal.transform.localPosition = new Vector3(0f, baseH * 0.5f, 0f);
+            pedestal.transform.localScale = new Vector3(baseW, baseH, baseD);
+            if (totemBaseMaterial != null) pedestal.GetComponent<MeshRenderer>().sharedMaterial = totemBaseMaterial;
+
+            // A estátua, em pé na base.
+            var figure = new GameObject("Estatua");
+            figure.transform.SetParent(root.transform, false);
+            figure.transform.localPosition = new Vector3(0f, baseH, 0f) + statueOffset;
+            figure.transform.localRotation = statueRotation;
+            figure.AddComponent<MeshFilter>().sharedMesh = statue;
+            figure.AddComponent<MeshRenderer>().sharedMaterials = statueMaterials;
+
+            // A placa de OFERTA encostada na frente da base.
+            GameObject sign = Get("PlacaOferta");
+            if (sign != null)
+            {
+                GameObject plate = Instantiate(sign, root.transform);
+                plate.name = "PlacaOferta";
+                Bounds sb = BoundsOf(sign);
+                plate.transform.localPosition = new Vector3(0.18f, baseH - sb.min.y, baseD * 0.5f + 0.02f - sb.min.z);
+                plate.transform.localRotation = Quaternion.Euler(-8f, Jitter(rng, 10f), 0f);
+            }
+
+            Totem.Register(root);
+            _count++;
+            unchecked
+            {
+                _hash = _hash * 31 + Fnv("Totem");
+                _hash = _hash * 31 + Mathf.RoundToInt(position.x * 1000f);
+                _hash = _hash * 31 + Mathf.RoundToInt(position.z * 1000f);
+                _hash = _hash * 31 + Mathf.RoundToInt(yaw * 10f);
+            }
+            return true;
+        }
+
+        // ---------------------------------------------------------------- Plástico-bolha
+
+        // Uma folha de 1,5 x 1,0 m no chão, atravessando a cruz livre da célula (é onde se pisa).
+        // Sem colisor: o perigo é o barulho.
+        void PlaceBubbleWrap(Vector3 origin, System.Random rng)
+        {
+            if (bubbleWrapMaterial == null) return;
+
+            bool alongX = rng.NextDouble() < 0.5;
+            float w = alongX ? 1.5f : 1.0f, d = alongX ? 1.0f : 1.5f;
+            float cx = Cell * 0.5f + Jitter(rng, 0.5f), cz = Cell * 0.5f + Jitter(rng, 0.5f);
+
+            var sheet = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            sheet.name = "PlasticoBolha";
+            if (Application.isPlaying) Destroy(sheet.GetComponent<Collider>()); else DestroyImmediate(sheet.GetComponent<Collider>());
+            sheet.transform.SetParent(_root, false);
+            sheet.transform.localPosition = origin + new Vector3(cx, 0.012f, cz);
+            sheet.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            sheet.transform.localScale = new Vector3(w, d, 1f);
+            var renderer = sheet.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = bubbleWrapMaterial;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+            Vector3 world = sheet.transform.position;
+            BubbleWrap.Add(new Rect(world.x - w * 0.5f, world.z - d * 0.5f, w, d));
+            _sheets++;
+            unchecked { _hash = _hash * 31 + 991 + Mathf.RoundToInt(cx * 100f) * 7 + Mathf.RoundToInt(cz * 100f); }
         }
 
         // ---------------------------------------------------------------- Temas
@@ -189,8 +514,15 @@ namespace BackRooms.World
         {
             if (!Free(x, z)) return;
 
+            if (_data.IsBarricade(x, z))
+            {
+                FillBarricade(x, z);
+                return;
+            }
+
             Theme theme = ThemeOf(x, z);
-            if (theme == Theme.Vazio) return;
+            bool totemHere = _totemCells.Contains(x + z * _data.Width);
+            if (theme == Theme.Vazio && !totemHere) return;
 
             System.Random rng = Rng(53, x, z);
             float wear = LevelGenerator.WearAt(_data, x, z);
@@ -238,6 +570,36 @@ namespace BackRooms.World
                     used[corners[1]] = true;
                 }
             }
+
+            // Totem: o primeiro canto livre em que ele couber. Sequência própria da seed, para
+            // não mudar a mobília das outras células.
+            if (totemHere)
+            {
+                System.Random totemRng = Rng(239, x, z);
+                for (int c = 0; c < 4; c++)
+                {
+                    if (used[c]) continue;
+                    bool west = c == 0 || c == 2, south = c == 0 || c == 1;
+                    float x0 = west ? (pillar[c] ? PillarGap : gapW) : Cell - Inner;
+                    float x1 = west ? Inner : Cell - (pillar[c] ? PillarGap : gapE);
+                    float z0 = south ? (pillar[c] ? PillarGap : gapS) : Cell - Inner;
+                    float z1 = south ? Inner : Cell - (pillar[c] ? PillarGap : gapN);
+                    var region = new Rect(x0, z0, x1 - x0, z1 - z0);
+                    if (!PlaceTotem(region, new Vector2(west ? 0.1f : 0.9f, south ? 0.1f : 0.9f), origin, totemRng)) continue;
+                    used[c] = true;
+                    break;
+                }
+            }
+
+            // Plástico-bolha: mais no estoque, às vezes perdido longe do início.
+            if (bubbleWrapMaterial != null)
+            {
+                System.Random wrapRng = Rng(241, x, z);
+                double wrapChance = theme == Theme.Estoque ? 0.35 : theme == Theme.Vazio ? 0.0 : 0.06 * wear;
+                if (wrapRng.NextDouble() < wrapChance) PlaceBubbleWrap(origin, wrapRng);
+            }
+
+            if (theme == Theme.Vazio) return;
 
             for (int c = 0; c < 4; c++)
             {
@@ -690,6 +1052,43 @@ namespace BackRooms.World
             return Spawn(model, position, rotation, local, true);
         }
 
+        // Guarda-roupa em pé e mesa de jantar em pé viram esconderijo (tecla E). A frente dos
+        // modelos é +Z: sai-se por ali, para a cruz livre da célula.
+        void AddHideSpot(GameObject item, string name, Bounds local)
+        {
+            bool upright = Vector3.Angle(item.transform.up, _root.up) < 5f;
+            if (!upright) return;
+
+            HideSpot spot;
+            if (name == "GuardaRoupa")
+            {
+                spot = item.AddComponent<HideSpot>();
+                spot.kind = BackRooms.Player.HideKind.Wardrobe;
+                spot.inside = new Vector3(local.center.x, 0f, local.center.z);
+                spot.exit = new Vector3(local.center.x, 0f, local.max.z + 1.0f);
+                spot.eye = 1.55f;
+                var doors = new List<Transform>();
+                foreach (Transform child in item.GetComponentsInChildren<Transform>())
+                    if (child.name.Contains("_Porta_")) doors.Add(child);
+                spot.doors = doors.ToArray();
+            }
+            else if (name == "MesaDeJantar")
+            {
+                spot = item.AddComponent<HideSpot>();
+                spot.kind = BackRooms.Player.HideKind.Table;
+                spot.inside = new Vector3(local.center.x, 0f, local.center.z);
+                spot.exit = new Vector3(local.center.x, 0f, local.max.z + 0.95f);
+                spot.eye = 0.45f;
+                spot.doors = new Transform[0];
+            }
+            else
+            {
+                return;
+            }
+
+            _hideSpots++;
+        }
+
         // O ponto está na mesma célula que a referência e a mais de "margin" das bordas dela?
         static bool SameCellInside(Vector3 point, Vector3 reference, float margin)
         {
@@ -704,6 +1103,10 @@ namespace BackRooms.World
             Vector3 middle = localPosition + rotation * local.center;
             int mx = Mathf.FloorToInt(middle.x / Cell), mz = Mathf.FloorToInt(middle.z / Cell);
             if (mx < 0 || mz < 0 || mx >= _data.Width || mz >= _data.Height || !Free(mx, mz)) return null;
+
+            // Dentro de uma barricada vale tudo: a cruz fica entupida de propósito e o colisor é
+            // um só, da célula inteira.
+            if (_barricading) collider = false;
 
             // Última garantia da cruz livre, para tudo que tem colisor: o que é posto por ponto
             // (cadeira diante da mesa, cadeira em cima da pilha, móvel tombado) pode passar da
@@ -721,6 +1124,8 @@ namespace BackRooms.World
                 box.center = local.center;
                 box.size = local.size;
             }
+
+            if (collider) AddHideSpot(item, model.name, local);
 
             // Só móvel alto projeta sombra (level1-mostruario.md, seção 4, regra 7): são mais de
             // mil no mapa e cada luminária guarda a sombra de tudo o que alcança.

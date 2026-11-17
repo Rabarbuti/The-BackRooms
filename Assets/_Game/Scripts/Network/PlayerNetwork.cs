@@ -40,8 +40,9 @@ namespace BackRooms.Net
         readonly NetworkVariable<bool> _crouching = new NetworkVariable<bool>(
             false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
-        readonly NetworkVariable<bool> _hidden = new NetworkVariable<bool>(
-            false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+        // Esconderijo (HideKind): nicho, guarda-roupa ou debaixo da mesa.
+        readonly NetworkVariable<byte> _hidden = new NetworkVariable<byte>(
+            0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
         readonly NetworkVariable<bool> _holding = new NetworkVariable<bool>(
             false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
@@ -72,7 +73,10 @@ namespace BackRooms.Net
         public bool Crouching => IsOwner ? controller.IsCrouching : _crouching.Value;
 
         /// <summary>Dentro de um esconderijo? Vale em qualquer máquina, como <see cref="Crouching"/>.</summary>
-        public bool Hidden => IsOwner ? controller.IsHidden : _hidden.Value;
+        public bool Hidden => Hiding != HideKind.None;
+
+        /// <summary>Que esconderijo. Vale em qualquer máquina, como <see cref="Crouching"/>.</summary>
+        public HideKind Hiding => IsOwner ? controller.Hiding : (HideKind)_hidden.Value;
 
         /// <summary>Com a mão na porta de saída, esperando os outros? Vale em qualquer máquina.</summary>
         public bool AtExit => _atExit.Value;
@@ -193,7 +197,8 @@ namespace BackRooms.Net
         {
             if (_flashlightOn.Value != flashlight.IsOn) _flashlightOn.Value = flashlight.IsOn;
             if (_crouching.Value != controller.IsCrouching) _crouching.Value = controller.IsCrouching;
-            if (_hidden.Value != controller.IsHidden) _hidden.Value = controller.IsHidden;
+            byte hiding = (byte)controller.Hiding;
+            if (_hidden.Value != hiding) _hidden.Value = hiding;
 
             bool holding = pen != null && pen.Equipped;
             if (_holding.Value != holding) _holding.Value = holding;
@@ -225,6 +230,15 @@ namespace BackRooms.Net
             cameraPivot.localRotation = Quaternion.Euler(_shownPitch, 0f, 0f);
 
             flashlight.SetOn(_flashlightOn.Value);
+
+            // Dentro de um guarda-roupa ou debaixo de uma mesa, o corpo não aparece (ficaria
+            // atravessando o móvel).
+            if (body != null)
+            {
+                HideKind hiding = (HideKind)_hidden.Value;
+                bool inside = hiding == HideKind.Wardrobe || hiding == HideKind.Table;
+                if (body.activeSelf == inside) body.SetActive(!inside);
+            }
 
             if (figure != null)
             {

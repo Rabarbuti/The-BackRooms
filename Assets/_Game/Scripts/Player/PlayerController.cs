@@ -5,6 +5,19 @@ using UnityEngine.InputSystem;
 
 namespace BackRooms.Player
 {
+    /// <summary>Onde o jogador está escondido. Vai pela rede (PlayerNetwork) e o inimigo lê.</summary>
+    public enum HideKind : byte
+    {
+        /// <summary>À vista.</summary>
+        None,
+        /// <summary>No nicho de uma parede grossa (Level 0): ninguém vê nem pega.</summary>
+        Niche,
+        /// <summary>Dentro de um guarda-roupa (Level 1): ninguém vê nem pega.</summary>
+        Wardrobe,
+        /// <summary>Debaixo de uma mesa (Level 1): some só para quem não o tem no cone de visão.</summary>
+        Table
+    }
+
     /// <summary>
     /// Movimento em primeira pessoa: andar, correr com fôlego, agachar, pular, olhar e
     /// balanço de câmera. As ações de input são criadas em código para não depender de asset.
@@ -150,6 +163,7 @@ namespace BackRooms.Player
             if (IsReturning || !enabled) return;
 
             IsCaught = true;
+            _furniture = HideKind.None;
             _fallTimer = captureRespawnDelay;
             _horizontalVelocity = Vector3.zero;
             Captures++;
@@ -186,9 +200,46 @@ namespace BackRooms.Player
         public bool CanClimb { get; private set; }
 
         /// <summary>Verdadeiro enquanto o jogador está dentro de um esconderijo.</summary>
-        public bool IsHidden => _hidingSpots > 0;
+        public bool IsHidden => Hiding != HideKind.None;
+
+        /// <summary>Que esconderijo: o móvel em que entrou ou o nicho em que está.</summary>
+        public HideKind Hiding => _furniture != HideKind.None ? _furniture : _hidingSpots > 0 ? HideKind.Niche : HideKind.None;
+
+        /// <summary>Dentro de um móvel (guarda-roupa, debaixo da mesa): parado, só olha em volta.</summary>
+        public bool InFurniture => _furniture != HideKind.None;
 
         int _hidingSpots;
+        HideKind _furniture;
+        Vector3 _furnitureExit;
+        float _furnitureEye;
+
+        /// <summary>
+        /// Entra num móvel: o corpo vai para <paramref name="inside"/>, virado para
+        /// <paramref name="yaw"/>, com o olho a <paramref name="eye"/> do chão, e fica parado até
+        /// <see cref="LeaveFurniture"/>, que o devolve a <paramref name="exit"/>.
+        /// </summary>
+        public void EnterFurniture(HideKind kind, Vector3 inside, float yaw, float eye, Vector3 exit)
+        {
+            if (IsReturning || !enabled || kind == HideKind.None || kind == HideKind.Niche) return;
+
+            _furniture = kind;
+            _furnitureExit = exit;
+            _furnitureEye = eye;
+            Teleport(inside, yaw);
+            _pitch = 0f;
+            _eyeHeight = eye;
+        }
+
+        /// <summary>Sai do móvel pela frente dele.</summary>
+        public void LeaveFurniture()
+        {
+            if (_furniture == HideKind.None) return;
+
+            _furniture = HideKind.None;
+            Teleport(_furnitureExit, transform.eulerAngles.y);
+            IsCrouching = false;
+            _eyeHeight = standingEyeHeight;
+        }
 
         public void SetHidden(bool inside)
         {
@@ -282,6 +333,20 @@ namespace BackRooms.Player
 
             UpdateCursor();
             UpdateLook(dt);
+
+            // Dentro de um móvel: parado, sem gravidade nem colisão (o corpo está dentro da caixa
+            // do móvel), só olhando em volta.
+            if (InFurniture)
+            {
+                _eyeHeight = _furnitureEye;
+                _horizontalVelocity = Vector3.zero;
+                _verticalVelocity = 0f;
+                IsSprinting = false;
+                UpdateCamera(dt);
+                UpdateBreath(dt);
+                return;
+            }
+
             UpdateCrouch(dt);
             UpdateMovement(dt);
             UpdateFall(dt);

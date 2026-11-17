@@ -75,9 +75,93 @@ namespace BackRooms.EditorTools
                 enemyPrefab = captain,
                 enemyWakeCells = 8,
                 paintedArrows = false,
-                decorate = level => level.AddComponent<PropLayer>().models = models,
+                decorate = level =>
+                {
+                    var props = level.AddComponent<PropLayer>();
+                    props.models = models;
+                    // Totens: a estátua é o próprio modelo do Capitão, assado na pose parada.
+                    props.totemModel = CharacterModels.Model("Capitao");
+                    props.totemMaterials = CharacterModels.Materials("Capitao");
+                    props.totemBaseMaterial = FaseMaterial("Totem_Base", new Color(0.035f, 0.035f, 0.04f), 0.7f, null);
+                    props.bubbleWrapMaterial = FaseMaterial("PlasticoBolha", new Color(0.86f, 0.9f, 0.93f), 0.88f, BubbleTexture());
+                },
             });
             Debug.Log($"[BackRooms] Level 1 de teste montado com {models.Length} modelos: abra {ScenePath}, aperte Play e hospede (H).");
+        }
+
+        // ---------------------------------------------------------------- Materiais da fase
+
+        // Materiais e texturas da própria fase (não dos móveis do Blender): Art/Level1/Fase.
+        // Gerados aqui a cada montagem.
+        const string FaseFolder = "Assets/_Game/Art/Level1/Fase";
+
+        static Material FaseMaterial(string name, Color color, float smoothness, Texture2D albedo)
+        {
+            if (!AssetDatabase.IsValidFolder(FaseFolder)) AssetDatabase.CreateFolder("Assets/_Game/Art/Level1", "Fase");
+            string path = FaseFolder + "/" + name + ".mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            bool created = material == null;
+            if (created) material = new Material(Shader.Find("HDRP/Lit")) { name = name };
+
+            material.SetColor("_BaseColor", color);
+            material.SetFloat("_Metallic", 0f);
+            material.SetFloat("_Smoothness", smoothness);
+            material.SetTexture("_BaseColorMap", albedo);
+            UnityEngine.Rendering.HighDefinition.HDMaterial.ValidateMaterial(material);
+
+            if (created) AssetDatabase.CreateAsset(material, path);
+            else EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        // Plástico-bolha: bolhas redondas em fileiras desencontradas, com brilho no alto de cada
+        // uma e a película entre elas mais apagada. Emenda nas bordas (o quadrado repete).
+        static Texture2D BubbleTexture()
+        {
+            string path = FaseFolder + "/PlasticoBolha.png";
+            if (!AssetDatabase.IsValidFolder(FaseFolder)) AssetDatabase.CreateFolder("Assets/_Game/Art/Level1", "Fase");
+
+            const int size = 256, rows = 8;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            float pitch = size / (float)rows;
+            float radius = pitch * 0.38f;
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float best = float.MaxValue;
+                    Vector2 offset = Vector2.zero;
+                    for (int r = -1; r <= rows; r++)
+                    {
+                        float cy = (r + 0.5f) * pitch;
+                        float shift = (r & 1) == 0 ? 0f : pitch * 0.5f;
+                        for (int c = -1; c <= rows; c++)
+                        {
+                            float cx = (c + 0.5f) * pitch + shift;
+                            var d = new Vector2(x - cx, y - cy);
+                            if (d.sqrMagnitude < best) { best = d.sqrMagnitude; offset = d; }
+                        }
+                    }
+                    float dist = Mathf.Sqrt(best) / radius;
+                    float film = 0.72f;
+                    float value = film;
+                    if (dist < 1f)
+                    {
+                        // Bolha: mais clara no meio, aro escuro na borda, brilho em cima e à esquerda.
+                        float dome = Mathf.Sqrt(Mathf.Max(0f, 1f - dist * dist));
+                        value = Mathf.Lerp(0.62f, 0.9f, dome);
+                        if (dist > 0.82f) value -= 0.12f;
+                        Vector2 glint = offset / radius - new Vector2(-0.35f, 0.35f);
+                        if (glint.magnitude < 0.22f) value = 1f;
+                    }
+                    texture.SetPixel(x, y, new Color(value * 0.96f, value, value * 1.02f, 1f));
+                }
+            }
+
+            System.IO.File.WriteAllBytes(path, texture.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(texture);
+            AssetDatabase.ImportAsset(path);
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         }
 
         static GameObject[] LoadModels()
@@ -168,7 +252,17 @@ namespace BackRooms.EditorTools
 
                     if (count < Size * Size / 2) problems.Add($"seed {seed}: só {count} móveis");
 
-                    lines.Add($"seed {seed}: {count} móveis, sala dos sofás no bloco {props.SofaRoomBlock}, {blocked.Count} passagens bloqueadas");
+                    // Abrigo e perigo: tem de haver de tudo, e as barricadas não podem isolar nada.
+                    if (props.Totems < props.totemsMin) problems.Add($"seed {seed}: só {props.Totems} totens");
+                    if (props.Barricades < 1) problems.Add($"seed {seed}: nenhuma barricada");
+                    if (props.BubbleSheets < 1) problems.Add($"seed {seed}: nenhum plástico-bolha");
+                    if (props.HideSpots < 3) problems.Add($"seed {seed}: só {props.HideSpots} esconderijos em móvel");
+                    string isolated = Isolated(d: builder.Data);
+                    if (isolated != null) problems.Add($"seed {seed}: a barricada isolou {isolated}");
+
+                    lines.Add($"seed {seed}: {count} móveis, sala dos sofás no bloco {props.SofaRoomBlock}, {blocked.Count} passagens bloqueadas, " +
+                              $"{props.Barricades} barricadas, {props.Totems} totens, {props.BubbleSheets} plásticos-bolha, {props.HideSpots} esconderijos " +
+                              $"({HideCount(root, BackRooms.Player.HideKind.Wardrobe)} guarda-roupas, {HideCount(root, BackRooms.Player.HideKind.Table)} mesas)");
                 }
 
                 builder.seed = CheckSeeds[0];
@@ -207,6 +301,40 @@ namespace BackRooms.EditorTools
 
         // Para cada par de células vizinhas sem parede entre elas, uma cápsula do tamanho do
         // jogador (0,28 m de raio) vai de um centro ao outro; bater num móvel é passagem fechada.
+        static int HideCount(Transform root, BackRooms.Player.HideKind kind)
+        {
+            int count = 0;
+            foreach (HideSpot spot in root.GetComponentsInChildren<HideSpot>())
+                if (spot.kind == kind) count++;
+            return count;
+        }
+
+        // Alguma célula com piso, fora das barricadas, ficou sem caminho até a sala inicial? Devolve
+        // a primeira, ou nulo se não.
+        static string Isolated(LevelData d)
+        {
+            var seen = new bool[d.Width, d.Height];
+            var queue = new Queue<Vector2Int>();
+            queue.Enqueue(new Vector2Int(d.SpawnX, d.SpawnZ));
+            seen[d.SpawnX, d.SpawnZ] = true;
+            WallSide[] sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
+            while (queue.Count > 0)
+            {
+                Vector2Int c = queue.Dequeue();
+                foreach (WallSide side in sides)
+                {
+                    if (!d.CanWalk(c.x, c.y, side, false) || !d.Neighbor(c.x, c.y, side, out int nx, out int nz)) continue;
+                    if (seen[nx, nz] || d.IsBarricade(nx, nz)) continue;
+                    seen[nx, nz] = true;
+                    queue.Enqueue(new Vector2Int(nx, nz));
+                }
+            }
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                    if (!d.Pit[x, z] && !d.IsBarricade(x, z) && !seen[x, z]) return $"({x},{z})";
+            return null;
+        }
+
         static List<string> BlockedPassages(LevelBuilder builder, Transform root)
         {
             Physics.SyncTransforms();
@@ -228,6 +356,8 @@ namespace BackRooms.EditorTools
         {
             if (nx >= d.Width || nz >= d.Height) return;
             if (!d.CanWalk(x, z, side, false)) return;
+            // A barricada fecha a passagem de propósito; o que se confere é que nada fica isolado.
+            if (d.IsBarricade(x, z) || d.IsBarricade(nx, nz)) return;
 
             Vector3 a = builder.CellCenter(x, z), b = builder.CellCenter(nx, nz);
             Vector3 low = Vector3.up * 0.35f, high = Vector3.up * 1.5f;
@@ -323,6 +453,62 @@ namespace BackRooms.EditorTools
                     Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, $"level1_placa_saida_{signs}.png"));
                     signs++;
                     shots++;
+                }
+
+                // Um totem (de frente e de baixo, que é como se vê um personagem alto), uma
+                // barricada, um plástico-bolha e um guarda-roupa.
+                Totem firstTotem = root.GetComponentInChildren<Totem>();
+                if (firstTotem != null)
+                {
+                    Transform t = firstTotem.transform;
+                    Vector3 eye = t.position + t.forward * 3.2f;
+                    rig.transform.SetPositionAndRotation(new Vector3(eye.x, 0f, eye.z), Quaternion.LookRotation(-t.forward, Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(-12f, 0f, 0f);
+                    Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_totem.png"));
+                    eye = t.position + t.forward * 1.4f;
+                    rig.transform.SetPositionAndRotation(new Vector3(eye.x, 0f, eye.z), Quaternion.LookRotation(-t.forward, Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(-35f, 0f, 0f);
+                    Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_totem_de_baixo.png"));
+                    shots += 2;
+                }
+
+                Transform barricade = root.Find("Barricada");
+                if (barricade != null)
+                {
+                    Vector3 at = barricade.position;
+                    foreach (WallSide side in sides)
+                    {
+                        Vector3 local = builder.transform.InverseTransformPoint(at);
+                        int bx = Mathf.FloorToInt(local.x / LevelBuilder.Cell), bz = Mathf.FloorToInt(local.z / LevelBuilder.Cell);
+                        if (!d.CanWalk(bx, bz, side, false) || !d.Neighbor(bx, bz, side, out int nx, out int nz)) continue;
+                        Vector3 eye = builder.CellCenter(nx, nz);
+                        rig.transform.SetPositionAndRotation(eye, Quaternion.LookRotation((builder.CellCenter(bx, bz) - eye).normalized, Vector3.up));
+                        camera.transform.localRotation = Quaternion.Euler(-5f, 0f, 0f);
+                        Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_barricada.png"));
+                        shots++;
+                        break;
+                    }
+                }
+
+                Transform wrap = root.Find("PlasticoBolha");
+                if (wrap != null)
+                {
+                    Vector3 eye = wrap.position + new Vector3(1.6f, 0f, 1.6f);
+                    rig.transform.SetPositionAndRotation(new Vector3(eye.x, 0f, eye.z), Quaternion.LookRotation(new Vector3(-1f, 0f, -1f), Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(40f, 0f, 0f);
+                    Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_plastico_bolha.png"));
+                    shots++;
+                }
+
+                foreach (HideSpot spot in root.GetComponentsInChildren<HideSpot>())
+                {
+                    if (spot.kind != BackRooms.Player.HideKind.Wardrobe) continue;
+                    Vector3 eye = spot.ExitWorld + spot.transform.forward * 0.8f;
+                    rig.transform.SetPositionAndRotation(new Vector3(eye.x, 0f, eye.z), Quaternion.LookRotation(-spot.transform.forward, Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(5f, 0f, 0f);
+                    Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_guarda_roupa.png"));
+                    shots++;
+                    break;
                 }
 
                 // Da porta da sala inicial para fora.

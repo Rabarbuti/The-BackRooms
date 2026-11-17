@@ -53,7 +53,7 @@ namespace BackRooms.Entities
         /// <summary>A entidade pode ficar nesta célula?</summary>
         public bool Standable(int x, int z)
         {
-            return !Data.Pit[x, z] && !Data.InRoom(x, z);
+            return !Data.Pit[x, z] && !Data.InRoom(x, z) && !Data.IsBarricade(x, z);
         }
 
         /// <summary>A entidade pode passar da célula (x, z) para a vizinha daquele lado?</summary>
