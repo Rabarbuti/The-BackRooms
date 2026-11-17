@@ -3,12 +3,15 @@
 Projeto da segunda fase. Escrito em 11/11/2026.
 
 **Já existe:** uma versão de teste jogável (`Scenes/Level1_Test.unity`, menu BackRooms > Montar
-Level 1 (teste)): a planta do Level 0 em 10 x 10 células, sem buracos, nichos nem entidade,
+Level 1 (teste)): a planta do Level 0 em 10 x 10 células, sem buracos nem nichos,
 mobiliada pela `PropLayer` com os 43 modelos do Blender, incluindo a sala dos sofás e placas
 de trânsito (PARE e STOP). No lugar das setas pintadas do Level 0, placas amarelas de curva
-(losango com a seta dobrada) pregadas na parede apontam o caminho até a saída. Também existe o corpo do Capitão (`CaptainBody`), ainda fora da fase.
-**Falta:** troca de fase a partir do Level 0, o cérebro do Capitão, totens, guarda-roupa como
-esconderijo, plástico-bolha, objetivo e som (seção 8).
+(losango com a seta dobrada) pregadas na parede apontam o caminho até a saída. A porta do Level 0
+leva até aqui. **O Capitão está na fase** (desde 17/11/2026, `CaptainBrain`): aparece quando alguém
+chega a 5 células da sala inicial, ouve, congela quando é visto e está iluminado, cansa quem o
+encara, anda em arrancadas no apagão e pega como a entidade (seção 5.4, regras 1 a 4 e 6).
+**Falta:** totens, guarda-roupa como esconderijo, plástico-bolha, barricadas, objetivo e som (o
+jingle e a música da loja; a perna de pau já soa) (seção 8).
 
 ---
 
@@ -298,17 +301,33 @@ comprida no amarelo das salas; de perto, o que fica é o **branco dos olhos** e 
 - **Não fala.** Perto, ouve-se o **jingle da loja** saindo de lugar nenhum, desafinado. Quanto
   mais perto, mais rápido e mais errado.
 
-### 5.4 Regras (a ser implementado)
+### 5.4 Regras
+
+As regras 1 a 4 e 6 estão feitas (`CaptainBrain`, que herda do `EntityBrain`; teste em
+`Level1CaptainTest`). As 5 e 7 dependem de totens, guarda-roupa e barricadas, que ainda não
+existem. Os números ficam no prefab (`CaptainPreview.CreatePrefab`) e no `CaptainBrain`.
 
 1. **Ouve como a entidade do Level 0** — mesmo cálculo de barulho do `EntityBrain`, com o
-   plástico-bolha valendo como corrida.
+   plástico-bolha valendo como corrida (quando existir). Também vê como ela: 22 m à frente, olho a
+   2,45 m.
 2. **Não se mexe enquanto é visto.** Se algum jogador o tem no campo de visão **e ele está
    iluminado** (luminária acesa ou lanterna), ele congela, duro. Pode estar no meio de um passo.
+   *Como está feito:* o host confere, a cada 0,1 s, a cabeça, o peito e o joelho dele na tela de
+   cada jogador (16:9, até 30 m, sem parede nem móvel no meio) e a luz no peito: uma luminária
+   acesa a até 6,5 m (fora do apagão) ou o facho de uma lanterna. Congelado, não anda, não vira e
+   não pega ninguém; o corpo segura a pose do instante, inclusive a respiração (`CaptainBody`
+   lê o estado, que vai pela rede).
 3. **Mas não dá para vigiar para sempre.** Encarar o Capitão pela filmadora por mais de 6 s
    enche a tela de chuvisco e derruba a sanidade (quando existir). Alguém precisa piscar —
    e é nessa hora que o grupo tem de combinar quem olha.
+   *Como está feito* (decisão D2 de `plano-de-acao.md`, sem sanidade): o tempo encarando conta
+   enquanto ele está à vista e iluminado e cai 1,5 s por segundo olhando para outro lado. Dos 6 s
+   aos 9 s o chuvisco cresce até tapar a imagem; a partir dos 9 s aquele jogador **deixa de valer
+   como vigia** e o Capitão volta a andar, se ninguém mais o olha.
 4. **Apagão é a hora dele.** No escuro, sem lanterna nele, anda livre e em arrancadas de 5,2
    m/s por 1,5 s. Fora isso manca a 1,7 m/s.
+   *Como está feito:* caçando (investigando um barulho ou perseguindo), as arrancadas se repetem
+   com 1 s mancando entre elas. Vagando, anda a 1,2 m/s; vasculhando, a 1,5.
 5. **Totens.** Há 6 a 10 estátuas de fibra de vidro do Capitão Ancoradouro espalhadas pela
    loja, do mesmo tamanho e na mesma pose dura. De longe são iguais. As pistas para separar, ensinadas por um bilhete na sala inicial:
    - o totem fica numa **base preta** e segura a placa de OFERTA;
@@ -354,13 +373,13 @@ o Capitão.
 | 1 | Corpo do Capitão + prévia em imagem | — (**feito**: `CaptainBody`, menu Capturar prévia do Capitão; fotos em `Logs/Previews/capitao_*.png`) |
 | 2 | `PropLayer` com os objetos e a cruz livre | — (**feito**, com 37 modelos do Blender) |
 | 3 | Zonas e conjuntos; hash de objetos no teste de fumaça | 2 (**feito em parte**: temas por bloco 2 x 2, sala dos sofás, hash conferido por `Level1Setup.BatchCheck`; falta conferir entre host e cliente) |
-| 4 | Troca de fase: a porta EXIT leva ao Level 1; o host envia índice da fase + seed | — |
-| 5 | Cérebro do Capitão: herda o ouvido do `EntityBrain`, regra de "visto e iluminado" | 1, 4 |
+| 4 | Troca de fase: a porta EXIT leva ao Level 1; o host envia índice da fase + seed | — (**feito**: `LevelExit`, `GameSession.OpenExit`) |
+| 5 | Cérebro do Capitão: herda o ouvido do `EntityBrain`, regra de "visto e iluminado" | 1, 4 (**feito** em 17/11/2026: `CaptainBrain`, `Level1CaptainTest`) |
 | 6 | Totens e troca no apagão | 3, 5 |
 | 7 | Guarda-roupa como `HidingSpot`, plástico-bolha | 3 |
 | 8 | Etiquetas de LIQUIDAÇÃO, teclado, porta da doca | 3 |
 | 9 | Anomalias, barricadas, carro, vitrine de verão | 3 |
-| 10 | Som: jingle desafinado, perna de pau, música de loja | 5 |
+| 10 | Som: jingle desafinado, perna de pau, música de loja | 5 (**feito em parte**: a perna de pau, "TOC… arrasta", em `CaptainAudio`) |
 
 Os passos 2 e 4 não dependem um do outro e podem andar em paralelo.
 

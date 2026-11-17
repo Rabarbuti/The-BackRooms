@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BackRooms.Entities;
 using BackRooms.Net;
 using BackRooms.World;
 using UnityEditor;
@@ -116,6 +117,9 @@ namespace BackRooms.EditorTools
             switch (_stage)
             {
                 case 0:
+                    // Este teste é do caminho e da mobília: o Capitão tem teste próprio
+                    // (Level1CaptainTest) e aqui só atrapalharia.
+                    EntityDirector.Paused = true;
                     session.fixedSeed = 1998;
                     session.Host(localOnly: true);
                     Next();
@@ -367,6 +371,7 @@ namespace BackRooms.EditorTools
 
         static void Finish(bool ok, string report)
         {
+            EntityDirector.Paused = false;
             EditorApplication.update -= Tick;
             Application.logMessageReceived -= OnLog;
             SessionState.SetBool(ActiveKey, false);

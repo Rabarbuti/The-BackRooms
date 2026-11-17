@@ -6,8 +6,8 @@ com faixas de travessia, apagões periódicos, a primeira entidade, que caça os
 barulho, gravação da tela em vídeo (F9), música na tela inicial e passos que mudam com o piso e a
 água (carpete, azulejo, água rasa, nado, debaixo d'água). Os dois inimigos (a entidade e o Capitão) são
 esculpidos no Blender e vestidos sobre juntas montadas em código (seção "Inimigos esculpidos"). A segunda fase, o **Level 1 — O Mostruário**, tem
-projeto, uma versão de teste jogável mobiliada com modelos feitos no Blender e o corpo do
-inimigo dela, o Capitão (seção "Level 1: onde parou e como continuar"). A terceira, o
+projeto, uma versão de teste jogável mobiliada com modelos feitos no Blender e o inimigo dela, o
+Capitão, que só anda quando ninguém o vê iluminado (seção "Level 1: onde parou e como continuar"). A terceira, o
 **Level 2 — As Piscinas** (as Poolrooms), tem projeto e uma versão de teste jogável: salas de
 azulejo sorteadas pelo `PoolGenerator` (não o labirinto do Level 0), água em quatro profundidades,
 luz só por claraboias e janelas, nado e fôlego; sem maré, ralo, objetivo nem inimigo ainda
@@ -57,8 +57,11 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
 - `Scripts/Entities` — a entidade do Level 0: `EntityDirector` (quando e onde aparece),
   `EntityBrain` (sentidos e decisão, só no host), `LevelNav` (caminho na grade do mapa),
   `EntityBody` (corpo de cipós e animação), `EntityHeadMesh` (cabeça esculpida como malha) e
-  `EntityAudio`. O inimigo do Level 1, o Capitão, por enquanto só corpo: `CaptainBody` (e
-  `CaptainHeadMesh`, do corpo antigo). Os corpos montam as juntas e a animação em código; a
+  `EntityAudio`. O inimigo do Level 1, o Capitão: `CaptainBrain` (herda do `EntityBrain` e muda
+  três coisas pelos ganchos `HoldStill`, `SpeedNow` e `IsLevel0Entity`: congela visto e iluminado,
+  cansa quem o encara, arrancadas no apagão), `CaptainBody` (segura a pose congelado; e
+  `CaptainHeadMesh`, do corpo antigo) e `CaptainAudio` (a perna de pau). O mesmo `EntityDirector`
+  põe um ou outro, pelo prefab. Os corpos montam as juntas e a animação em código; a
   aparência é o modelo do Blender (`model` no componente; vazio, volta o corpo antigo de peças).
 - `Scripts/Systems/LevelCatalog.cs` — as fases em ordem (`LevelCatalog`: nome e cena) e o
   progresso desta máquina (`LevelProgress`: zeradas + a próxima liberadas; tudo no modo
@@ -121,7 +124,9 @@ gerado; o `Level0Setup` só acerta a importação (Streaming, Vorbis 0,7, estér
 `MusicaDoMenu` nas três cenas.
 
 A cena `Scenes/Level1_Test.unity` é **gerada** por `Level1Setup` (menu BackRooms > Montar Level 1
-(teste)), com o mesmo montador do Level 0 (`Level0Setup.SceneOptions`).
+(teste)), com o mesmo montador do Level 0 (`Level0Setup.SceneOptions`). O prefab
+`Prefabs/Captain.prefab` também é **gerado**, por `CaptainPreview.CreatePrefab`, a cada montagem do
+Level 1.
 
 Tudo em `Art/Personagens` é **gerado**: `<Nome>.bytes`, `_Cor.png` e `_Normal.png` pelos scripts de
 `Tools/Blender/personagens` com `--exportar`, e os materiais por `CharacterModels`. Os
@@ -257,15 +262,19 @@ são postos, o Capitão e as regras dele, objetivo, som, ordem de construção e
   até a saída viram placas amarelas de curva pregadas na parede (`MountExitSigns`). Modelo novo
   só aparece na fase se entrar nas listas de algum tema (`WallItem`, `CornerItem`).
 - **43 modelos** feitos no Blender em 5 lotes (lista em `Docs/modelos-blender.md`, seção 7).
-- **O Capitão:** só o corpo (`CaptainBody.Pose(fase, velocidade, parado, boca, tempo)`), ainda
-  fora da fase. Modelo esculpido no Blender (seção "Inimigos esculpidos"): mais sujo e
+- **O Capitão na fase** (`CaptainBrain`, regras em `level1-mostruario.md`, seção 5.4): aparece pelo
+  `EntityDirector` quando alguém chega a 5 células da sala inicial; ouve e vê como a entidade;
+  congela quando algum jogador o tem na tela, sem parede no meio, **e** ele está iluminado
+  (luminária acesa a até 6,5 m ou facho de lanterna); quem o encara mais de 6 s vê o chuvisco
+  crescer e, aos 9 s, deixa de valer como vigia; manca a 1,7 m/s e, no apagão, caçando, dá
+  arrancadas de 5,2 m/s; pega como a entidade (NO SIGNAL). Som: "TOC… arrasta" da perna de pau.
+- **O corpo do Capitão** (`CaptainBody.Pose(fase, velocidade, parado, boca, tempo)`). Modelo esculpido no Blender (seção "Inimigos esculpidos"): mais sujo e
   assustador, de olhos injetados e mãos em garra; parado, estica os braços para a frente. A boca
   não abre mais com `mouth` (o modelo já tem a boca aberta). Desenho a partir de imagens do filme *Backrooms* (2026), a pedido; antes de
   publicar, ver a decisão em aberto 4 de `level1-mostruario.md` (direitos autorais).
 
 **Próximos passos** (ordem de `level1-mostruario.md`, seção 8): passagem do Level 0 para o
-Level 1 (o host envia o índice da fase junto com a seed); cérebro do Capitão (herda o ouvido do
-`EntityBrain` e congela quando visto e iluminado); totens; guarda-roupa como `HidingSpot`
+Level 1 (o host envia o índice da fase junto com a seed); totens; guarda-roupa como `HidingSpot`
 (as portas já são objetos filhos com a origem na dobradiça); plástico-bolha; etiquetas de
 LIQUIDAÇÃO, teclado e porta da doca (objetivo); som; anomalias e barricadas. Conferir a mobília
 entre host e cliente (dois editores) ainda não foi feito.
@@ -278,12 +287,13 @@ e rode `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`.
 ## Como testar
 
 No editor, pelo menu **BackRooms**: Abrir Level 0, Abrir Level 1 (teste), Testar Level 0
-(fumaça), Testar Level 1 (Play), Conferir Level 1, Abrir Level 2 (teste), Testar Level 2 (Play), Testar fuga da água funda,
+(fumaça), Testar Level 1 (Play), Testar Capitão (Level 1), Conferir Level 1, Abrir Level 2 (teste), Testar Level 2 (Play), Testar fuga da água funda,
 Conferir Level 2, Fotografar Level 2, Conferir colisores do Level 0, Gerar mapa 2D,
 Capturar prévia, Capturar prévia do Capitão, Móveis do Level 1 > Atualizar e fotografar,
 Testar passos do Level 2, Exportar sons (entidade e passos) (WAV em `Logs/Sons`, para ouvir e
 ajustar os sons sintetizados sem precisar jogar: os da entidade, `passo_carpete_*`,
-`passo_azulejo_*`, `passo_agua_rasa_*`, `nado_bracada_*`, `debaixo_dagua_*` e `espirro_entrada_*`;
+`passo_azulejo_*`, `passo_agua_rasa_*`, `nado_bracada_*`, `debaixo_dagua_*`, `espirro_entrada_*`
+e os do Capitão, `capitao_toc` e `capitao_arrasta`;
 em lote, `EntitySounds.BatchExport`).
 
 Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo projeto):
@@ -309,7 +319,15 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   a mobília montada, anda o caminho seguro inteiro até a saída sem travar e anda contra um móvel
   sem atravessá-lo. Sai com 0 se passou, 3 se falhou; linha `[BackRooms] Teste do Level 1`.
   "Encostou" se mede pela colisão que o `CharacterController` relata, não por distância: numa
-  pilha, a cadeira de cima, inclinada, barra o jogador antes da de baixo.
+  pilha, a cadeira de cima, inclinada, barra o jogador antes da de baixo. O Capitão fica pausado
+  (`EntityDirector.Paused`): ele tem teste próprio.
+- `Level1CaptainTest.BatchRun` — as regras do Capitão em Play: põe jogador e Capitão a 8–14 m com
+  visada livre, sob uma luminária boa, e confere que de costas ele anda; olhado com luz congela e
+  o corpo segura a pose; no apagão forçado, olhado sem lanterna, anda em arrancadas; com a
+  lanterna nele congela; sem lanterna, pega quem fica parado; com a luz de volta, encarado sem
+  parar, volta a andar depois de uns 9 s. Linha `[BackRooms] Teste do Capitão`. Dois editores:
+  `BatchHost` (o mesmo teste, esperando o cliente) + `BatchJoin` (na cópia; confere que o Capitão
+  aparece, anda e congela com a pose segura no cliente).
 - `LevelSelectTest.BatchRun` — seletor de fase em Play: fase bloqueada sem progresso, troca
   para o Level 1 com uma sessão só, a porta do Level 1 zera e leva ao Level 2 já hospedando,
   nada num poço, a porta do Level 2 (última fase) zera e devolve ao menu, volta ao Level 0 sem
@@ -382,7 +400,9 @@ em rede, depois do teste com dois editores; mudança no Level 2 (ou na água, no
 `Level2PlayTest.BatchRun`, `Level2EscapeTest.BatchRun` (nas seeds de conferência),
 `Level0ColliderCheck.BatchRunLevel2` e `LevelSelectTest.BatchRun` (a
 porta do Level 1 leva às Piscinas); mudança no Level 1 (ou no `LevelBuilder`, no gerador
-ou nos modelos), depois de `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`; mudança nos
+ou nos modelos), depois de `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`; mudança no
+Capitão (ou no `EntityBrain`, que ele herda), depois de `Level1CaptainTest.BatchRun` e do teste de
+fumaça; mudança nos
 passos (`Footsteps`), depois do teste de fumaça e de `Level2SoundTest.BatchRun`. Diga no resumo o
 que foi testado por máquina e o que não foi testado à mão.
 

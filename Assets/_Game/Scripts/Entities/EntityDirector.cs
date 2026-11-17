@@ -7,7 +7,9 @@ using UnityEngine;
 namespace BackRooms.Entities
 {
     /// <summary>
-    /// Decide quando e onde a entidade aparece. Roda só no host.
+    /// Decide quando e onde a entidade aparece. Roda só no host. Serve também ao Capitão do
+    /// Level 1: o prefab é outro (com <see cref="CaptainBrain"/>, que herda de
+    /// <see cref="EntityBrain"/>) e a regra de quando e onde é a mesma.
     ///
     /// Ela não existe no começo da partida. Surge quando algum jogador já se afastou bastante
     /// da sala inicial, e surge atrás dele: numa célula do caminho entre a sala e esse jogador,
@@ -166,15 +168,33 @@ namespace BackRooms.Entities
 
             LastRefusal = "";
             Vector3 position = _path[best];
-            Vector3 ahead = _path[best + 1] - position;
-            ahead.y = 0f;
-
-            GameObject spawned = Instantiate(entityPrefab, position, Quaternion.LookRotation(ahead.sqrMagnitude > 0.01f ? ahead : Vector3.forward, Vector3.up));
-            spawned.GetComponent<NetworkObject>().Spawn(true);
-
-            Entity = spawned.GetComponent<EntityBrain>();
+            SpawnAt(position, _path[best + 1] - position);
             Entity.Alert(lead.transform.position);
             return true;
+        }
+
+        /// <summary>
+        /// Host: põe a entidade (ou o Capitão) num ponto escolhido, olhando para
+        /// <paramref name="facing"/>, sem conferir nada. Para os testes; o jogo usa
+        /// <see cref="TrySpawn"/>. Se já existe, só muda de lugar.
+        /// </summary>
+        public EntityBrain SpawnAt(Vector3 position, Vector3 facing)
+        {
+            facing.y = 0f;
+            Quaternion rotation = Quaternion.LookRotation(facing.sqrMagnitude > 0.01f ? facing : Vector3.forward, Vector3.up);
+
+            if (Entity != null)
+            {
+                Entity.transform.SetPositionAndRotation(position, rotation);
+                if (Entity.TryGetComponent(out Unity.Netcode.Components.NetworkTransform moved))
+                    moved.Teleport(position, rotation, Entity.transform.localScale);
+                return Entity;
+            }
+
+            GameObject spawned = Instantiate(entityPrefab, position, rotation);
+            spawned.GetComponent<NetworkObject>().Spawn(true);
+            Entity = spawned.GetComponent<EntityBrain>();
+            return Entity;
         }
 
         // A célula serve se está longe de todos, andando, e fora da vista de todos.

@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using BackRooms.Entities;
 using BackRooms.World;
+using Unity.Netcode;
+using Unity.Netcode.Components;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -51,6 +53,63 @@ namespace BackRooms.EditorTools
         static string DefaultFolder()
         {
             return Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Logs", "Previews"));
+        }
+
+        public const string PrefabPath = "Assets/_Game/Prefabs/Captain.prefab";
+
+        /// <summary>
+        /// Grava o prefab de rede do Capitão (Prefabs/Captain.prefab), que o Level1Setup põe no
+        /// diretor da fase. Como o da entidade: só componentes; o corpo é montado em código quando
+        /// ele aparece. O colisor impede o jogador de atravessá-lo e o corpo rígido cinemático faz
+        /// a caneta não riscar nele. O Netcode registra o prefab sozinho em
+        /// DefaultNetworkPrefabs.asset.
+        /// </summary>
+        public static GameObject CreatePrefab()
+        {
+            var captain = new GameObject("Captain");
+
+            var capsule = captain.AddComponent<CapsuleCollider>();
+            capsule.radius = 0.38f;
+            capsule.height = 2.7f;
+            capsule.center = new Vector3(0f, 1.35f, 0f);
+
+            var rigid = captain.AddComponent<Rigidbody>();
+            rigid.isKinematic = true;
+            rigid.useGravity = false;
+
+            var body = captain.AddComponent<CaptainBody>();
+            AssignMaterials(body);
+            body.model = CharacterModels.Model("Capitao");
+            body.modelMaterials = CharacterModels.Materials("Capitao");
+            captain.AddComponent<CaptainAudio>();
+
+            // Rede: quem manda na posição é o host.
+            captain.AddComponent<NetworkObject>();
+            var networkTransform = captain.AddComponent<NetworkTransform>();
+            networkTransform.SyncRotAngleX = false;
+            networkTransform.SyncRotAngleZ = false;
+            networkTransform.SyncScaleX = false;
+            networkTransform.SyncScaleY = false;
+            networkTransform.SyncScaleZ = false;
+            networkTransform.Interpolate = true;
+
+            // Manca devagar (1,7 m/s caçando; o jogador anda a 2,8): o perigo é chegar por trás.
+            // No apagão, as arrancadas de 5,2 m/s (CaptainBrain).
+            var brain = captain.AddComponent<CaptainBrain>();
+            brain.roamSpeed = 1.2f;
+            brain.searchSpeed = 1.5f;
+            brain.investigateSpeed = 1.7f;
+            brain.chaseSpeed = 1.7f;
+            brain.acceleration = 14f;
+            brain.sightRange = 22f;
+            brain.eyeHeight = 2.45f;
+            brain.bodyRadius = 0.4f;
+            brain.catchRadius = 1.3f;
+
+            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(captain, PrefabPath);
+            UnityEngine.Object.DestroyImmediate(captain);
+            Level0Setup.StampNetworkId(prefab);
+            return prefab;
         }
 
         /// <summary>Monta o Capitão com os materiais dele (criados ou atualizados aqui).</summary>

@@ -56,6 +56,8 @@ namespace BackRooms.EditorTools
             Save(folder, "entidade_guincho_de_perseguicao", EntityAudio.CreateScreech());
             Save(folder, "entidade_passo", EntityAudio.CreateStep());
             Save(folder, "entidade_ronco", EntityAudio.CreateDrone());
+            Save(folder, "capitao_toc", CaptainAudio.CreateKnock());
+            Save(folder, "capitao_arrasta", CaptainAudio.CreateDrag());
 
             // Passos do jogador por superfície (Footsteps), três variações de cada, e o espirro
             // de entrar ou sair da água. O volume relativo já está no clipe (pico de cada um).

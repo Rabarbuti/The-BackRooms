@@ -11,8 +11,9 @@ namespace BackRooms.EditorTools
 {
     /// <summary>
     /// O Level 1 de teste (Docs/level1-mostruario.md): uma versão pequena do Level 0 — 10 x 10
-    /// células, sem buracos, sem nichos e sem a entidade — mobiliada pela <see cref="PropLayer"/>
-    /// com todos os modelos do Blender de Art/Level1/Modelos.
+    /// células, sem buracos e sem nichos — mobiliada pela <see cref="PropLayer"/> com todos os
+    /// modelos do Blender de Art/Level1/Modelos, e com o Capitão no lugar da entidade (o prefab
+    /// Prefabs/Captain.prefab é gravado aqui, por <see cref="CaptainPreview.CreatePrefab"/>).
     ///
     /// Menu BackRooms > Montar Level 1 (teste). A cena fica em Scenes/Level1_Test.unity; para
     /// jogar, abra a cena, aperte Play e hospede (H). Ela é gerada: mudança se faz aqui, no
@@ -56,6 +57,7 @@ namespace BackRooms.EditorTools
         public static void BuildScene()
         {
             GameObject[] models = LoadModels();
+            GameObject captain = CaptainPreview.CreatePrefab();
             Level0Setup.BuildScene(false, new Level0Setup.SceneOptions
             {
                 scenePath = ScenePath,
@@ -63,7 +65,11 @@ namespace BackRooms.EditorTools
                 size = Size,
                 pits = false,
                 alcoves = false,
-                entity = false,
+                // O inimigo daqui é o Capitão, com o mesmo diretor da entidade. O mapa é menor
+                // (10 x 10): ele acorda quando alguém chega a 5 células da sala inicial.
+                entity = true,
+                enemyPrefab = captain,
+                enemyWakeCells = 5,
                 paintedArrows = false,
                 decorate = level => level.AddComponent<PropLayer>().models = models,
             });
