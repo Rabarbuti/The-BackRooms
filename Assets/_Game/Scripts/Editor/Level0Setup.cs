@@ -46,7 +46,7 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 19;
+        public const int ContentVersion = 20;
 
         /// <summary>Música da tela inicial (cópia do arquivo mandado pelo usuário; não é gerada).</summary>
         public const string MenuMusicPath = "Assets/_Game/Audio/Musica/Menu_Tema.mp3";
@@ -521,11 +521,13 @@ namespace BackRooms.EditorTools
             var torchData = GetOrAdd<HDAdditionalLightData>(torch);
             HDAdditionalLightData.InitDefaultHDAdditionalLightData(torchData);
 
+            // Forte e aberta (17/11/2026, a pedido): 6000 cd, 40 m, cone de 80° com miolo de 45°.
+            // Era 2000 cd, 25 m e 55°/28°: fraca demais e estreita.
             torchLight.lightUnit = LightUnit.Candela;
-            torchLight.intensity = 2000f;
-            torchLight.range = 25f;
-            torchLight.spotAngle = 55f;
-            torchLight.innerSpotAngle = 28f;
+            torchLight.intensity = 6000f;
+            torchLight.range = 40f;
+            torchLight.spotAngle = 80f;
+            torchLight.innerSpotAngle = 45f;
             torchLight.color = Color.white;
             torchLight.useColorTemperature = true;
             torchLight.colorTemperature = 5600f;
