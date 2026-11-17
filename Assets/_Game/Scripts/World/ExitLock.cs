@@ -30,19 +30,26 @@ namespace BackRooms.World
 
         public bool Unlocked { get; private set; }
 
+        /// <summary>O que está digitado agora (para os testes).</summary>
+        public string Typed => _typed;
+
         /// <summary>O que a tecla E faz agora no teclado, para o painel. Nulo se nada.</summary>
         public static string Prompt { get; private set; }
 
         /// <summary>Para os testes: aperta E na tecla mirada.</summary>
         public static bool PressForTest;
 
-        /// <summary>O aviso de destrancar chegou antes de a fase ser montada nesta máquina.</summary>
+        /// <summary>
+        /// Nesta partida a porta já foi destrancada (o aviso do host chegou). Vale para todo
+        /// teclado montado depois: o cliente pode remontar a fase pela seed logo depois do aviso.
+        /// O <c>GameSession</c> apaga ao receber uma seed nova ou ao hospedar.
+        /// </summary>
         public static bool PendingUnlock;
 
         /// <summary>Quantas vezes o host recebeu um código errado.</summary>
         public int WrongCodes { get; private set; }
 
-        public float reach = 1.6f;
+        public float reach = 2f;
 
         static readonly RaycastHit[] Hits = new RaycastHit[16];
         static readonly string[] Keys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "X", "0", "OK" };
@@ -138,11 +145,7 @@ namespace BackRooms.World
             _clunk = Tone("Destrava", 90f, 0.4f, 0.15f);
 
             Redraw();
-            if (PendingUnlock)
-            {
-                PendingUnlock = false;
-                SetUnlocked();
-            }
+            if (PendingUnlock) SetUnlocked();
         }
 
         // Centro de cada tecla na face, em pontos (origem em cima, à esquerda).
@@ -254,7 +257,7 @@ namespace BackRooms.World
 
         void Play(AudioClip clip)
         {
-            if (_audio != null && clip != null) _audio.PlayOneShot(clip, 0.8f);
+            if (_audio != null && clip != null && _audio.isActiveAndEnabled) _audio.PlayOneShot(clip, 0.8f);
         }
 
         void Redraw()
@@ -300,7 +303,7 @@ namespace BackRooms.World
         /// <summary>Textura de uma etiqueta vermelha de LIQUIDAÇÃO: o dígito grande e a ordem.</summary>
         public static Texture2D TagTexture(int digit, int order)
         {
-            const int w = 48, h = 32;
+            const int w = 64, h = 40;
             var pixels = new Color32[w * h];
             var red = new Color32(196, 26, 22, 255);
             var white = new Color32(250, 246, 236, 255);
@@ -310,9 +313,9 @@ namespace BackRooms.World
 
             PixelFont.Draw(pixels, w, h, (w - PixelFont.Measure("LIQUIDACAO", 1)) / 2, 2, "LIQUIDACAO", 1, white);
             string d = digit.ToString();
-            PixelFont.Draw(pixels, w, h, 6, 11, d, 2, white);
+            PixelFont.Draw(pixels, w, h, 8, 13, d, 3, white);
             string o = $"{order}/3";
-            PixelFont.Draw(pixels, w, h, w - 6 - PixelFont.Measure(o, 1), 22, o, 1, white);
+            PixelFont.Draw(pixels, w, h, w - 6 - PixelFont.Measure(o, 1), 28, o, 1, white);
 
             var texture = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, name = "Etiqueta_" + order };
             texture.SetPixels32(pixels);

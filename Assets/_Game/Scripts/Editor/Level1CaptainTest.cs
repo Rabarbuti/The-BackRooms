@@ -171,6 +171,9 @@ namespace BackRooms.EditorTools
                     _local.controller.Teleport(_playerSpot, 0f);
                     _captain = _director.SpawnAt(_captainSpot, _playerSpot - _captainSpot) as CaptainBrain;
                     if (_captain == null) { Finish(false, "o diretor não pôs um Capitão"); return; }
+                    // A troca com um totem no apagão tem teste próprio (Level1ShelterTest): aqui
+                    // ela o levaria para longe no meio da conferência.
+                    _captain.swapChance = 0f;
 
                     Face(away: true);
                     _captain.Alert(_playerSpot);

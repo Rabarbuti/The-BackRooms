@@ -146,6 +146,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Entities.CaptainAudio
   volume: 0.9
   range: 26
+  jingleRange: 16
+  jingleVolume: 0.45
 --- !u!114 &3644013700829471322
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -242,6 +244,7 @@ MonoBehaviour:
   sightHalfAngle: 65
   closeSense: 3.5
   hearCells: 8
+  tableSightRange: 6
   catchRadius: 1.3
   feedSeconds: 2.5
   mercySeconds: 8
@@ -256,3 +259,6 @@ MonoBehaviour:
   stareNoiseAfter: 6
   stareBlindAfter: 9
   stareRecovery: 1.5
+  swapChance: 0.5
+  swapDelay: 1.2
+  swapMinDistance: 8

@@ -38,7 +38,11 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   desligados) e `LevelBuilder` (malhas e colisores; as setas pintadas podem ser desligadas);
   buracos (`PitFall`, `PitSmoke`); luminárias e apagão (`CeilingLight`, `LightsOut`); esconderijo e
   saída (`HidingSpot`, `LevelExit`); `PropLayer` (os móveis do Level 1 espalhados pela seed e as
-  placas de curva no lugar das setas pintadas). As Piscinas têm gerador e construtor próprios:
+  placas de curva no lugar das setas pintadas; também as barricadas, os totens, o plástico-bolha, o
+  piso por zona e o objetivo). Do Level 1: `HideSpot` (guarda-roupa e mesa de esconder, tecla E;
+  `HideSpotInput`), `BubbleWrap` (plástico-bolha: barulho e estalo), `Totem` (estátua do Capitão),
+  `ExitLock` (porta trancada por teclado, etiquetas e bilhete) e `FloorZones` (laminado e
+  vinílico, para os passos). As Piscinas têm gerador e construtor próprios:
   `PoolGenerator` (planta por salas, C# puro, com `Validate`), `PoolData` (divisas, claraboias,
   salas, colunas, lâmpadas), `LevelBuilder.Pools.cs` (a geometria, parte do `LevelBuilder`) e
   `PoolWater` (ondulação, cáustica, debaixo d'água, anoitecer, salas escuras).
@@ -48,7 +52,8 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   jogadores, calculado aqui pela altura deles e a água local; `NoiseOf` dá o barulho de cada
   superfície para um inimigo que ouça a água), `PlayerBody` (o traje que os outros veem) e
   `ItemHand` (a mão em primeira pessoa).
-- `Scripts/Audio` — `FluorescentHum` (zumbido das luminárias) e `MenuMusic` (música da tela
+- `Scripts/Audio` — `ShopMusic` (música de loja do Level 1, que se cala antes do apagão, e o
+  jingle do Capitão), `FluorescentHum` (zumbido das luminárias) e `MenuMusic` (música da tela
   inicial, `Audio/Musica/Menu_Tema.mp3`: toca em laço no menu, some ao começar a jogar; um dono
   só, que sobrevive à troca de fase pela lista do menu sem recomeçar).
 - `Scripts/Network` — `GameSession` (host, cliente, envio da seed e do relógio da sessão) e
@@ -146,7 +151,8 @@ claraboias. A planta não fica na cena: sai do `PoolGenerator` pela seed, em Pla
 Os modelos em `Art/Level1/Modelos` (`.fbx` e `materiais_<lote>.json`) e as texturas em
 `Art/Level1/Texturas` são **gerados** pelos lotes de `Tools/Blender`; os materiais em
 `Art/Level1/Materiais`, por `Level1Models` a partir dos `materiais_*.json`; os de
-`Art/Level1/Capitao`, pelo `CaptainPreview`. Muda-se o script e roda de novo: o `.fbx` nunca se
+`Art/Level1/Capitao`, pelo `CaptainPreview`; os de `Art/Level1/Fase` (plástico-bolha, pisos,
+etiqueta, base e fibra de vidro do totem), pelo `Level1Setup`. Muda-se o script e roda de novo: o `.fbx` nunca se
 edita, e `.blend` não entra no projeto.
 
 Ao mudar algo que só aparece depois de recriar (texturas, materiais, objetos da cena, valores
@@ -174,7 +180,10 @@ velho. Mudança só de código não precisa. A cena do Level 1 não tem versão:
   em `LevelGenerator.DigPits` mantém a conferência de `SafeDetour`.
 - **Móvel nunca fecha passagem.** A `PropLayer` deixa livre uma cruz de 1,2 m no meio de cada
   célula e recusa, ao criar, qualquer móvel com colisor que invada essa cruz (inclusive cadeira
-  tombada ou empilhada). `Level1Setup.BatchCheck` confere com uma cápsula entre todas as células.
+  tombada ou empilhada). A cruz é o meio da célula e um braço até cada lado **aberto**: rente a
+  parede fechada não há passagem (até 17/11/2026 a faixa inteira valia, e mesa de jantar e sofá
+  encostados nunca entravam). Nenhum móvel invade a sala inicial nem a saída: confere a caixa
+  girada inteira (cadeira tombada gira pelo pé e atravessava a parede). `Level1Setup.BatchCheck` confere com uma cápsula entre todas as células.
 - **O que precisa acontecer junto em todas as máquinas usa `GameSession.SessionSeconds`**, o
   relógio do servidor, em vez de mandar o evento pela rede. É assim que o apagão (`LightsOut`)
   funciona: cada máquina faz a mesma conta.
@@ -264,21 +273,34 @@ são postos, o Capitão e as regras dele, objetivo, som, ordem de construção e
   só aparece na fase se entrar nas listas de algum tema (`WallItem`, `CornerItem`).
 - **43 modelos** feitos no Blender em 5 lotes (lista em `Docs/modelos-blender.md`, seção 7).
 - **O Capitão na fase** (`CaptainBrain`, regras em `level1-mostruario.md`, seção 5.4): aparece pelo
-  `EntityDirector` quando alguém chega a 5 células da sala inicial; ouve e vê como a entidade;
+  `EntityDirector` quando alguém chega a 8 células da sala inicial; ouve e vê como a entidade;
   congela quando algum jogador o tem na tela, sem parede no meio, **e** ele está iluminado
   (luminária acesa a até 6,5 m ou facho de lanterna); quem o encara mais de 6 s vê o chuvisco
   crescer e, aos 9 s, deixa de valer como vigia; manca a 1,7 m/s e, no apagão, caçando, dá
-  arrancadas de 5,2 m/s; pega como a entidade (NO SIGNAL). Som: "TOC… arrasta" da perna de pau.
+  arrancadas de 5,2 m/s; pega como a entidade (NO SIGNAL). Som: "TOC… arrasta" da perna de pau e,
+  perto, o jingle da loja numa caixinha (mais alto, rápido e desafinado de perto; mudo congelado).
+  No apagão, com chance de 50%, troca de lugar com um totem que ninguém vê.
+- **Abrigo e perigo** (`PropLayer`, pela seed): guarda-roupa e mesa de jantar de esconder (mira + E;
+  na mesa, só agachado; o guarda-roupa esconde sempre, a mesa só fora do cone do inimigo, até 6 m;
+  dentro, a tela vira a fresta da porta e o jogador não vigia o Capitão); totens (6 a 10: o corpo
+  do Capitão na pose parada, em fibra de vidro, numa base preta com a placa de OFERTA);
+  plástico-bolha (barulho de corrida, mesmo agachado); barricadas (2,5% das células, entupidas do
+  chão ao teto; nunca isolam nada: `LevelData.Barricade`, que o `LevelNav` evita).
+- **Objetivo** (`ExitLock`): a porta de saída fica trancada por um teclado na parede ao lado (mira +
+  E em cada tecla; as teclas 1, 2 e 3 são das canetas); o código de 3 dígitos sai da seed e está em
+  três etiquetas vermelhas de LIQUIDACAO, em blocos diferentes e longe umas das outras; um bilhete
+  na sala inicial traz os dígitos fora de ordem. O cliente manda o código ao host
+  (`GameSession`, mensagens nomeadas), que destranca e avisa todos, inclusive quem entra depois.
+- **Som e piso:** música de loja baixinha (some antes do aviso do apagão); laminado nas vitrines de
+  jantar e de estar e vinílico no estoque, com passos próprios (`Footsteps`: `Laminate`, `Vinyl`).
 - **O corpo do Capitão** (`CaptainBody.Pose(fase, velocidade, parado, boca, tempo)`). Modelo esculpido no Blender (seção "Inimigos esculpidos"): mais sujo e
   assustador, de olhos injetados e mãos em garra; parado, estica os braços para a frente. A boca
   não abre mais com `mouth` (o modelo já tem a boca aberta). Desenho a partir de imagens do filme *Backrooms* (2026), a pedido; antes de
   publicar, ver a decisão em aberto 4 de `level1-mostruario.md` (direitos autorais).
 
-**Próximos passos** (ordem de `level1-mostruario.md`, seção 8): passagem do Level 0 para o
-Level 1 (o host envia o índice da fase junto com a seed); totens; guarda-roupa como `HidingSpot`
-(as portas já são objetos filhos com a origem na dobradiça); plástico-bolha; etiquetas de
-LIQUIDAÇÃO, teclado e porta da doca (objetivo); som; anomalias e barricadas. Conferir a mobília
-entre host e cliente (dois editores) ainda não foi feito.
+**Próximos passos:** as zonas novas com os modelos dos lotes `quarto`, `escritorio`,
+`festa_verao` e `sorteio_estoque`, as placas penduradas com texto e as anomalias (rodada 5, na
+branch `level1-anomalias`); depois, jogar à mão e ajustar os números.
 
 **Modelos novos:** escreva um lote em `Tools/Blender/lotes/` (ou peça a agentes, um por lote,
 com o modelo Sonnet; o roteiro do pedido está em `Docs/modelos-blender.md`, seção 6), rode-o
@@ -294,7 +316,8 @@ Capturar prévia, Capturar prévia do Capitão, Móveis do Level 1 > Atualizar e
 Testar passos do Level 2, Exportar sons (entidade e passos) (WAV em `Logs/Sons`, para ouvir e
 ajustar os sons sintetizados sem precisar jogar: os da entidade, `passo_carpete_*`,
 `passo_azulejo_*`, `passo_agua_rasa_*`, `nado_bracada_*`, `debaixo_dagua_*`, `espirro_entrada_*`
-e os do Capitão, `capitao_toc` e `capitao_arrasta`;
+os do Capitão, `capitao_toc`, `capitao_arrasta` e `capitao_jingle`, e os do Level 1,
+`loja_musica`, `plastico_bolha_*`, `passo_laminado_*` e `passo_vinilico_*`;
 em lote, `EntitySounds.BatchExport`).
 
 Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo projeto):
@@ -328,7 +351,22 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   lanterna nele congela; sem lanterna, pega quem fica parado; com a luz de volta, encarado sem
   parar, volta a andar depois de uns 9 s. Linha `[BackRooms] Teste do Capitão`. Dois editores:
   `BatchHost` (o mesmo teste, esperando o cliente) + `BatchJoin` (na cópia; confere que o Capitão
-  aparece, anda e congela com a pose segura no cliente).
+  aparece, anda e congela com a pose segura no cliente). Desliga a troca com o totem.
+- `Level1ShelterTest.BatchRun` — abrigo e perigo do Level 1 em Play: o guarda-roupa (E entra,
+  esconde, o Capitão não pega nem é congelado de dentro, E sai pela frente), a mesa (em pé pede
+  para agachar; o Capitão a 9 m não vê, a 3 m olhando vê e pega), o plástico-bolha (andando
+  devagar no chão comum o Capitão a 6 células não ouve; em cima da folha, ouve), a barricada (não se
+  entra) e a troca com um totem num apagão forçado. Linha `[BackRooms] Teste de abrigo do Level 1`.
+  Dois editores: `BatchHost` + `BatchJoin` (o cliente vê o host sumir no guarda-roupa e o totem
+  trocar de lugar).
+- `Level1ObjectiveTest.BatchRun` — o objetivo: três etiquetas em blocos diferentes, bilhete na sala
+  inicial, porta trancada não abre, a mira numa tecla mostra o aviso dela, código errado não
+  destranca, o certo (mira + E, tecla por tecla) destranca e a porta abre. Linha
+  `[BackRooms] Teste do objetivo do Level 1`. Dois editores: `BatchHost` destranca e espera;
+  `BatchJoin` entra depois e tem de achar a porta destrancada.
+- `Level1SoundTest.BatchRun` — som do Level 1 com teclado virtual: passos no laminado, no vinílico e
+  no carpete; a música da loja toca e se cala antes do aviso do apagão; o jingle do Capitão alto e
+  agudo a 3 m, baixo a 13 m. Linha `[BackRooms] Teste de som do Level 1`.
 - `LevelSelectTest.BatchRun` — seletor de fase em Play: fase bloqueada sem progresso, troca
   para o Level 1 com uma sessão só, a porta do Level 1 zera e leva ao Level 2 já hospedando,
   nada num poço, a porta do Level 2 (última fase) zera e devolve ao menu, volta ao Level 0 sem
@@ -403,7 +441,9 @@ em rede, depois do teste com dois editores; mudança no Level 2 (ou na água, no
 porta do Level 1 leva às Piscinas); mudança no Level 1 (ou no `LevelBuilder`, no gerador
 ou nos modelos), depois de `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`; mudança no
 Capitão (ou no `EntityBrain`, que ele herda), depois de `Level1CaptainTest.BatchRun` e do teste de
-fumaça; mudança nos
+fumaça; mudança no abrigo, no objetivo ou no som do Level 1 (`PropLayer`, `HideSpot`, `ExitLock`,
+`ShopMusic`), depois de `Level1Setup.BatchCheck`, `Level1ShelterTest`, `Level1ObjectiveTest` e
+`Level1SoundTest` (os dois primeiros também em dois editores); mudança nos
 passos (`Footsteps`), depois do teste de fumaça e de `Level2SoundTest.BatchRun`. Diga no resumo o
 que foi testado por máquina e o que não foi testado à mão.
 

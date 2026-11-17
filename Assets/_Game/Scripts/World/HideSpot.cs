@@ -42,19 +42,20 @@ namespace BackRooms.World
         void OnEnable() { if (!All.Contains(this)) All.Add(this); }
         void OnDisable() { All.Remove(this); }
 
-        void Awake()
-        {
-            if (doors == null) doors = new Transform[0];
-            _closed = new Quaternion[doors.Length];
-            for (int i = 0; i < doors.Length; i++) _closed[i] = doors[i].localRotation;
-        }
-
         /// <summary>Abre as portas um instante (alguém entrou ou saiu).</summary>
         public void Swing() => _swing = 1f;
 
         void Update()
         {
-            if (_swing <= 0f || doors.Length == 0) return;
+            if (_swing <= 0f || doors == null || doors.Length == 0) return;
+
+            // A rotação fechada é lida no primeiro balanço: no Play o componente nasce (Awake)
+            // antes de a PropLayer dizer quais são as portas.
+            if (_closed == null || _closed.Length != doors.Length)
+            {
+                _closed = new Quaternion[doors.Length];
+                for (int i = 0; i < doors.Length; i++) _closed[i] = doors[i] != null ? doors[i].localRotation : Quaternion.identity;
+            }
 
             _swing = Mathf.Max(0f, _swing - Time.deltaTime / 0.9f);
             // Abre depressa e fecha devagar: sobe até 75° no primeiro terço e volta.
@@ -162,21 +163,24 @@ namespace BackRooms.World
 
             Transform eye = camera.transform;
             int count = Physics.RaycastNonAlloc(eye.position, eye.forward, Hits, reach, ~0, QueryTriggerInteraction.Ignore);
+            System.Array.Sort(Hits, 0, count, HitDistance);
             Transform self = local.transform.root;
-            float best = float.MaxValue;
-            Collider nearest = null;
 
-            // O próprio jogador não conta: o colisor dele acompanha o corpo um passo atrasado.
+            // Do mais perto ao mais longe: o próprio jogador não conta (o colisor dele acompanha o
+            // corpo um passo atrasado); móvel que não é esconderijo (a cadeira diante da mesa) a
+            // mira atravessa; parede e o resto da fase param a mira.
             for (int i = 0; i < count; i++)
             {
-                if (Hits[i].collider.transform.root == self) continue;
-                if (Hits[i].distance >= best) continue;
-                best = Hits[i].distance;
-                nearest = Hits[i].collider;
+                Collider hit = Hits[i].collider;
+                if (hit.transform.root == self) continue;
+                HideSpot spot = hit.GetComponentInParent<HideSpot>();
+                if (spot != null) return spot;
+                if (!hit.transform.IsChildOf(transform)) return null;
             }
-
-            return nearest != null ? nearest.GetComponentInParent<HideSpot>() : null;
+            return null;
         }
+
+        static readonly IComparer<RaycastHit> HitDistance = Comparer<RaycastHit>.Create((a, b) => a.distance.CompareTo(b.distance));
 
         // Quando alguém entra ou sai de um móvel, as portas do móvel mais perto balançam.
         void SwingDoors()

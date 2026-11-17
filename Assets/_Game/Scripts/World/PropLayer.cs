@@ -501,8 +501,7 @@ namespace BackRooms.World
         // em cima e a placa de OFERTA na frente. Um colisor só, da base à cabeça.
         bool PlaceTotem(Rect region, Vector2 anchor, Vector3 origin, System.Random rng)
         {
-            if (!Totem.Statue(totemModel, totemMaterials, out Mesh statue, out Material[] statueMaterials,
-                              out Vector3 statueOffset, out Quaternion statueRotation)) return false;
+            if (totemModel == null || totemMaterials == null || totemMaterials.Length == 0) return false;
 
             const float baseW = 0.9f, baseH = 0.12f, baseD = 0.6f, height = 2.95f;
             Vector2 toCenter = new Vector2(Cell * 0.5f, Cell * 0.5f) - region.center;
@@ -536,12 +535,8 @@ namespace BackRooms.World
             if (totemBaseMaterial != null) pedestal.GetComponent<MeshRenderer>().sharedMaterial = totemBaseMaterial;
 
             // A estátua, em pé na base.
-            var figure = new GameObject("Estatua");
-            figure.transform.SetParent(root.transform, false);
-            figure.transform.localPosition = new Vector3(0f, baseH, 0f) + statueOffset;
-            figure.transform.localRotation = statueRotation;
-            figure.AddComponent<MeshFilter>().sharedMesh = statue;
-            figure.AddComponent<MeshRenderer>().sharedMaterials = statueMaterials;
+            GameObject figure = Totem.CreateStatue(root.transform, totemModel, totemMaterials);
+            if (figure != null) figure.transform.localPosition = new Vector3(0f, baseH, 0f);
 
             // A placa de OFERTA encostada na frente da base.
             GameObject sign = Get("PlacaOferta");
@@ -1894,20 +1889,29 @@ namespace BackRooms.World
         }
 
         // A cruz livre, um pouco mais estreita que a usada para planejar (o balcão pode avançar
-        // Overhang nela): faixa de 2 x (Lane - Overhang) no meio da célula, nos dois sentidos.
-        static bool BlocksLane(Vector3 position, Bounds rotated)
+        // Overhang nela): o quadrado do meio da célula e, dele, um braço de 2 x (Lane - Overhang)
+        // até cada lado aberto. Rente a uma parede fechada não há passagem: um móvel comprido
+        // encostado nela (mesa de jantar, sofá) cruza a faixa do meio sem fechar caminho nenhum.
+        bool BlocksLane(Vector3 position, Bounds rotated)
         {
             Vector3 min = position + rotated.min, max = position + rotated.max;
             Vector3 center = (min + max) * 0.5f;
-            float ox = Mathf.Floor(center.x / Cell) * Cell, oz = Mathf.Floor(center.z / Cell) * Cell;
+            int cx = Mathf.FloorToInt(center.x / Cell), cz = Mathf.FloorToInt(center.z / Cell);
+            float ox = cx * Cell, oz = cz * Cell;
             float half = Lane - Overhang - 0.01f;
-            float mid = Cell * 0.5f;
+            float a = Cell * 0.5f - half, b = Cell * 0.5f + half, mid = Cell * 0.5f;
+            bool inMap = _data != null && cx >= 0 && cz >= 0 && cx < _data.Width && cz < _data.Height;
 
-            bool crossesX = max.x > ox + mid - half && min.x < ox + mid + half; // faixa norte-sul
-            bool crossesZ = max.z > oz + mid - half && min.z < oz + mid + half; // faixa leste-oeste
-            bool insideZ = max.z > oz && min.z < oz + Cell;
-            bool insideX = max.x > ox && min.x < ox + Cell;
-            return (crossesX && insideZ) || (crossesZ && insideX);
+            bool Overlaps(float x0, float x1, float z0, float z1) =>
+                max.x > ox + x0 && min.x < ox + x1 && max.z > oz + z0 && min.z < oz + z1;
+            bool Open(int side) => !inMap || !Closed(cx, cz, side);
+
+            if (Overlaps(a, b, a, b)) return true;                    // o meio
+            if (Open(0) && Overlaps(a, b, 0f, mid)) return true;      // braço sul
+            if (Open(1) && Overlaps(a, b, mid, Cell)) return true;    // braço norte
+            if (Open(2) && Overlaps(0f, mid, a, b)) return true;      // braço oeste
+            if (Open(3) && Overlaps(mid, Cell, a, b)) return true;    // braço leste
+            return false;
         }
 
         float TopOf(GameObject item)

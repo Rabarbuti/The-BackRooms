@@ -205,7 +205,7 @@ namespace BackRooms.EditorTools
                 {
                     if (_typedIndex >= _sequence.Length)
                     {
-                        if (!_lock.Unlocked) { if (InStage > 2f) Finish(false, "digitou o código certo com a mira e não destrancou"); break; }
+                        if (!_lock.Unlocked) { if (InStage > 2f) Finish(false, $"digitou o código certo ({_lock.Code:000}) com a mira e não destrancou: no teclado \"{_lock.Typed}\", códigos errados {_lock.WrongCodes}"); break; }
                         Next("o código certo, digitado tecla por tecla com a mira e o E, destrancou");
                         break;
                     }

@@ -305,6 +305,7 @@ namespace BackRooms.Net
             }
 
             Address = "esta máquina";
+            ExitLock.PendingUnlock = false;
             _net.CustomMessagingManager.RegisterNamedMessageHandler(ExitCodeMessage, OnExitCodeMessage);
             _epoch = _net.ServerTime.Time;
             int seed = fixedSeed != 0 ? fixedSeed : new System.Random().Next(1, int.MaxValue);
@@ -437,8 +438,8 @@ namespace BackRooms.Net
         void OnExitOpenMessage(ulong senderClientId, FastBufferReader reader)
         {
             reader.ReadValueSafe(out int _);
+            ExitLock.PendingUnlock = true;
             if (ExitLock.Instance != null) ExitLock.Instance.SetUnlocked();
-            else ExitLock.PendingUnlock = true;
         }
 
         void OnStrokeMessage(ulong senderClientId, FastBufferReader reader)
@@ -457,6 +458,8 @@ namespace BackRooms.Net
             reader.ReadValueSafe(out int seed);
             reader.ReadValueSafe(out _epoch);
             reader.ReadValueSafe(out int levelIndex);
+            // Partida nova: a porta do Level 1 volta a nascer trancada (o host avisa se não estiver).
+            ExitLock.PendingUnlock = false;
 
             if (levelIndex != LevelIndex && LevelCatalog.IsValid(levelIndex))
             {

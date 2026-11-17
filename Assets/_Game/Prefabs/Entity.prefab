@@ -220,6 +220,7 @@ MonoBehaviour:
   sightHalfAngle: 65
   closeSense: 3.5
   hearCells: 8
+  tableSightRange: 6
   catchRadius: 1.25
   feedSeconds: 2.5
   mercySeconds: 8
