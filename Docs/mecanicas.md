@@ -125,7 +125,7 @@ Projeto completo em `level1-mostruario.md`.
 
 ### Existe
 
-- O mesmo labirinto amarelo, menor (10 x 10 células) e sem buracos, **cheio de móveis**: salas de
+- O mesmo labirinto amarelo (20 x 20 células, teto mais baixo) e sem buracos, **cheio de móveis**: salas de
   jantar montadas, estantes, sofás, cadeiras tombadas e empilhadas. Os móveis tapam a visão mas
   nunca fecham uma passagem.
 - **Placas amarelas** de curva na parede apontam o caminho até a saída.

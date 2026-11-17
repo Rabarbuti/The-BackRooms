@@ -343,13 +343,21 @@ namespace BackRooms.EditorTools
             int count = 0;
             foreach (Transform item in root)
             {
-                Vector3 p = item.localPosition;
-                int x = Mathf.FloorToInt(p.x / LevelBuilder.Cell), z = Mathf.FloorToInt(p.z / LevelBuilder.Cell);
-                if (x >= 0 && z >= 0 && x < d.Width && z < d.Height && d.InRoom(x, z))
-                {
-                    count++;
-                    names?.Add($"{item.name} em ({x},{z})");
-                }
+                // Pela caixa do móvel (encolhida 10 cm), não pelo pé: tombado, o pé fica num canto.
+                var box = item.GetComponent<BoxCollider>();
+                Bounds b = box != null ? box.bounds : new Bounds(item.position, Vector3.zero);
+                Vector3 min = root.InverseTransformPoint(b.min), max = root.InverseTransformPoint(b.max);
+                int x0 = Mathf.FloorToInt((Mathf.Min(min.x, max.x) + 0.1f) / LevelBuilder.Cell), x1 = Mathf.FloorToInt((Mathf.Max(min.x, max.x) - 0.1f) / LevelBuilder.Cell);
+                int z0 = Mathf.FloorToInt((Mathf.Min(min.z, max.z) + 0.1f) / LevelBuilder.Cell), z1 = Mathf.FloorToInt((Mathf.Max(min.z, max.z) - 0.1f) / LevelBuilder.Cell);
+                bool inside = false;
+                for (int z = Mathf.Min(z0, z1); z <= Mathf.Max(z0, z1) && !inside; z++)
+                    for (int x = Mathf.Min(x0, x1); x <= Mathf.Max(x0, x1) && !inside; x++)
+                        if (x >= 0 && z >= 0 && x < d.Width && z < d.Height && d.InRoom(x, z))
+                        {
+                            inside = true;
+                            count++;
+                            names?.Add($"{item.name} em ({x},{z})");
+                        }
             }
             return count;
         }
