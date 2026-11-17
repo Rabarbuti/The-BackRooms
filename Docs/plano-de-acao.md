@@ -12,7 +12,7 @@ nos projetos das fases (`level1-mostruario.md`, `level2-piscinas.md`, `plano-coo
 | Fase | Dá para jogar | Ameaça | Objetivo |
 |---|---|---|---|
 | Level 0 — o labirinto | Sim | A entidade (caça pelo barulho), buracos, apagão | Não: chegar à porta basta |
-| Level 1 — o Mostruário | Sim, versão de teste mobiliada | O Capitão (anda só quando não é visto iluminado) | Não |
+| Level 1 — o Mostruário | Sim, completo (17/11/2026) | O Capitão, totens, plástico-bolha, barricadas | Sim: teclado na porta, código em três etiquetas |
 | Level 2 — As Piscinas | Sim, versão de teste com nado | **Nenhuma** (sem maré, sem ralo) | Não |
 
 O que mais falta é **algo a fazer** em cada fase (objetivo) e **algo a temer** nas duas últimas.

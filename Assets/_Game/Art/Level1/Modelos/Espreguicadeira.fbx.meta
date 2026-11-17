@@ -1,0 +1,716 @@
+fileFormatVersion: 2
+guid: 1bb314db63ed31345b741f8302dd0160
+ModelImporter:
+  serializedVersion: 24600
+  internalIDToNameTable: []
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Borracha_Preta
+    second: {fileID: 2100000, guid: ac3bd7224cf4327458f532919400f9a2, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Ceramica_Cobalto
+    second: {fileID: 2100000, guid: 72b23f9907f5a4f42806c0c977a8dfca, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Escritorio_Aco_Bege
+    second: {fileID: 2100000, guid: c289c02a2162bb9449b3f8848fff08c0, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Escritorio_Aluminio
+    second: {fileID: 2100000, guid: 181cb491853f7f54b86ee4b04fc917d7, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Escritorio_Borda_Escura
+    second: {fileID: 2100000, guid: 858cc2e378eca294f9d00da0ce724610, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Escritorio_Cromado
+    second: {fileID: 2100000, guid: 9b972a499873af1438524dd27715fd74, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Escritorio_Formica_Cinza
+    second: {fileID: 2100000, guid: 568460a46d0a5304fa2f2562f3ffdbc5, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Escritorio_Tecido_Divisoria
+    second: {fileID: 2100000, guid: 8625692631abda945840b8b0125e8d8e, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Escritorio_Tecido_Grafite
+    second: {fileID: 2100000, guid: 4de238d4579ab6c49953b163e5ea5522, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Escritorio_Tecla_Bege
+    second: {fileID: 2100000, guid: 2dd33621c5546dc489bdad9ed723d355, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Esmalte_Turquesa
+    second: {fileID: 2100000, guid: 677c2dd5da22e2940b0b7e26655312f2, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Esmalte_Vermelho
+    second: {fileID: 2100000, guid: bf2a1d53eebbd614cbf1bf4c96b13b7b, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Estoque_Azul_Alca
+    second: {fileID: 2100000, guid: 978972a1a4846e942a449f91f12ba220, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Estoque_Chapa_Cinza
+    second: {fileID: 2100000, guid: 40cb302d10dc8df4eb61c10f72e44683, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Estoque_Madeira_Palete
+    second: {fileID: 2100000, guid: a40391826de35e749b916c92731b33a4, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Estoque_Madeira_Palete_Escura
+    second: {fileID: 2100000, guid: 29eeb027fac17be4bbda9ec5588d8bc3, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Estoque_Rodizio
+    second: {fileID: 2100000, guid: 5096ca2781ee27e48b52a49314387672, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Estoque_Zincado
+    second: {fileID: 2100000, guid: c3068e2a59a98724ba455df99ff2ea6a, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Balao_Amarelo
+    second: {fileID: 2100000, guid: b8680880b10626d449d515e500dacee4, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Balao_Azul
+    second: {fileID: 2100000, guid: 391543f7d61510a49b30f5c814817946, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Balao_Verde
+    second: {fileID: 2100000, guid: 30e78fa4bec191740a33a84027945c01, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Balao_Vermelho
+    second: {fileID: 2100000, guid: e02008e3c8da4674d995c4ee0561df0c, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Barbante
+    second: {fileID: 2100000, guid: a73512f22b8f20445a87f4d60488df8f, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Chama
+    second: {fileID: 2100000, guid: e3a1accdd2622a74cb2e7612c8a6fc4d, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Copo_Amarelo
+    second: {fileID: 2100000, guid: 701070040cb33544b9150a7d4707427a, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Copo_Azul
+    second: {fileID: 2100000, guid: af1f729eccf1c104e95f614d60717974, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Copo_Verde
+    second: {fileID: 2100000, guid: 1f22901fc9ac2c04aa3d2976182ad394, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Copo_Vermelho
+    second: {fileID: 2100000, guid: 2a716c7b2be007b419a009b2d96f0d64, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Fita
+    second: {fileID: 2100000, guid: bb78957cb118af74fbc41221a3963601, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Glace_Branca
+    second: {fileID: 2100000, guid: 60fe1ac75730c8a4baa2787d8c25be4e, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Glace_Rosa
+    second: {fileID: 2100000, guid: d07aba06c00834243a92ef5225271431, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Papel_Amarelo
+    second: {fileID: 2100000, guid: fe6e64b5f30ea5041ba7e0c0719ac553, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Papel_Azul
+    second: {fileID: 2100000, guid: 9f3fea6978cc7d842baec8a057acb20b, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Papel_Laranja
+    second: {fileID: 2100000, guid: 965440299836c0f479c23aed44fc38ba, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Papel_Rosa
+    second: {fileID: 2100000, guid: 3364c5711432da4408632b2b0a1d46cb, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Papel_Verde
+    second: {fileID: 2100000, guid: 325acb09731f75b4d9f0c628756cd149, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Peso_Prata
+    second: {fileID: 2100000, guid: 215b5a75be1babf4aaeaa773e6c54440, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Prato_Papel
+    second: {fileID: 2100000, guid: f264ee85bb596564682fb204b2b08aaf, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Prato_Rosa
+    second: {fileID: 2100000, guid: 7d42abd55f35ea241987efaf352ea5c8, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Toalha_Branca
+    second: {fileID: 2100000, guid: a7f0b6837cf716442b0fdaaf35c97e7e, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Festa_Vela
+    second: {fileID: 2100000, guid: 1cc9d6534bbaa6141bec4cc576b43dca, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Fita_Adesiva
+    second: {fileID: 2100000, guid: 526c744827a5645419d7341fc4c0ff99, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Latao
+    second: {fileID: 2100000, guid: 0e2865b0b80413f4c956ce7e9e60a746, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Lavanderia_Roupa_Azul
+    second: {fileID: 2100000, guid: aa9a8aa0233f73a45aae9904e3951bba, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Lavanderia_Roupa_Bege
+    second: {fileID: 2100000, guid: fdf5885aa9ba13b4cbd620e9e73a7f73, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Lavanderia_Roupa_Branca
+    second: {fileID: 2100000, guid: 9450c88eb89ee274e8ae4718687bdb64, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Lavanderia_Roupa_Cinza
+    second: {fileID: 2100000, guid: c3f07850854cac647881bb7ad1e04262, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Lavanderia_Roupa_Rosa
+    second: {fileID: 2100000, guid: 68cd1b7c899f00c47a26dc8a0900471d, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Lavanderia_Roupa_Verde
+    second: {fileID: 2100000, guid: 34be124c05602b04f9147dabebfaf4a7, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Lavanderia_Vime
+    second: {fileID: 2100000, guid: b8a2d8ea7617dd445a42bbc5ead5bec0, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Lavanderia_Vime_Escuro
+    second: {fileID: 2100000, guid: 7194cd045cfff2445bcabcd5b7f4b7ad, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Livro_Azul
+    second: {fileID: 2100000, guid: 320c84fab609db247bc17abe8c98636d, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Livro_Bege
+    second: {fileID: 2100000, guid: fc331890abccfe94ab7b4708dfc88895, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Livro_Verde
+    second: {fileID: 2100000, guid: 063f1441d89d5104891f4fcda4dd467c, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Livro_Vinho
+    second: {fileID: 2100000, guid: aac18adb08fea2f4d878d3172ddc4089, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Madeira_Clara
+    second: {fileID: 2100000, guid: 8501ebb36b22cfd4484d525cb615902a, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Madeira_Escura
+    second: {fileID: 2100000, guid: ba21c1e4e122f6b4c94ee39c88cdb71c, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Madeira_Mel
+    second: {fileID: 2100000, guid: 44078f2e16aeb784abb808fa1953b078, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Madeira_Mel_Lisa
+    second: {fileID: 2100000, guid: d2f0a734975458043a84448e922c4011, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Metal_Cromado
+    second: {fileID: 2100000, guid: a0a5a55a8b1ce7942b108e593c3d8993, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Metal_Escuro
+    second: {fileID: 2100000, guid: 4a13134510f497d4bbf317b5a99016fb, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Metal_Galvanizado
+    second: {fileID: 2100000, guid: 5e400552850e95e4b98d7a22dcdba2a3, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Metal_Grafite
+    second: {fileID: 2100000, guid: 06cb48ec578b3d24680ebe97e4c43f09, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Metal_Pintado
+    second: {fileID: 2100000, guid: 87b16acd6b43163419c866f79f85e7e8, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Papel_Branco
+    second: {fileID: 2100000, guid: 425126ca8102b304baefeff73f91795c, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Papel_Vermelho
+    second: {fileID: 2100000, guid: 8bb3990312268294987889212be4d199, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Papelao
+    second: {fileID: 2100000, guid: e705d1664f3490e4a96156ca62da1c83, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Placa_Amarela
+    second: {fileID: 2100000, guid: 937da86dc01237e44a4a35f16635e9b3, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Placa_Branca
+    second: {fileID: 2100000, guid: 8b3fa47b6e4bbc9428a3ae017c695a3a, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Placa_Preta
+    second: {fileID: 2100000, guid: 848db9fd69825a24a965866c8e899a09, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Placa_Vermelha
+    second: {fileID: 2100000, guid: 1bb42547d175944429131403b0eba0fc, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Plastico_Azul
+    second: {fileID: 2100000, guid: ea1cc9e2cb2da424eb73f852458962c8, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Plastico_Bege
+    second: {fileID: 2100000, guid: 224a9dd301f71ba48afcc8a9535a8f9c, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Plastico_Preto
+    second: {fileID: 2100000, guid: b5ccbfed03a0cab41b60a6369f6617f4, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Quarto_Ceramica_Verde
+    second: {fileID: 2100000, guid: 9b3153833d1ff5945b630afe9e070c2e, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Quarto_Colcha_Azul
+    second: {fileID: 2100000, guid: dd287282923f0644cb81a639c6130f5c, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Quarto_Colcha_Bege
+    second: {fileID: 2100000, guid: 58b3a3f5c53d8404c9146607113080b8, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Quarto_Colchao
+    second: {fileID: 2100000, guid: d72d4d46f6cc7f34eaa2056680012517, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Quarto_Cupula_Creme
+    second: {fileID: 2100000, guid: 42ca2ecdae2dd294fbdc1b1101724da1, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Quarto_Franja
+    second: {fileID: 2100000, guid: f5ff52253fc97a245b9eabba989b453b, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Quarto_Lencol
+    second: {fileID: 2100000, guid: b02cbe9ebc588074bbbcce5e81af918d, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Quarto_Tapete_Bege
+    second: {fileID: 2100000, guid: f2152eccd9571f841815d77cee7c118a, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Quarto_Tapete_Tijolo
+    second: {fileID: 2100000, guid: 83dd08c060688be4b94138972492bb91, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Sorteio_Calota
+    second: {fileID: 2100000, guid: e3933159789e92047b40c623c087140b, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Sorteio_Chassi
+    second: {fileID: 2100000, guid: d878b25193b139c469eb8d76306975be, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Sorteio_Cromado
+    second: {fileID: 2100000, guid: 81e5265253e04574fbf036cf04e77d0a, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Sorteio_Farol
+    second: {fileID: 2100000, guid: b439318cc69287c4792960c553d9b439, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Sorteio_Laco
+    second: {fileID: 2100000, guid: b81c8d9f0383e2145a242e46d5d09b12, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Sorteio_Lanterna
+    second: {fileID: 2100000, guid: 1926039fb6153654cb12057cb869d4b3, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Sorteio_Letra_Vermelha
+    second: {fileID: 2100000, guid: bfc9583bb6a0375408d57a943f8568c9, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Sorteio_Pintura_Vermelha
+    second: {fileID: 2100000, guid: 05eae3535f5d04f4ba739c82b92f63be, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Sorteio_Pisca
+    second: {fileID: 2100000, guid: a3ed2ae049212c442bfa8aa2705a8045, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Sorteio_Placa
+    second: {fileID: 2100000, guid: f15842828735f4d4f9813499f2e0bcb1, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Sorteio_Plastico_Preto
+    second: {fileID: 2100000, guid: cfa33e33fd8561f42aa073993159d2ae, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Sorteio_Pneu
+    second: {fileID: 2100000, guid: 8ff7c68ec816f89418bbdafe321fa87f, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Sorteio_Tecido_Amarelo
+    second: {fileID: 2100000, guid: ac0b2ac7140b0014185e7a472424038c, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Sorteio_Veludo_Vermelho
+    second: {fileID: 2100000, guid: 165af4a81f119b04ab5932d6dbae9ab1, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Sorteio_Vidro_Escuro
+    second: {fileID: 2100000, guid: 0e2425005667c574d9ff3b41d635963d, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Tecido_Azul
+    second: {fileID: 2100000, guid: d089b9295ce02a949bdaefc8fd66f88e, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Tecido_Azul_Gasto
+    second: {fileID: 2100000, guid: 012b8536c1e7472419464deeb3e06bf1, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Tecido_Caramelo
+    second: {fileID: 2100000, guid: d84ac71e37423ed479d9c939cdc6e7ef, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Tecido_Cinza_Azulado
+    second: {fileID: 2100000, guid: 82a66db2bdc916c4f994f5ed625f31ee, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Tecido_Vermelho
+    second: {fileID: 2100000, guid: e80052770da593943b6f59c9be776477, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Tinta_Branca
+    second: {fileID: 2100000, guid: f8ca043329c906746a7efcbc0d0ce94b, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Tinta_Laranja
+    second: {fileID: 2100000, guid: 6c3f7c7c583197849861a2726dd832cb, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Tinta_Vermelha
+    second: {fileID: 2100000, guid: 41020259843d5144aa8219ef1040b8fc, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Veludo_Marrom_Listrado
+    second: {fileID: 2100000, guid: 8b95b340bb979aa408f85804604c4372, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Verao_Aluminio
+    second: {fileID: 2100000, guid: 6e657046eff54874e8050464495128cc, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Verao_Bola_Amarela
+    second: {fileID: 2100000, guid: 0099dc45149dba14d84b56a19d9501aa, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Verao_Bola_Azul
+    second: {fileID: 2100000, guid: a877df0f13c7cc34fa46afdbe77a9140, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Verao_Bola_Branca
+    second: {fileID: 2100000, guid: 9cfd58b59b6f7ed44b9c7828058335aa, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Verao_Bola_Vermelha
+    second: {fileID: 2100000, guid: 4b0d07c6a3c8b964e8db9e3762da176d, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Verao_Borracha
+    second: {fileID: 2100000, guid: d7306190695254745b5a6c0902fea582, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Verao_Concreto
+    second: {fileID: 2100000, guid: b8f53f3e3a1ceb541b73bb8223ab2288, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Verao_Lona_Azul
+    second: {fileID: 2100000, guid: 326f762cb5857264785b417a78722320, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Verao_Lona_Branca
+    second: {fileID: 2100000, guid: fe08e611d3b1b1d419418b09479b3df6, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Verao_Mastro_Branco
+    second: {fileID: 2100000, guid: b81636bd4eb54ee43993801db09e926a, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Verao_Tecido_Branco
+    second: {fileID: 2100000, guid: a096701dbfc57fb44a393fe2c4e5ef44, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Verao_Tecido_Vermelho
+    second: {fileID: 2100000, guid: fe8bf5897eef8124da89146c55e2d6f7, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Vidro_Tela
+    second: {fileID: 2100000, guid: 01eedb6b82448a9479fac947e1bea92f, type: 2}
+  materials:
+    materialImportMode: 1
+    materialName: 0
+    materialSearch: 1
+    materialLocation: 1
+    searchTexturesGlobally: 0
+  animations:
+    legacyGenerateAnimations: 4
+    bakeSimulation: 0
+    resampleCurves: 1
+    optimizeGameObjects: 0
+    removeConstantScaleCurves: 0
+    motionNodeName: 
+    animationImportErrors: 
+    animationImportWarnings: 
+    animationRetargetingWarnings: 
+    animationDoRetargetingWarnings: 0
+    importAnimatedCustomProperties: 0
+    importConstraints: 0
+    animationCompression: 1
+    animationRotationError: 0.5
+    animationPositionError: 0.5
+    animationScaleError: 0.5
+    animationWrapMode: 0
+    extraExposedTransformPaths: []
+    extraUserProperties: []
+    clipAnimations: []
+    isReadable: 0
+  meshes:
+    lODScreenPercentages: []
+    globalScale: 1
+    meshCompression: 0
+    addColliders: 0
+    useSRGBMaterialColor: 1
+    sortHierarchyByName: 1
+    preBakeConvexCollisionMesh: 0
+    preBakeTriangleCollisionMesh: 0
+    importPhysicalCameras: 1
+    importVisibility: 0
+    importBlendShapes: 0
+    importCameras: 0
+    importLights: 0
+    nodeNameCollisionStrategy: 1
+    fileIdsGeneration: 2
+    swapUVChannels: 0
+    generateSecondaryUV: 0
+    useFileUnits: 1
+    keepQuads: 0
+    weldVertices: 1
+    bakeAxisConversion: 0
+    preserveHierarchy: 0
+    skinWeightsMode: 0
+    maxBonesPerVertex: 4
+    minBoneWeight: 0.001
+    optimizeBones: 1
+    generateMeshLods: 0
+    meshLodGenerationFlags: 0
+    maximumMeshLod: -1
+    importUVs: -1
+    importVertexColors: 1
+    meshOptimizationFlags: -1
+    indexFormat: 0
+    secondaryUVAngleDistortion: 8
+    secondaryUVAreaDistortion: 15.000001
+    secondaryUVHardAngle: 88
+    secondaryUVMarginMethod: 1
+    secondaryUVMinLightmapResolution: 40
+    secondaryUVMinObjectScale: 1
+    secondaryUVPackMargin: 4
+    useFileScale: 1
+    strictVertexDataChecks: 0
+  tangentSpace:
+    normalSmoothAngle: 60
+    normalImportMode: 0
+    tangentImportMode: 3
+    normalCalculationMode: 4
+    legacyComputeAllNormalsFromSmoothingGroupsWhenMeshHasBlendShapes: 0
+    blendShapeNormalImportMode: 1
+    normalSmoothingSource: 0
+    calculateBlendshapeNormalsDeltaFromImportedNormals: 0
+  referencedClips: []
+  importAnimation: 0
+  humanDescription:
+    serializedVersion: 3
+    human: []
+    skeleton: []
+    armTwist: 0.5
+    foreArmTwist: 0.5
+    upperLegTwist: 0.5
+    legTwist: 0.5
+    armStretch: 0.05
+    legStretch: 0.05
+    feetSpacing: 0
+    globalScale: 1
+    rootMotionBoneName: 
+    hasTranslationDoF: 0
+    hasExtraRoot: 0
+    skeletonHasParents: 1
+  lastHumanDescriptionAvatarSource: {instanceID: 0}
+  autoGenerateAvatarMappingIfUnspecified: 1
+  animationType: 0
+  humanoidOversampling: 1
+  avatarSetup: 0
+  addHumanoidExtraRootOnlyWhenUsingAvatar: 1
+  importBlendShapeDeformPercent: 1
+  remapMaterialsIfMaterialImportModeIsNone: 0
+  additionalBone: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

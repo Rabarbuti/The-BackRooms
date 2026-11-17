@@ -1,0 +1,374 @@
+{
+  "materiais": [
+    {
+      "nome": "Festa_Balao_Amarelo",
+      "cor": [
+        214,
+        176,
+        44
+      ],
+      "rugosidade": 0.32,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Balao_Azul",
+      "cor": [
+        38,
+        80,
+        164
+      ],
+      "rugosidade": 0.32,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Balao_Verde",
+      "cor": [
+        50,
+        136,
+        66
+      ],
+      "rugosidade": 0.32,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Balao_Vermelho",
+      "cor": [
+        176,
+        38,
+        40
+      ],
+      "rugosidade": 0.32,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Barbante",
+      "cor": [
+        206,
+        192,
+        160
+      ],
+      "rugosidade": 0.9,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Chama",
+      "cor": [
+        250,
+        170,
+        60
+      ],
+      "rugosidade": 0.3,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Copo_Amarelo",
+      "cor": [
+        222,
+        186,
+        52
+      ],
+      "rugosidade": 0.5,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Copo_Azul",
+      "cor": [
+        44,
+        92,
+        172
+      ],
+      "rugosidade": 0.5,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Copo_Verde",
+      "cor": [
+        62,
+        146,
+        74
+      ],
+      "rugosidade": 0.5,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Copo_Vermelho",
+      "cor": [
+        184,
+        44,
+        40
+      ],
+      "rugosidade": 0.5,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Fita",
+      "cor": [
+        218,
+        208,
+        190
+      ],
+      "rugosidade": 0.5,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Glace_Branca",
+      "cor": [
+        240,
+        234,
+        222
+      ],
+      "rugosidade": 0.45,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Glace_Rosa",
+      "cor": [
+        222,
+        146,
+        166
+      ],
+      "rugosidade": 0.45,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Papel_Amarelo",
+      "cor": [
+        226,
+        196,
+        60
+      ],
+      "rugosidade": 0.85,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Papel_Azul",
+      "cor": [
+        60,
+        118,
+        196
+      ],
+      "rugosidade": 0.85,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Papel_Laranja",
+      "cor": [
+        230,
+        128,
+        44
+      ],
+      "rugosidade": 0.85,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Papel_Rosa",
+      "cor": [
+        218,
+        120,
+        160
+      ],
+      "rugosidade": 0.85,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Papel_Verde",
+      "cor": [
+        72,
+        160,
+        84
+      ],
+      "rugosidade": 0.85,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Peso_Prata",
+      "cor": [
+        176,
+        176,
+        182
+      ],
+      "rugosidade": 0.3,
+      "metal": 0.8
+    },
+    {
+      "nome": "Festa_Prato_Papel",
+      "cor": [
+        234,
+        230,
+        220
+      ],
+      "rugosidade": 0.8,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Prato_Rosa",
+      "cor": [
+        214,
+        130,
+        156
+      ],
+      "rugosidade": 0.8,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Toalha_Branca",
+      "cor": [
+        226,
+        222,
+        210
+      ],
+      "rugosidade": 0.85,
+      "metal": 0.0
+    },
+    {
+      "nome": "Festa_Vela",
+      "cor": [
+        236,
+        214,
+        120
+      ],
+      "rugosidade": 0.5,
+      "metal": 0.0
+    },
+    {
+      "nome": "Metal_Escuro",
+      "cor": [
+        40,
+        42,
+        44
+      ],
+      "rugosidade": 0.45,
+      "metal": 0.6
+    },
+    {
+      "nome": "Papel_Vermelho",
+      "cor": [
+        178,
+        30,
+        28
+      ],
+      "rugosidade": 0.8,
+      "metal": 0.0
+    },
+    {
+      "nome": "Verao_Aluminio",
+      "cor": [
+        186,
+        190,
+        194
+      ],
+      "rugosidade": 0.35,
+      "metal": 0.85
+    },
+    {
+      "nome": "Verao_Bola_Amarela",
+      "cor": [
+        236,
+        196,
+        40
+      ],
+      "rugosidade": 0.3,
+      "metal": 0.0
+    },
+    {
+      "nome": "Verao_Bola_Azul",
+      "cor": [
+        36,
+        92,
+        186
+      ],
+      "rugosidade": 0.3,
+      "metal": 0.0
+    },
+    {
+      "nome": "Verao_Bola_Branca",
+      "cor": [
+        238,
+        236,
+        230
+      ],
+      "rugosidade": 0.3,
+      "metal": 0.0
+    },
+    {
+      "nome": "Verao_Bola_Vermelha",
+      "cor": [
+        196,
+        40,
+        36
+      ],
+      "rugosidade": 0.3,
+      "metal": 0.0
+    },
+    {
+      "nome": "Verao_Borracha",
+      "cor": [
+        30,
+        30,
+        32
+      ],
+      "rugosidade": 0.85,
+      "metal": 0.0
+    },
+    {
+      "nome": "Verao_Concreto",
+      "cor": [
+        150,
+        146,
+        138
+      ],
+      "rugosidade": 0.92,
+      "metal": 0.0
+    },
+    {
+      "nome": "Verao_Lona_Azul",
+      "cor": [
+        34,
+        82,
+        158
+      ],
+      "rugosidade": 0.85,
+      "metal": 0.0
+    },
+    {
+      "nome": "Verao_Lona_Branca",
+      "cor": [
+        230,
+        230,
+        222
+      ],
+      "rugosidade": 0.85,
+      "metal": 0.0
+    },
+    {
+      "nome": "Verao_Mastro_Branco",
+      "cor": [
+        232,
+        232,
+        226
+      ],
+      "rugosidade": 0.4,
+      "metal": 0.0
+    },
+    {
+      "nome": "Verao_Tecido_Branco",
+      "cor": [
+        234,
+        230,
+        220
+      ],
+      "rugosidade": 0.8,
+      "metal": 0.0
+    },
+    {
+      "nome": "Verao_Tecido_Vermelho",
+      "cor": [
+        182,
+        38,
+        36
+      ],
+      "rugosidade": 0.8,
+      "metal": 0.0
+    }
+  ]
+}
