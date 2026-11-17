@@ -1,0 +1,315 @@
+{
+  "materiais": [
+    {
+      "nome": "Estoque_Azul_Alca",
+      "cor": [
+        30,
+        72,
+        160
+      ],
+      "rugosidade": 0.4,
+      "metal": 0.3
+    },
+    {
+      "nome": "Estoque_Chapa_Cinza",
+      "cor": [
+        118,
+        122,
+        124
+      ],
+      "rugosidade": 0.5,
+      "metal": 0.5
+    },
+    {
+      "nome": "Estoque_Madeira_Palete",
+      "cor": [
+        182,
+        150,
+        106
+      ],
+      "rugosidade": 0.85,
+      "metal": 0.0
+    },
+    {
+      "nome": "Estoque_Madeira_Palete_Escura",
+      "cor": [
+        148,
+        116,
+        78
+      ],
+      "rugosidade": 0.88,
+      "metal": 0.0
+    },
+    {
+      "nome": "Estoque_Rodizio",
+      "cor": [
+        22,
+        22,
+        24
+      ],
+      "rugosidade": 0.8,
+      "metal": 0.0
+    },
+    {
+      "nome": "Estoque_Zincado",
+      "cor": [
+        168,
+        170,
+        168
+      ],
+      "rugosidade": 0.35,
+      "metal": 0.8
+    },
+    {
+      "nome": "Fita_Adesiva",
+      "cor": [
+        200,
+        174,
+        120
+      ],
+      "rugosidade": 0.35,
+      "metal": 0.0
+    },
+    {
+      "nome": "Lavanderia_Roupa_Azul",
+      "cor": [
+        84,
+        100,
+        126
+      ],
+      "rugosidade": 0.95,
+      "metal": 0.0
+    },
+    {
+      "nome": "Lavanderia_Roupa_Bege",
+      "cor": [
+        178,
+        166,
+        138
+      ],
+      "rugosidade": 0.95,
+      "metal": 0.0
+    },
+    {
+      "nome": "Lavanderia_Roupa_Branca",
+      "cor": [
+        206,
+        202,
+        190
+      ],
+      "rugosidade": 0.95,
+      "metal": 0.0
+    },
+    {
+      "nome": "Lavanderia_Roupa_Cinza",
+      "cor": [
+        124,
+        124,
+        122
+      ],
+      "rugosidade": 0.95,
+      "metal": 0.0
+    },
+    {
+      "nome": "Lavanderia_Roupa_Rosa",
+      "cor": [
+        166,
+        124,
+        124
+      ],
+      "rugosidade": 0.95,
+      "metal": 0.0
+    },
+    {
+      "nome": "Lavanderia_Roupa_Verde",
+      "cor": [
+        98,
+        114,
+        92
+      ],
+      "rugosidade": 0.95,
+      "metal": 0.0
+    },
+    {
+      "nome": "Lavanderia_Vime",
+      "cor": [
+        255,
+        255,
+        255
+      ],
+      "rugosidade": 0.85,
+      "metal": 0.0,
+      "textura": "Lavanderia_Vime_Trama"
+    },
+    {
+      "nome": "Lavanderia_Vime_Escuro",
+      "cor": [
+        168,
+        128,
+        78
+      ],
+      "rugosidade": 0.85,
+      "metal": 0.0
+    },
+    {
+      "nome": "Papelao",
+      "cor": [
+        166,
+        124,
+        78
+      ],
+      "rugosidade": 0.9,
+      "metal": 0.0
+    },
+    {
+      "nome": "Sorteio_Calota",
+      "cor": [
+        178,
+        182,
+        186
+      ],
+      "rugosidade": 0.3,
+      "metal": 0.8
+    },
+    {
+      "nome": "Sorteio_Chassi",
+      "cor": [
+        14,
+        14,
+        15
+      ],
+      "rugosidade": 0.9,
+      "metal": 0.0
+    },
+    {
+      "nome": "Sorteio_Cromado",
+      "cor": [
+        206,
+        210,
+        214
+      ],
+      "rugosidade": 0.14,
+      "metal": 1.0
+    },
+    {
+      "nome": "Sorteio_Farol",
+      "cor": [
+        226,
+        228,
+        214
+      ],
+      "rugosidade": 0.12,
+      "metal": 0.0
+    },
+    {
+      "nome": "Sorteio_Laco",
+      "cor": [
+        214,
+        30,
+        52
+      ],
+      "rugosidade": 0.38,
+      "metal": 0.0
+    },
+    {
+      "nome": "Sorteio_Lanterna",
+      "cor": [
+        150,
+        18,
+        20
+      ],
+      "rugosidade": 0.15,
+      "metal": 0.0
+    },
+    {
+      "nome": "Sorteio_Letra_Vermelha",
+      "cor": [
+        200,
+        22,
+        26
+      ],
+      "rugosidade": 0.7,
+      "metal": 0.0
+    },
+    {
+      "nome": "Sorteio_Pintura_Vermelha",
+      "cor": [
+        158,
+        20,
+        24
+      ],
+      "rugosidade": 0.32,
+      "metal": 0.0
+    },
+    {
+      "nome": "Sorteio_Pisca",
+      "cor": [
+        226,
+        128,
+        30
+      ],
+      "rugosidade": 0.15,
+      "metal": 0.0
+    },
+    {
+      "nome": "Sorteio_Placa",
+      "cor": [
+        228,
+        226,
+        212
+      ],
+      "rugosidade": 0.5,
+      "metal": 0.0
+    },
+    {
+      "nome": "Sorteio_Plastico_Preto",
+      "cor": [
+        30,
+        30,
+        32
+      ],
+      "rugosidade": 0.6,
+      "metal": 0.0
+    },
+    {
+      "nome": "Sorteio_Pneu",
+      "cor": [
+        20,
+        20,
+        21
+      ],
+      "rugosidade": 0.88,
+      "metal": 0.0
+    },
+    {
+      "nome": "Sorteio_Tecido_Amarelo",
+      "cor": [
+        238,
+        196,
+        36
+      ],
+      "rugosidade": 0.9,
+      "metal": 0.0
+    },
+    {
+      "nome": "Sorteio_Veludo_Vermelho",
+      "cor": [
+        128,
+        14,
+        24
+      ],
+      "rugosidade": 0.95,
+      "metal": 0.0
+    },
+    {
+      "nome": "Sorteio_Vidro_Escuro",
+      "cor": [
+        26,
+        30,
+        34
+      ],
+      "rugosidade": 0.06,
+      "metal": 0.0
+    }
+  ]
+}
