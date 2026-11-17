@@ -87,6 +87,10 @@ namespace BackRooms.EditorTools
                     // Objetivo: porta trancada por teclado, código nas etiquetas vermelhas.
                     props.exitCode = true;
                     props.labelMaterial = FaseMaterial("Etiqueta", Color.white, 0.25f, null);
+                    // Piso por zona e música de loja.
+                    props.laminateMaterial = FaseMaterial("PisoLaminado", Color.white, 0.45f, FloorTexture("PisoLaminado", PaintLaminate));
+                    props.vinylMaterial = FaseMaterial("PisoVinilico", Color.white, 0.35f, FloorTexture("PisoVinilico", PaintVinyl));
+                    props.shopMusic = true;
                 },
             });
             Debug.Log($"[BackRooms] Level 1 de teste montado com {models.Length} modelos: abra {ScenePath}, aperte Play e hospede (H).");
@@ -165,6 +169,54 @@ namespace BackRooms.EditorTools
             UnityEngine.Object.DestroyImmediate(texture);
             AssetDatabase.ImportAsset(path);
             return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        }
+
+        // Textura de piso que cobre uma célula inteira (4 m): 1024 pontos, ~4 mm por ponto.
+        static Texture2D FloorTexture(string name, System.Func<int, int, int, Color> paint)
+        {
+            if (!AssetDatabase.IsValidFolder(FaseFolder)) AssetDatabase.CreateFolder("Assets/_Game/Art/Level1", "Fase");
+            string path = FaseFolder + "/" + name + ".png";
+            const int size = 1024;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                    texture.SetPixel(x, y, paint(x, y, size));
+            System.IO.File.WriteAllBytes(path, texture.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(texture);
+            AssetDatabase.ImportAsset(path);
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        }
+
+        // Laminado: tábuas de 19 cm de largura e 1,2 m de comprimento, emendas desencontradas,
+        // veio de madeira média e um pouco de desgaste.
+        static Color PaintLaminate(int x, int y, int size)
+        {
+            float meters = 4f / size;
+            float u = x * meters, v = y * meters;
+            int row = Mathf.FloorToInt(v / 0.19f);
+            float shift = Mathf.Repeat(row * 0.47f, 1.2f);
+            int plank = Mathf.FloorToInt((u + shift) / 1.2f);
+            float along = Mathf.Repeat(u + shift, 1.2f), across = Mathf.Repeat(v, 0.19f);
+            float seed = Mathf.Repeat(Mathf.Sin(row * 12.9898f + plank * 78.233f) * 43758.5453f, 1f);
+
+            var baseColor = Color.Lerp(new Color(0.42f, 0.29f, 0.17f), new Color(0.56f, 0.4f, 0.24f), seed);
+            float grain = Mathf.Sin((across * 90f + Mathf.Sin(along * 6f + seed * 10f) * 1.5f) * (1f + seed)) * 0.5f + 0.5f;
+            Color c = baseColor * Mathf.Lerp(0.88f, 1.08f, grain);
+            if (across < 0.004f || along < 0.004f) c *= 0.55f; // fresta entre as tábuas
+            return new Color(c.r, c.g, c.b, 1f);
+        }
+
+        // Vinílico: placas cinza de 50 cm com fuga escura e um pontilhado mais claro.
+        static Color PaintVinyl(int x, int y, int size)
+        {
+            float meters = 4f / size;
+            float u = x * meters, v = y * meters;
+            int tx = Mathf.FloorToInt(u / 0.5f), ty = Mathf.FloorToInt(v / 0.5f);
+            float seed = Mathf.Repeat(Mathf.Sin(tx * 12.9898f + ty * 78.233f) * 43758.5453f, 1f);
+            float speck = Mathf.Repeat(Mathf.Sin(x * 3.1f + y * 7.7f) * 9137.1f, 1f);
+            float g = Mathf.Lerp(0.42f, 0.5f, seed) + (speck > 0.93f ? 0.08f : 0f);
+            if (Mathf.Repeat(u, 0.5f) < 0.006f || Mathf.Repeat(v, 0.5f) < 0.006f) g *= 0.6f;
+            return new Color(g, g * 1.01f, g * 1.03f, 1f);
         }
 
         static GameObject[] LoadModels()

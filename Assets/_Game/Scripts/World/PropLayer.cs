@@ -60,6 +60,14 @@ namespace BackRooms.World
         [Tooltip("Distância mínima entre as etiquetas, em células.")]
         public int tagSpacing = 6;
 
+        [Header("Piso e som (level1-mostruario.md, seções 3 e 7)")]
+        [Tooltip("Laminado de madeira debaixo das vitrines de jantar e de estar. Sem material, carpete.")]
+        public Material laminateMaterial;
+        [Tooltip("Piso vinílico cinza no estoque. Sem material, carpete.")]
+        public Material vinylMaterial;
+        [Tooltip("A música de loja baixinha, do teto, que some antes do apagão.")]
+        public bool shopMusic;
+
         /// <summary>Quantos móveis foram postos na última construção.</summary>
         public int Count { get; private set; }
 
@@ -147,6 +155,7 @@ namespace BackRooms.World
             ChooseTotemCells();
             Totem.Clear();
             BubbleWrap.Clear();
+            FloorZones.Clear();
             _hideSpots = 0;
             _sheets = 0;
 
@@ -169,6 +178,7 @@ namespace BackRooms.World
             {
                 if (_hideSpots > 0) _root.gameObject.AddComponent<HideSpotInput>();
                 if (_sheets > 0) _root.gameObject.AddComponent<BubbleWrap>();
+                if (shopMusic) _root.gameObject.AddComponent<BackRooms.Audio.ShopMusic>();
             }
 
             Count = _count;
@@ -538,6 +548,32 @@ namespace BackRooms.World
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         }
 
+        // ---------------------------------------------------------------- Piso
+
+        // Uma placa de piso cobrindo a célula, rente ao carpete, sem colisor (o chão continua o
+        // do LevelBuilder). Os passos sabem dela por FloorZones.
+        void LayFloor(int x, int z, Material material, FloorKind kind)
+        {
+            if (material == null) return;
+
+            const float inset = 0.1f;
+            var floor = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            floor.name = kind == FloorKind.Laminate ? "PisoLaminado" : "PisoVinilico";
+            Collider c = floor.GetComponent<Collider>();
+            if (Application.isPlaying) Destroy(c); else DestroyImmediate(c);
+            floor.transform.SetParent(_root, false);
+            floor.transform.localPosition = new Vector3((x + 0.5f) * Cell, 0.006f, (z + 0.5f) * Cell);
+            floor.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            floor.transform.localScale = new Vector3(Cell - inset * 2f, Cell - inset * 2f, 1f);
+            var renderer = floor.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+            Vector3 world = floor.transform.position;
+            float half = Cell * 0.5f;
+            FloorZones.Add(new Rect(world.x - half, world.z - half, Cell, Cell), kind);
+        }
+
         // ---------------------------------------------------------------- Plástico-bolha
 
         // Uma folha de 1,5 x 1,0 m no chão, atravessando a cruz livre da célula (é onde se pisa).
@@ -653,6 +689,10 @@ namespace BackRooms.World
 
             Theme theme = ThemeOf(x, z);
             bool totemHere = _totemCells.Contains(x + z * _data.Width);
+
+            // Piso da zona: laminado nas vitrines de jantar e de estar, vinílico no estoque.
+            if (theme == Theme.Jantar || theme == Theme.Estar) LayFloor(x, z, laminateMaterial, FloorKind.Laminate);
+            else if (theme == Theme.Estoque) LayFloor(x, z, vinylMaterial, FloorKind.Vinyl);
             if (theme == Theme.Vazio && !totemHere) return;
 
             System.Random rng = Rng(53, x, z);
