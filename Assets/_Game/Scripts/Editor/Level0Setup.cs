@@ -84,6 +84,8 @@ namespace BackRooms.EditorTools
             public string scenePath = ScenePath;
             public string levelName = "Level0";
             public int size = LevelBuilder.DefaultSize;
+            /// <summary>Pé-direito em metros (o Level 1 usa 3,4).</summary>
+            public float ceilingHeight = LevelBuilder.DefaultWallHeight;
             public bool pits = true;
             public bool alcoves = true;
             public bool entity = true;
@@ -275,6 +277,7 @@ namespace BackRooms.EditorTools
             var builder = level.AddComponent<LevelBuilder>();
             builder.width = options.size;
             builder.height = options.size;
+            builder.ceilingHeight = options.ceilingHeight;
             builder.pitsEnabled = options.pits;
             builder.alcovesEnabled = options.alcoves;
             builder.paintedArrows = options.paintedArrows;

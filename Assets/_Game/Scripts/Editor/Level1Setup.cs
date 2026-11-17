@@ -10,8 +10,8 @@ using UnityEngine;
 namespace BackRooms.EditorTools
 {
     /// <summary>
-    /// O Level 1 de teste (Docs/level1-mostruario.md): uma versão pequena do Level 0 — 10 x 10
-    /// células, sem buracos e sem nichos — mobiliada pela <see cref="PropLayer"/> com todos os
+    /// O Level 1 (Docs/level1-mostruario.md): a planta do Level 0 — 20 x 20 células, pé-direito
+    /// de 3,4 m, sem buracos e sem nichos — mobiliada pela <see cref="PropLayer"/> com todos os
     /// modelos do Blender de Art/Level1/Modelos, e com o Capitão no lugar da entidade (o prefab
     /// Prefabs/Captain.prefab é gravado aqui, por <see cref="CaptainPreview.CreatePrefab"/>).
     ///
@@ -28,7 +28,10 @@ namespace BackRooms.EditorTools
     {
         public const string ScenePath = "Assets/_Game/Scenes/Level1_Test.unity";
         const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
-        const int Size = 10;
+        // O tamanho do Level 0 (20 x 20 células, 80 x 80 m) e o pé-direito baixo do projeto
+        // (level1-mostruario.md, seção 3): 3,4 m deixam os móveis mais opressivos.
+        const int Size = 20;
+        const float Ceiling = 3.4f;
         static readonly int[] CheckSeeds = { 1998, 7, 4242, 31337, 90210 };
 
         [MenuItem("BackRooms/Abrir Level 1 (teste)", priority = 0)]
@@ -63,13 +66,14 @@ namespace BackRooms.EditorTools
                 scenePath = ScenePath,
                 levelName = "Level1",
                 size = Size,
+                ceilingHeight = Ceiling,
                 pits = false,
                 alcoves = false,
-                // O inimigo daqui é o Capitão, com o mesmo diretor da entidade. O mapa é menor
-                // (10 x 10): ele acorda quando alguém chega a 5 células da sala inicial.
+                // O inimigo daqui é o Capitão, com o mesmo diretor da entidade.
+                // Ele acorda quando alguém chega a 8 células da sala inicial, como a entidade.
                 entity = true,
                 enemyPrefab = captain,
-                enemyWakeCells = 5,
+                enemyWakeCells = 8,
                 paintedArrows = false,
                 decorate = level => level.AddComponent<PropLayer>().models = models,
             });
@@ -154,8 +158,9 @@ namespace BackRooms.EditorTools
                         problems.Add($"seed {seed}: a mesma seed deu mobília diferente ({count} x {props.Count} móveis)");
 
                     Transform root = builder.transform.Find("Moveis");
-                    int inRoom = CountInSpawnRoom(builder, root);
-                    if (inRoom > 0) problems.Add($"seed {seed}: {inRoom} móveis dentro da sala inicial");
+                    var roomItems = new List<string>();
+                    int inRoom = CountInSpawnRoom(builder, root, roomItems);
+                    if (inRoom > 0) problems.Add($"seed {seed}: {inRoom} móveis dentro da sala inicial ({string.Join(", ", roomItems)})");
 
                     List<string> blocked = BlockedPassages(builder, root);
                     if (blocked.Count > 0)
@@ -181,7 +186,9 @@ namespace BackRooms.EditorTools
             return problems.Count == 0;
         }
 
-        static int CountInSpawnRoom(LevelBuilder builder, Transform root)
+        static int CountInSpawnRoom(LevelBuilder builder, Transform root) => CountInSpawnRoom(builder, root, null);
+
+        static int CountInSpawnRoom(LevelBuilder builder, Transform root, List<string> names)
         {
             LevelData d = builder.Data;
             int count = 0;
@@ -189,7 +196,11 @@ namespace BackRooms.EditorTools
             {
                 Vector3 p = item.localPosition;
                 int x = Mathf.FloorToInt(p.x / LevelBuilder.Cell), z = Mathf.FloorToInt(p.z / LevelBuilder.Cell);
-                if (x >= 0 && z >= 0 && x < d.Width && z < d.Height && d.InRoom(x, z)) count++;
+                if (x >= 0 && z >= 0 && x < d.Width && z < d.Height && d.InRoom(x, z))
+                {
+                    count++;
+                    names?.Add($"{item.name} em ({x},{z})");
+                }
             }
             return count;
         }

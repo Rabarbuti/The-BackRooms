@@ -56,6 +56,7 @@ namespace BackRooms.World
         const float PillarGap = 0.45f;            // pilar de 0,8 m no canto: 0,4 mais folga
         const float OpenGap = 0.05f;
         const float Overhang = 0.08f;             // o balcão pode avançar um tico na cruz
+        const float ShadowMinHeight = 1.2f;       // móvel mais baixo que isto não projeta sombra
 
         enum Theme { Vazio, Jantar, Estar, Loja, Estoque, Bagunca, Sofas }
 
@@ -69,6 +70,7 @@ namespace BackRooms.World
         readonly Dictionary<GameObject, Bounds> _bounds = new Dictionary<GameObject, Bounds>();
         readonly HashSet<(int, int, WallSide)> _arrowFaces = new HashSet<(int, int, WallSide)>();
         LevelData _data;
+        float _ceiling = LevelBuilder.DefaultWallHeight;
         Transform _root;
         int _seed;
         int _count;
@@ -81,6 +83,7 @@ namespace BackRooms.World
         {
             _data = level.Data;
             _seed = _data.Seed;
+            _ceiling = level.WallHeight;
             _count = 0;
             _hash = 17;
 
@@ -262,7 +265,7 @@ namespace BackRooms.World
                 GameObject model = Get(sign);
                 if (model != null)
                 {
-                    float hang = LevelBuilder.WallHeight - BoundsOf(model).size.y;
+                    float hang = _ceiling - BoundsOf(model).size.y;
                     var center = new Rect(Cell * 0.5f - 0.6f, Cell * 0.5f - 0.2f, 1.2f, 0.4f);
                     Put(sign, center, new Vector2(0.5f, 0.5f), rng.Next(4) * 90f + Jitter(rng, 10f), Quaternion.identity,
                         origin, rng, hang, collider: false);
@@ -281,6 +284,8 @@ namespace BackRooms.World
             foreach (Decoration mark in _data.Decorations)
             {
                 if (mark.Kind != DecorationKind.Arrow) continue;
+                // A sala inicial fica vazia: a placa da primeira curva vai do lado de fora.
+                if (_data.InRoom(mark.X, mark.Z)) continue;
 
                 LevelBuilder.WallFace(mark.X, mark.Z, mark.Side, out Vector3 center, out Vector3 normal);
                 Vector3 tangent = Mathf.Abs(normal.z) > 0.5f ? Vector3.right : Vector3.forward;
@@ -393,6 +398,9 @@ namespace BackRooms.World
                     for (int i = -1; i <= 1; i++)
                     {
                         Vector3 at = table.transform.localPosition + front * 0.62f + right * (i * 0.6f + Jitter(rng, 0.05f));
+                        // A cadeira fica na célula da mesa, longe das paredes: sem isso, numa mesa
+                        // encostada ela podia atravessar a parede (e cair até na sala inicial).
+                        if (!SameCellInside(at, table.transform.localPosition, 0.35f)) continue;
                         PutAt(chair, at, yaw + 180f + Jitter(rng, 8f), Quaternion.identity, rng, wear);
                     }
                     if (rng.NextDouble() < 0.4)
@@ -682,8 +690,21 @@ namespace BackRooms.World
             return Spawn(model, position, rotation, local, true);
         }
 
+        // O ponto está na mesma célula que a referência e a mais de "margin" das bordas dela?
+        static bool SameCellInside(Vector3 point, Vector3 reference, float margin)
+        {
+            int cx = Mathf.FloorToInt(reference.x / Cell), cz = Mathf.FloorToInt(reference.z / Cell);
+            float lx = point.x - cx * Cell, lz = point.z - cz * Cell;
+            return lx >= margin && lx <= Cell - margin && lz >= margin && lz <= Cell - margin;
+        }
+
         GameObject Spawn(GameObject model, Vector3 localPosition, Quaternion rotation, Bounds local, bool collider)
         {
+            // Nada nasce numa célula que fica vazia (sala inicial, saída), nem fora do mapa.
+            Vector3 middle = localPosition + rotation * local.center;
+            int mx = Mathf.FloorToInt(middle.x / Cell), mz = Mathf.FloorToInt(middle.z / Cell);
+            if (mx < 0 || mz < 0 || mx >= _data.Width || mz >= _data.Height || !Free(mx, mz)) return null;
+
             // Última garantia da cruz livre, para tudo que tem colisor: o que é posto por ponto
             // (cadeira diante da mesa, cadeira em cima da pilha, móvel tombado) pode passar da
             // região. Se a caixa invade a cruz da célula, o móvel não entra.
@@ -700,6 +721,12 @@ namespace BackRooms.World
                 box.center = local.center;
                 box.size = local.size;
             }
+
+            // Só móvel alto projeta sombra (level1-mostruario.md, seção 4, regra 7): são mais de
+            // mil no mapa e cada luminária guarda a sombra de tudo o que alcança.
+            if (local.size.y < ShadowMinHeight)
+                foreach (Renderer part in item.GetComponentsInChildren<Renderer>())
+                    part.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
             _count++;
             unchecked
