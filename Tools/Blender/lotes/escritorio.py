@@ -32,10 +32,10 @@ PALETA = {
     BORDA: ((50, 49, 48), 0.5, 0.0),
     TECIDO: ((44, 46, 52), 0.95, 0.0),
     CROMO: ((198, 200, 204), 0.18, 0.9),
-    ACO_BEGE: ((196, 184, 152), 0.45, 0.3),
+    ACO_BEGE: ((196, 184, 152), 0.5, 0.0),     # aço pintado: a tinta não é metal
     TECLA: ((178, 170, 148), 0.6, 0.0),
     DIVISORIA: ((98, 112, 130), 0.95, 0.0),
-    ALUMINIO: ((172, 176, 180), 0.35, 0.8),
+    ALUMINIO: ((176, 180, 184), 0.4, 0.5),
 }
 
 # Da paleta comum.
@@ -127,7 +127,7 @@ def cadeira_giratoria(name="CadeiraGiratoria"):
     p.box((0, 0.232, 0.53), (0.06, 0.025, 0.28), PRETO, bevel=0.006, rot=(-6, 0, 0))
     # Encosto estofado, inclinado para trás.
     tilt = 8
-    p.box((0, 0.195, 0.765), (0.44, 0.07, 0.45), TECIDO, bevel=0.03, segments=2, rot=(-tilt, 0, 0))
+    p.box((0, 0.195, 0.772), (0.44, 0.07, 0.45), TECIDO, bevel=0.03, segments=2, rot=(-tilt, 0, 0))
     # Braços em L: braçadeira sob o assento, montante e apoio.
     for sx in (-1, 1):
         p.box((sx * 0.19, -0.01, 0.41), (0.14, 0.05, 0.016), PRETO, bevel=0.004)
