@@ -575,6 +575,9 @@ início). Até lá, a saída é a sala seca da seção 3.2.
    Nos dois casos, todo ponto do caminho a pé a no máximo três células de um refúgio; e o caminho a
    pé, que hoje passa só por seco e raso, precisa continuar sem nado na maré alta (o raso vira nado):
    um laço mais longo e mais seco onde ele corre pelo raso.
+6. **Ideias novas** para esta fase, ainda não decididas (puxar um colega da água, ondas que
+   denunciam o barulho, eco do azulejo, mergulho em dupla, marcar onde dá pé): `mecanicas.md`,
+   seção 4, propostas `P2.1` a `P2.5`.
 
 ---
 
