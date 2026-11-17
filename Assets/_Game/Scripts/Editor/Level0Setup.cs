@@ -46,7 +46,7 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 18;
+        public const int ContentVersion = 19;
 
         /// <summary>Música da tela inicial (cópia do arquivo mandado pelo usuário; não é gerada).</summary>
         public const string MenuMusicPath = "Assets/_Game/Audio/Musica/Menu_Tema.mp3";

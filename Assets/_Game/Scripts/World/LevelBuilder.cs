@@ -142,7 +142,7 @@ namespace BackRooms.World
         [Tooltip("As luminárias do teto acendem a névoa volumétrica. Caro: um quarto do tempo de cada quadro, para quase nenhuma diferença na imagem.")]
         public bool lampsLightFog = false;
         [Tooltip("As luminárias deixam de iluminar a esta distância da câmera, em metros. A sombra vai 20% além: luz acesa sem sombra atravessa as paredes.")]
-        public float lightFadeDistance = 45f;
+        public float lightFadeDistance = 25f;
 
         [Header("Distância das marcas")]
         [Tooltip("Sangue, palavras, sujeira e desgaste somem a esta distância da câmera, em metros.")]

@@ -115,3 +115,8 @@ O de dois editores não foi rodado: a mudança não mexe em rede.
   a passada. O quadro caiu de 27 para cerca de 20 ms desde a rodada anterior por causa dos ajustes
   do volume (oclusão de ambiente e céu desligados). O que sobra de caro são as luminárias: só com
   a lanterna o quadro custa 12 ms.
+
+- **Luz a 25 m (12/11/2026, segunda mudança do dia).** `lightFadeDistance` caiu de 45 para 25 m, e
+  com isso a sombra some a 30 m. O fundo dos corredores fica mais escuro a partir de 25 m. Vale para
+  os três níveis (o Level 2 usa o mesmo campo nas claraboias e nos janelões). Não foi medido nem
+  testado.
