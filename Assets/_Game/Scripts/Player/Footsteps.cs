@@ -201,8 +201,17 @@ namespace BackRooms.Player
             PoolWater water = PoolWater.Current;
             if (water == null)
             {
-                // Fase sem água: carpete, como sempre foi.
-                Surface = StepSurface.Carpet;
+                // Fase sem água: carpete, como sempre foi; no Escritório o piso é duro (placas de
+                // porcelanato e madeira), então os passos são os do azulejo seco.
+                if (LevelBuilder.HardFloorActive)
+                {
+                    EnsureWaterClips();
+                    Surface = StepSurface.Tile;
+                }
+                else
+                {
+                    Surface = StepSurface.Carpet;
+                }
                 _waterKnown = false;
                 if (_remote) RemoteGroundSteps(dt);
                 return;

@@ -270,6 +270,43 @@ namespace BackRooms.World
 
         public bool HasPools => Depth != null;
 
+        // ---------------------------------------------------------------- Escritório (Level 3)
+
+        /// <summary>Tipo de cada célula no Escritório. Nulo nos outros níveis.</summary>
+        public OfficeCell[,] Office;
+
+        /// <summary>O que há em cada divisa do Escritório. Mesmos índices de WallSouth / WallWest.</summary>
+        public OfficeEdge[,] OfficeSouth;
+        public OfficeEdge[,] OfficeWest;
+
+        /// <summary>
+        /// Armários amarelos encostados numa parede do corredor. Mesmos índices de WallSouth /
+        /// WallWest: 0 = nenhum, 1 = do lado da célula de índice menor (sul / oeste), 2 = do outro.
+        /// </summary>
+        public byte[,] LockersSouth;
+        public byte[,] LockersWest;
+
+        public List<OfficeRoom> OfficeRooms = new List<OfficeRoom>();
+
+        /// <summary>Índice em <see cref="OfficeRooms"/> de cada célula; -1 nos corredores.</summary>
+        public int[,] OfficeRoomOf;
+
+        public OfficeAtrium Atrium;
+        public List<OfficeElevator> Elevators = new List<OfficeElevator>();
+
+        public bool HasOffice => Office != null;
+
+        public OfficeEdge OfficeEdgeAt(int x, int z, WallSide side)
+        {
+            switch (side)
+            {
+                case WallSide.South: return OfficeSouth[x, z];
+                case WallSide.North: return OfficeSouth[x, z + 1];
+                case WallSide.West: return OfficeWest[x, z];
+                default: return OfficeWest[x + 1, z];
+            }
+        }
+
         /// <summary>Altura de um degrau: um azulejo.</summary>
         public const float StepRise = 0.2f;
 
