@@ -118,12 +118,15 @@ namespace BackRooms.World
         const float Overhang = 0.08f;             // o balcão pode avançar um tico na cruz
         const float ShadowMinHeight = 1.2f;       // móvel mais baixo que isto não projeta sombra
 
-        enum Theme { Vazio, Jantar, Estar, Loja, Estoque, Bagunca, Sofas }
+        enum Theme { Vazio, Jantar, Estar, Loja, Estoque, Bagunca, Sofas, Quarto, Escritorio, Cubiculos, Lavanderia, Festa, Verao }
 
         static readonly (Theme, float)[] ThemeWeights =
         {
             (Theme.Jantar, 3f), (Theme.Estar, 3f), (Theme.Loja, 3f), (Theme.Estoque, 2.5f),
             (Theme.Bagunca, 2f), (Theme.Vazio, 1.2f),
+            // Zonas que vieram com os lotes quarto, escritorio, festa_verao e sorteio_estoque.
+            (Theme.Quarto, 2f), (Theme.Escritorio, 2f), (Theme.Cubiculos, 1.5f), (Theme.Lavanderia, 1f),
+            (Theme.Festa, 0.7f), (Theme.Verao, 0.5f),
         };
 
         readonly Dictionary<string, GameObject> _byName = new Dictionary<string, GameObject>();
@@ -133,6 +136,7 @@ namespace BackRooms.World
         float _ceiling = LevelBuilder.DefaultWallHeight;
         Transform _root;
         readonly HashSet<int> _totemCells = new HashSet<int>();
+        int _sorteioCell = -1;
         bool _barricading;
         int _hideSpots, _sheets, _anomalies, _signs;
         bool _anomaly;
@@ -165,6 +169,7 @@ namespace BackRooms.World
             // Antes de qualquer móvel: as células entupidas (o LevelNav do inimigo já as evita) e
             // onde ficam os totens. Cada etapa tem a própria sequência da seed.
             ChooseBarricades();
+            ChooseSorteio();
             ChooseTotemCells();
             Totem.Clear();
             BubbleWrap.Clear();
@@ -255,6 +260,100 @@ namespace BackRooms.World
                 if (AllReachable()) made++;
                 else _data.Barricade[x, z] = false;
             }
+        }
+
+        // O sorteio (seção 3.1): um carro inteiro num beco sem saída longe do início e fora do
+        // caminho até a saída. A célula vira obstáculo como uma barricada (o carro a ocupa).
+        void ChooseSorteio()
+        {
+            _sorteioCell = -1;
+            if (Get("Carro") == null) return;
+
+            var keep = new HashSet<int>(_data.SafePathCells);
+            foreach (int cell in _data.PathCells) keep.Add(cell);
+            var candidates = new List<int>();
+            for (int z = 0; z < _data.Height; z++)
+                for (int x = 0; x < _data.Width; x++)
+                {
+                    if (!Free(x, z) || _data.IsBarricade(x, z) || keep.Contains(x + z * _data.Width) || NextToRoom(x, z)) continue;
+                    if (LevelGenerator.WearAt(_data, x, z) < 0.3f || OpenSides(x, z) != 1) continue;
+                    if (SofaRoomBlock == new Vector2Int(x / 2, z / 2)) continue;
+                    candidates.Add(x + z * _data.Width);
+                }
+
+            System.Random rng = Rng(271, 0, 0);
+            while (candidates.Count > 0)
+            {
+                int pick = candidates[rng.Next(candidates.Count)];
+                candidates.Remove(pick);
+                int px = pick % _data.Width, pz = pick / _data.Width;
+                _data.Barricade[px, pz] = true;
+                if (AllReachable()) { _sorteioCell = pick; return; }
+                _data.Barricade[px, pz] = false;
+            }
+        }
+
+        int OpenSides(int x, int z)
+        {
+            int open = 0;
+            foreach (WallSide side in Sides)
+                if (_data.CanWalk(x, z, side, false)) open++;
+            return open;
+        }
+
+        // O carro no beco, de frente para a saída dele; a faixa CONCORRA no vão (só os postes da
+        // faixa têm colisor, fora da faixa de passagem) e dois postes de fila ao lado do carro.
+        void PlaceSorteio(int x, int z)
+        {
+            System.Random rng = Rng(277, x, z);
+            var origin = new Vector3(x * Cell, 0f, z * Cell);
+            WallSide open = WallSide.South;
+            foreach (WallSide side in Sides)
+                if (_data.CanWalk(x, z, side, false)) open = side;
+            _data.Neighbor(x, z, open, out int nx, out int nz);
+            var toward = new Vector3(nx - x, 0f, nz - z);
+            Quaternion facing = Quaternion.LookRotation(toward, Vector3.up);
+            Vector3 middle = origin + new Vector3(Cell * 0.5f, 0f, Cell * 0.5f);
+
+            GameObject car = Get("Carro");
+            Bounds cb = BoundsOf(car);
+            GameObject carItem = Instantiate(car, _root);
+            carItem.name = car.name;
+            carItem.transform.localRotation = facing * Quaternion.Euler(0f, Jitter(rng, 4f), 0f);
+            carItem.transform.localPosition = middle - facing * new Vector3(cb.center.x, 0f, cb.center.z) - Vector3.up * cb.min.y;
+            var carBox = carItem.AddComponent<BoxCollider>();
+            carBox.center = cb.center;
+            carBox.size = cb.size;
+            _count++;
+
+            // Faixa CONCORRA atravessando o vão, acima da cabeça.
+            GameObject banner = Get("FaixaConcorra");
+            if (banner != null)
+            {
+                Bounds bb = BoundsOf(banner);
+                GameObject item = Instantiate(banner, _root);
+                item.name = banner.name;
+                item.transform.localRotation = facing;
+                item.transform.localPosition = middle + toward * (Cell * 0.5f) - Vector3.up * bb.min.y;
+                float half = bb.size.x * 0.5f - 0.05f;
+                for (int i = -1; i <= 1; i += 2)
+                {
+                    var post = item.AddComponent<BoxCollider>();
+                    post.center = new Vector3(bb.center.x + i * half, bb.center.y, bb.center.z);
+                    post.size = new Vector3(0.08f, bb.size.y, 0.08f);
+                }
+                _count++;
+            }
+
+            // Postes de fila dos dois lados do carro, perto da saída do beco.
+            Vector3 across = facing * Vector3.right;
+            for (int i = -1; i <= 1; i += 2)
+            {
+                Vector3 at = middle + toward * 1.4f + across * (i * 1.45f);
+                PutAt("PosteDeFila", at, Quaternion.LookRotation(across * -i).eulerAngles.y, Quaternion.identity, rng, 0f);
+            }
+
+            unchecked { _hash = _hash * 31 + Fnv("Sorteio") + x * 131 + z; }
         }
 
         bool NextToRoom(int x, int z)
@@ -943,6 +1042,12 @@ namespace BackRooms.World
         {
             if (!Free(x, z)) return;
 
+            if (x + z * _data.Width == _sorteioCell)
+            {
+                PlaceSorteio(x, z);
+                return;
+            }
+
             if (_data.IsBarricade(x, z))
             {
                 FillBarricade(x, z);
@@ -1071,6 +1176,38 @@ namespace BackRooms.World
                 CornerItem(theme, region, anchor, facing, origin, rng, wear);
             }
 
+            // Festa: bandeirinhas atravessando os vãos abertos, rente ao teto.
+            if (theme == Theme.Festa && Get("Bandeirinhas") != null)
+            {
+                System.Random flagRng = Rng(281, x, z);
+                for (int s = 0; s < 4; s++)
+                {
+                    if (Closed(x, z, s) || flagRng.NextDouble() > 0.6) continue;
+                    GameObject flags = Instantiate(Get("Bandeirinhas"), _root);
+                    flags.name = "Bandeirinhas";
+                    Vector3 edge = origin + new Vector3(Cell * 0.5f, 0f, Cell * 0.5f);
+                    if (s == 0) edge.z = origin.z; else if (s == 1) edge.z = origin.z + Cell;
+                    else if (s == 2) edge.x = origin.x; else edge.x = origin.x + Cell;
+                    flags.transform.localPosition = new Vector3(edge.x, _ceiling - 0.15f, edge.z);
+                    flags.transform.localRotation = Quaternion.Euler(0f, s < 2 ? 0f : 90f, 0f);
+                    foreach (Renderer part in flags.GetComponentsInChildren<Renderer>())
+                        part.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    unchecked { _hash = _hash * 31 + Fnv("Bandeirinhas") + s * 7 + x * 131 + z; }
+                }
+            }
+
+            // Quarto: tapete no meio da célula, rente ao chão, sem colisor.
+            if (theme == Theme.Quarto && Get("Tapete") != null)
+            {
+                System.Random rugRng = Rng(283, x, z);
+                if (rugRng.NextDouble() < 0.6)
+                {
+                    var center = new Rect(Cell * 0.5f - 0.9f, Cell * 0.5f - 0.9f, 1.8f, 1.8f);
+                    Put("Tapete", center, new Vector2(0.5f, 0.5f), rugRng.Next(2) * 90f + Jitter(rugRng, 6f), Quaternion.identity,
+                        origin, rugRng, 0.007f, collider: false);
+                }
+            }
+
             // Loja: placa pendurada do teto no meio da célula, acima da cabeça.
             if (theme == Theme.Loja && rng.NextDouble() < 0.4)
             {
@@ -1194,12 +1331,93 @@ namespace BackRooms.World
                 case Theme.Sofas:
                     choice = Pick(rng, new[] { ("@sofa_empilhado", 3f), ("NamoradeiraMarromListrada", 1f) });
                     break;
+                case Theme.Quarto:
+                    choice = Pick(rng, new[] { ("@cama_casal", 3f), ("@cama_solteiro", 2f), ("GuardaRoupa", 2.5f), ("Comoda", 1f) });
+                    break;
+                case Theme.Escritorio:
+                    choice = Pick(rng, new[] { ("@mesa_escritorio", 4f), ("Gaveteiro", 1f), ("EstanteDeAco", 1f) });
+                    break;
+                case Theme.Cubiculos:
+                    choice = Pick(rng, new[] { ("@cubiculo", 4f), ("@mesa_escritorio", 1f) });
+                    break;
+                case Theme.Lavanderia:
+                    choice = Pick(rng, new[] { ("@lavadoras", 4f), ("EstanteDeAco", 1f) });
+                    break;
+                case Theme.Festa:
+                    choice = Pick(rng, new[] { ("@mesa_bolos", 3f), ("@dobraveis", 1.5f) });
+                    break;
+                case Theme.Verao:
+                    choice = Pick(rng, new[] { ("@espreguicadeiras", 3f) });
+                    break;
                 default:
                     return false;
             }
 
             switch (choice)
             {
+                case "@cama_casal":
+                case "@cama_solteiro":
+                {
+                    // Cama de lado, encostada na parede (a cabeceira numa ponta). A de casal vai a
+                    // 88%: inteira, com a colcha, ela invadiria o meio da célula.
+                    bool couple = choice == "@cama_casal";
+                    float turn = rng.NextDouble() < 0.5 ? 90f : -90f;
+                    GameObject bed = PutScaled(couple ? "CamaDeCasal" : "CamaDeSolteiro", strip, anchor, yaw + turn, origin, rng, couple ? 0.88f : 1f);
+                    if (bed == null && couple) bed = PutScaled("CamaDeSolteiro", strip, anchor, yaw + turn, origin, rng, 1f);
+                    return bed != null;
+                }
+                case "@mesa_escritorio":
+                {
+                    // Mesa de escritório na parede, o computador em cima e a cadeira giratória na frente.
+                    GameObject desk = Put("MesaDeEscritorio", strip, anchor, yaw, Quaternion.identity, origin, rng);
+                    if (desk == null) return false;
+                    Vector3 front = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+                    Vector3 right = Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
+                    PutAt("ComputadorDeMesa", desk.transform.localPosition + Vector3.up * 0.75f + front * 0.08f + right * Jitter(rng, 0.15f),
+                          yaw + Jitter(rng, 6f), Quaternion.identity, rng, 0f);
+                    Vector3 seat = desk.transform.localPosition + front * 0.75f + right * Jitter(rng, 0.2f);
+                    if (SameCellInside(seat, desk.transform.localPosition, 0.35f))
+                        PutAt("CadeiraGiratoria", seat, yaw + 180f + Jitter(rng, 35f), Quaternion.identity, rng, wear);
+                    return true;
+                }
+                case "@cubiculo":
+                {
+                    // Cubículo: a mesa na parede e uma divisória alta de cada ponta, saindo da parede.
+                    GameObject desk = Put("MesaDeEscritorio", strip, anchor, yaw, Quaternion.identity, origin, rng);
+                    if (desk == null) return false;
+                    Vector3 front = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+                    Vector3 right = Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
+                    PutAt("ComputadorDeMesa", desk.transform.localPosition + Vector3.up * 0.75f + front * 0.08f,
+                          yaw + Jitter(rng, 6f), Quaternion.identity, rng, 0f);
+                    for (int end = -1; end <= 1; end += 2)
+                    {
+                        Vector3 at = desk.transform.localPosition + right * end * 0.78f + front * 0.25f;
+                        if (SameCellInside(at, desk.transform.localPosition, 0.1f))
+                            PutAt("DivisoriaCubiculo", at, yaw + 90f, Quaternion.identity, rng, 0f);
+                    }
+                    return true;
+                }
+                case "@mesa_bolos":
+                {
+                    GameObject table = Put("MesaDeBolos", strip, anchor, yaw, Quaternion.identity, origin, rng);
+                    if (table == null) return false;
+                    Vector3 front = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+                    Vector3 right = Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
+                    for (int i = -1; i <= 1; i += 2)
+                    {
+                        Vector3 at = table.transform.localPosition + front * 0.75f + right * (i * 0.55f);
+                        if (SameCellInside(at, table.transform.localPosition, 0.35f))
+                            PutAt("CadeiraDobravel", at, yaw + 180f + Jitter(rng, 20f), Quaternion.identity, rng, wear);
+                    }
+                    return true;
+                }
+                case "@dobraveis":
+                    return Row(new[] { "CadeiraDobravel" }, 5, strip, side, yaw, origin, rng, 0.08f);
+                case "@espreguicadeiras":
+                {
+                    // Duas ou três espreguiçadeiras lado a lado, de frente para a célula.
+                    return Row(new[] { "Espreguicadeira" }, 3, strip, side, yaw + 90f, origin, rng, 0.3f);
+                }
                 case "@jantar":
                 {
                     // Mesa encostada e cadeiras do lado de fora, viradas para ela.
@@ -1330,6 +1548,24 @@ namespace BackRooms.World
                 case Theme.Sofas:
                     choice = Pick(rng, new[] { ("@poltrona_marrom", 3f), ("@sofa_em_pe", 1f) });
                     break;
+                case Theme.Quarto:
+                    choice = Pick(rng, new[] { ("CriadoMudo", 3f), ("VasoAlto", 1f), ("CabideiroDePe", 1f) });
+                    break;
+                case Theme.Escritorio:
+                    choice = Pick(rng, new[] { ("Gaveteiro", 2f), ("CadeiraGiratoria", 2f), ("@caixas_soltas", 1f), ("VasoAlto", 1f) });
+                    break;
+                case Theme.Cubiculos:
+                    choice = Pick(rng, new[] { ("DivisoriaCubiculo", 3f), ("Gaveteiro", 2f), ("CadeiraGiratoria", 1f) });
+                    break;
+                case Theme.Lavanderia:
+                    choice = Pick(rng, new[] { ("CestoDeRoupa", 3f), ("RoupaNoChao", 2f), ("CilindroAzul", 1f) });
+                    break;
+                case Theme.Festa:
+                    choice = Pick(rng, new[] { ("CachoDeBaloes", 3f), ("CadeiraDobravel", 2f) });
+                    break;
+                case Theme.Verao:
+                    choice = Pick(rng, new[] { ("@guarda_sol", 2f), ("BolaDePraia", 2f), ("Espreguicadeira", 1f) });
+                    break;
                 default:
                     return;
             }
@@ -1337,6 +1573,26 @@ namespace BackRooms.World
             float tip = 0.06f + 0.4f * wear; // chance de estar tombado
             switch (choice)
             {
+                case "@guarda_sol":
+                {
+                    // O guarda-sol: só o mastro tem colisor; a cobertura fica acima da cabeça e
+                    // pode passar por cima da cruz. O mastro fica no meio do canto.
+                    GameObject model = Get("GuardaSol");
+                    if (model == null) return;
+                    var mast = new Bounds(new Vector3(0f, 1.1f, 0f), new Vector3(0.12f, 2.2f, 0.12f));
+                    var at = new Vector3(region.center.x, 0f, region.center.y) + origin;
+                    if (Intrudes(at, mast) || BlocksLane(at, mast)) return;
+                    GameObject item = Instantiate(model, _root);
+                    item.name = model.name;
+                    item.transform.localPosition = at - new Vector3(0f, BoundsOf(model).min.y, 0f);
+                    item.transform.localRotation = Quaternion.Euler(0f, Jitter(rng, 180f), 0f);
+                    var box = item.AddComponent<BoxCollider>();
+                    box.center = mast.center;
+                    box.size = mast.size;
+                    _count++;
+                    unchecked { _hash = _hash * 31 + Fnv("GuardaSol") + Mathf.RoundToInt(at.x * 1000f) * 3 + Mathf.RoundToInt(at.z * 1000f); }
+                    return;
+                }
                 case "@cadeira":
                 {
                     string chair = Pick(rng, new[] { ("Cadeira", 1f), ("CadeiraEncostoRipas", 1f) });
@@ -1485,6 +1741,35 @@ namespace BackRooms.World
                 region.y + Mathf.Max(0f, slackZ) * anchor.y - rb.min.z);
 
             return Spawn(model, origin + position, rotation, local, collider);
+        }
+
+        // Como Put, com o modelo em escala uniforme.
+        GameObject PutScaled(string name, Rect region, Vector2 anchor, float yaw, Vector3 origin, System.Random rng, float scale)
+        {
+            GameObject model = Get(name);
+            if (model == null) return null;
+
+            Bounds real = BoundsOf(model);
+            var local = new Bounds(real.center * scale, real.size * scale);
+            Quaternion rotation = Quaternion.Euler(0f, yaw, 0f);
+            Bounds rb = Rotated(local, rotation);
+            float slackX = region.width - rb.size.x, slackZ = region.height - rb.size.z;
+            if (slackX < -0.001f || slackZ < -0.001f) return null;
+
+            var position = new Vector3(region.x + Mathf.Max(0f, slackX) * anchor.x - rb.min.x, -rb.min.y,
+                                       region.y + Mathf.Max(0f, slackZ) * anchor.y - rb.min.z);
+            GameObject item = Spawn(model, origin + position, rotation, local, true);
+            if (item == null) return null;
+
+            // O colisor foi feito na escala 1 com a caixa já reduzida: com o objeto reduzido, volta.
+            item.transform.localScale = Vector3.one * scale;
+            var box = item.GetComponent<BoxCollider>();
+            if (box != null)
+            {
+                box.center = real.center;
+                box.size = real.size;
+            }
+            return item;
         }
 
         /// <summary>
