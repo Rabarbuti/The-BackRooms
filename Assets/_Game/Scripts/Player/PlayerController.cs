@@ -310,6 +310,9 @@ namespace BackRooms.Player
             SetCursorLocked(true);
         }
 
+        /// <summary>Para os testes: inclina a câmera (positivo = olhando para baixo).</summary>
+        public void SetPitch(float pitch) => _pitch = Mathf.Clamp(pitch, -85f, 85f);
+
         /// <summary>Inclinação atual da câmera, em graus (positivo = olhando para baixo).</summary>
         public float Pitch => _pitch;
 

@@ -214,6 +214,8 @@ namespace BackRooms.UI
                 PlayerNetwork.CountAtExit(out int waiting, out int total);
 
                 if (exit.LocalWaiting) prompt = total > 1 ? $"WAITING {waiting}/{total}\nE - LET GO" : "OPENING";
+                else if (ExitLock.Prompt != null) prompt = ExitLock.Prompt;
+                else if (exit.LocalInReach && LevelExit.Locked) prompt = "LOCKED\nCODE ON KEYPAD";
                 else if (exit.LocalInReach) prompt = waiting > 0 ? $"E - OPEN DOOR\n{waiting}/{total} WAITING" : "E - OPEN DOOR";
                 else if (waiting > 0) footer = $"EXIT {waiting}/{total}";
             }

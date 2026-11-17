@@ -84,6 +84,9 @@ namespace BackRooms.EditorTools
                     props.totemMaterials = CharacterModels.Materials("Capitao");
                     props.totemBaseMaterial = FaseMaterial("Totem_Base", new Color(0.035f, 0.035f, 0.04f), 0.7f, null);
                     props.bubbleWrapMaterial = FaseMaterial("PlasticoBolha", new Color(0.86f, 0.9f, 0.93f), 0.88f, BubbleTexture());
+                    // Objetivo: porta trancada por teclado, código nas etiquetas vermelhas.
+                    props.exitCode = true;
+                    props.labelMaterial = FaseMaterial("Etiqueta", Color.white, 0.25f, null);
                 },
             });
             Debug.Log($"[BackRooms] Level 1 de teste montado com {models.Length} modelos: abra {ScenePath}, aperte Play e hospede (H).");

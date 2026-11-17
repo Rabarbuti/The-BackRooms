@@ -52,6 +52,14 @@ namespace BackRooms.World
         [Tooltip("Plástico-bolha no chão. Sem material, não há plástico-bolha.")]
         public Material bubbleWrapMaterial;
 
+        [Header("Objetivo (level1-mostruario.md, seção 6)")]
+        [Tooltip("Porta de saída trancada por um teclado; o código está em três etiquetas vermelhas.")]
+        public bool exitCode;
+        [Tooltip("Material-base (HDRP/Lit branco) das etiquetas, do bilhete e do teclado: cada um recebe a própria textura.")]
+        public Material labelMaterial;
+        [Tooltip("Distância mínima entre as etiquetas, em células.")]
+        public int tagSpacing = 6;
+
         /// <summary>Quantos móveis foram postos na última construção.</summary>
         public int Count { get; private set; }
 
@@ -69,6 +77,12 @@ namespace BackRooms.World
 
         /// <summary>Móveis em que dá para se esconder (guarda-roupas e mesas de jantar).</summary>
         public int HideSpots { get; private set; }
+
+        /// <summary>Etiquetas vermelhas de LIQUIDAÇÃO postas (o objetivo pede 3).</summary>
+        public int Tags { get; private set; }
+
+        /// <summary>Células das etiquetas, na ordem do dígito.</summary>
+        public readonly List<Vector2Int> TagCells = new List<Vector2Int>();
 
         /// <summary>Bloco (de 2 x 2 células) que virou a sala dos sofás; (-1, -1) se nenhum coube.</summary>
         public Vector2Int SofaRoomBlock { get; private set; } = new Vector2Int(-1, -1);
@@ -144,6 +158,11 @@ namespace BackRooms.World
             for (int z = 0; z < _data.Height; z++)
                 for (int x = 0; x < _data.Width; x++)
                     PlaceCell(x, z);
+
+            // O objetivo: teclado na porta, etiquetas e bilhete.
+            Tags = 0;
+            TagCells.Clear();
+            if (exitCode && labelMaterial != null) PlaceObjective(level);
 
             // A tecla E dos esconderijos e o estalo do plástico-bolha: um de cada por fase, só em jogo.
             if (Application.isPlaying)
@@ -405,6 +424,118 @@ namespace BackRooms.World
                 _hash = _hash * 31 + Mathf.RoundToInt(yaw * 10f);
             }
             return true;
+        }
+
+        // ---------------------------------------------------------------- Objetivo
+
+        void PlaceObjective(LevelBuilder level)
+        {
+            var lockObject = new GameObject("PortaTrancada");
+            lockObject.transform.SetParent(_root, false);
+            var exitLock = lockObject.AddComponent<ExitLock>();
+            exitLock.Init(_seed);
+
+            Transform exitRoot = level.transform.Find("Saida");
+            if (exitRoot != null) exitLock.BuildKeypad(exitRoot, labelMaterial);
+
+            Physics.SyncTransforms();
+            PlaceTags(exitLock.Digits);
+            PlaceNote(exitLock.Digits);
+            unchecked { _hash = _hash * 31 + exitLock.Code + 7919; }
+        }
+
+        // Três células longe do início, em blocos diferentes e longe umas das outras, com uma
+        // parede fechada livre (sem placa de saída nem móvel encostado) para a etiqueta.
+        void PlaceTags(int[] digits)
+        {
+            var candidates = new List<int>();
+            for (int z = 0; z < _data.Height; z++)
+                for (int x = 0; x < _data.Width; x++)
+                {
+                    if (!Free(x, z) || _data.IsBarricade(x, z) || _totemCells.Contains(x + z * _data.Width)) continue;
+                    if (LevelGenerator.WearAt(_data, x, z) < 0.3f) continue;
+                    candidates.Add(x + z * _data.Width);
+                }
+
+            System.Random rng = Rng(251, 0, 0);
+            for (int spacing = tagSpacing; spacing >= 3 && TagCells.Count < 3; spacing--)
+            {
+                TagCells.Clear();
+                var pool = new List<int>(candidates);
+                while (TagCells.Count < 3 && pool.Count > 0)
+                {
+                    int pick = pool[rng.Next(pool.Count)];
+                    pool.Remove(pick);
+                    int px = pick % _data.Width, pz = pick / _data.Width;
+
+                    bool apart = true;
+                    foreach (Vector2Int other in TagCells)
+                        if (Mathf.Max(Mathf.Abs(other.x - px), Mathf.Abs(other.y - pz)) < spacing ||
+                            new Vector2Int(other.x / 2, other.y / 2) == new Vector2Int(px / 2, pz / 2)) apart = false;
+                    if (!apart || !FreeWall(px, pz, out _)) continue;
+                    TagCells.Add(new Vector2Int(px, pz));
+                }
+            }
+
+            for (int i = 0; i < TagCells.Count; i++)
+            {
+                Vector2Int cell = TagCells[i];
+                FreeWall(cell.x, cell.y, out WallSide side);
+                MountLabel($"Etiqueta_{i + 1}", cell.x, cell.y, side, 1.45f, new Vector2(0.6f, 0.4f), ExitLock.TagTexture(digits[i], i + 1));
+                Tags++;
+                unchecked { _hash = _hash * 31 + cell.x * 131 + cell.y * 7 + digits[i]; }
+            }
+        }
+
+        // O bilhete na sala inicial, numa parede fechada dela.
+        void PlaceNote(int[] digits)
+        {
+            int x = _data.SpawnX, z = _data.SpawnZ;
+            for (int s = 0; s < 4; s++)
+            {
+                if (!Closed(x, z, s)) continue;
+                MountLabel("Bilhete", x, z, Sides[s], 1.4f, new Vector2(0.32f, 0.24f), ExitLock.NoteTexture(digits, _seed));
+                return;
+            }
+        }
+
+        // Uma parede fechada da célula, sem placa de saída e sem móvel encostado na frente dela.
+        bool FreeWall(int x, int z, out WallSide side)
+        {
+            for (int s = 0; s < 4; s++)
+            {
+                side = Sides[s];
+                if (!Closed(x, z, s) || _arrowFaces.Contains((x, z, side))) continue;
+                LevelBuilder.WallFace(x, z, side, out Vector3 center, out Vector3 normal);
+                Vector3 front = _root.TransformPoint(center + normal * 0.35f + Vector3.up * 1.45f);
+                Quaternion turn = _root.rotation * Quaternion.LookRotation(normal, Vector3.up);
+                bool blocked = false;
+                foreach (Collider hit in Physics.OverlapBox(front, new Vector3(0.4f, 0.4f, 0.3f), turn, ~0, QueryTriggerInteraction.Ignore))
+                    if (hit.transform.IsChildOf(_root)) blocked = true;
+                if (!blocked) return true;
+            }
+            side = WallSide.South;
+            return false;
+        }
+
+        // Um cartão plano pregado na parede, de frente para a célula, sem colisor.
+        void MountLabel(string name, int x, int z, WallSide side, float height, Vector2 size, Texture2D texture)
+        {
+            LevelBuilder.WallFace(x, z, side, out Vector3 center, out Vector3 normal);
+            var card = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            card.name = name;
+            Collider c = card.GetComponent<Collider>();
+            if (Application.isPlaying) Destroy(c); else DestroyImmediate(c);
+            card.transform.SetParent(_root, false);
+            card.transform.localPosition = center + normal * 0.012f + Vector3.up * height;
+            card.transform.localRotation = Quaternion.LookRotation(-normal, Vector3.up);
+            card.transform.localScale = new Vector3(size.x, size.y, 1f);
+            var material = new Material(labelMaterial) { name = name };
+            material.SetTexture("_BaseColorMap", texture);
+            material.SetColor("_BaseColor", Color.white);
+            var renderer = card.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         }
 
         // ---------------------------------------------------------------- Plástico-bolha

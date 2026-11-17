@@ -31,6 +31,10 @@ namespace BackRooms.Net
     {
         const string SeedMessage = "BackRooms.Seed";
         const string PassMessage = "BackRooms.Pass";
+        // Level 1: o cliente manda ao host o código digitado no teclado da porta; o host avisa
+        // todos (e quem entra depois) de que a porta destrancou.
+        const string ExitCodeMessage = "BackRooms.ExitCode";
+        const string ExitOpenMessage = "BackRooms.ExitOpen";
 
         /// <summary>Do abrir da porta até a troca de cena, em segundos (a tela fica preta).</summary>
         public const float PassSeconds = 1.6f;
@@ -301,6 +305,7 @@ namespace BackRooms.Net
             }
 
             Address = "esta máquina";
+            _net.CustomMessagingManager.RegisterNamedMessageHandler(ExitCodeMessage, OnExitCodeMessage);
             _epoch = _net.ServerTime.Time;
             int seed = fixedSeed != 0 ? fixedSeed : new System.Random().Next(1, int.MaxValue);
             BuildLevel(seed);
@@ -334,6 +339,8 @@ namespace BackRooms.Net
             _net.CustomMessagingManager.RegisterNamedMessageHandler(DrawingBoard.StrokeMessage, OnStrokeMessage);
             // E, quando todos chegarem à porta de saída, para qual fase ela leva.
             _net.CustomMessagingManager.RegisterNamedMessageHandler(PassMessage, OnPassMessage);
+            // E, no Level 1, que a porta destrancou.
+            _net.CustomMessagingManager.RegisterNamedMessageHandler(ExitOpenMessage, OnExitOpenMessage);
             return true;
         }
 
@@ -386,6 +393,52 @@ namespace BackRooms.Net
             }
 
             if (DrawingBoard.Instance != null) DrawingBoard.Instance.SendAll(_net, clientId);
+
+            // Porta do Level 1 já destrancada: quem entra depois também a encontra aberta.
+            if (ExitLock.Instance != null && ExitLock.Instance.Unlocked) SendExitOpen(clientId);
+        }
+
+        // ---------------------------------------------------------------- Teclado da porta (Level 1)
+
+        /// <summary>Cliente: manda ao host o código digitado no teclado da porta.</summary>
+        public void SendExitCode(int code)
+        {
+            if (_net == null || !_net.IsConnectedClient) return;
+            using (var writer = new FastBufferWriter(sizeof(int), Allocator.Temp))
+            {
+                writer.WriteValueSafe(code);
+                _net.CustomMessagingManager.SendNamedMessage(ExitCodeMessage, NetworkManager.ServerClientId, writer);
+            }
+        }
+
+        /// <summary>Host: a porta destrancou. Avisa todos os clientes.</summary>
+        public void BroadcastExitUnlocked()
+        {
+            if (!IsHosting) return;
+            foreach (ulong clientId in _net.ConnectedClientsIds)
+                if (clientId != _net.LocalClientId) SendExitOpen(clientId);
+        }
+
+        void SendExitOpen(ulong clientId)
+        {
+            using (var writer = new FastBufferWriter(sizeof(int), Allocator.Temp))
+            {
+                writer.WriteValueSafe(1);
+                _net.CustomMessagingManager.SendNamedMessage(ExitOpenMessage, clientId, writer);
+            }
+        }
+
+        void OnExitCodeMessage(ulong senderClientId, FastBufferReader reader)
+        {
+            reader.ReadValueSafe(out int code);
+            if (ExitLock.Instance != null) ExitLock.Instance.Submit(code);
+        }
+
+        void OnExitOpenMessage(ulong senderClientId, FastBufferReader reader)
+        {
+            reader.ReadValueSafe(out int _);
+            if (ExitLock.Instance != null) ExitLock.Instance.SetUnlocked();
+            else ExitLock.PendingUnlock = true;
         }
 
         void OnStrokeMessage(ulong senderClientId, FastBufferReader reader)
