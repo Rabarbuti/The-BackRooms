@@ -690,6 +690,19 @@ namespace BackRooms.World
             return Spawn(model, position, rotation, local, true);
         }
 
+        // A caixa (encolhida 10 cm, a folga da parede) entra em alguma célula proibida ou fora do mapa?
+        bool Intrudes(Vector3 position, Bounds rotated)
+        {
+            const float shrink = 0.1f;
+            Vector3 min = position + rotated.min, max = position + rotated.max;
+            int x0 = Mathf.FloorToInt((min.x + shrink) / Cell), x1 = Mathf.FloorToInt((max.x - shrink) / Cell);
+            int z0 = Mathf.FloorToInt((min.z + shrink) / Cell), z1 = Mathf.FloorToInt((max.z - shrink) / Cell);
+            for (int z = z0; z <= z1; z++)
+                for (int x = x0; x <= x1; x++)
+                    if (x < 0 || z < 0 || x >= _data.Width || z >= _data.Height || !Free(x, z)) return true;
+            return false;
+        }
+
         // O ponto está na mesma célula que a referência e a mais de "margin" das bordas dela?
         static bool SameCellInside(Vector3 point, Vector3 reference, float margin)
         {
@@ -700,10 +713,9 @@ namespace BackRooms.World
 
         GameObject Spawn(GameObject model, Vector3 localPosition, Quaternion rotation, Bounds local, bool collider)
         {
-            // Nada nasce numa célula que fica vazia (sala inicial, saída), nem fora do mapa.
-            Vector3 middle = localPosition + rotation * local.center;
-            int mx = Mathf.FloorToInt(middle.x / Cell), mz = Mathf.FloorToInt(middle.z / Cell);
-            if (mx < 0 || mz < 0 || mx >= _data.Width || mz >= _data.Height || !Free(mx, mz)) return null;
+            // Nada invade uma célula que fica vazia (sala inicial, saída), nem sai do mapa: confere
+            // a caixa inteira, girada (cadeira tombada gira pelo pé e pode atravessar a parede).
+            if (Intrudes(localPosition, Rotated(local, rotation))) return null;
 
             // Última garantia da cruz livre, para tudo que tem colisor: o que é posto por ponto
             // (cadeira diante da mesa, cadeira em cima da pilha, móvel tombado) pode passar da
