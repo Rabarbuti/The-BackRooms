@@ -37,13 +37,15 @@ Material:
   m_DoubleSidedGI: 0
   m_CustomRenderQueue: 2000
   stringTagMap: {}
-  disabledShaderPasses: []
+  disabledShaderPasses:
+  - DecalMeshForwardEmissive
+  - DecalProjectorForwardEmissive
   m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
     - _BaseColorMap:
-        m_Texture: {fileID: 2800000, guid: fb87e90f5b8fa294ebdf4b3244caae14, type: 3}
+        m_Texture: {fileID: 2800000, guid: ae0f06065fc8f0643a4d969811b6a63f, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _EmissiveColorMap:

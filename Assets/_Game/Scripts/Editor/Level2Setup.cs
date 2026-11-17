@@ -82,6 +82,7 @@ namespace BackRooms.EditorTools
                 {
                     Apply(level.GetComponent<LevelBuilder>(), materials);
                     UseOwnAtmosphere(profile);
+                    UseDusk();
                 },
             });
             Debug.Log($"[BackRooms] Level 2 de teste montado em {ScenePath}: abra a cena, aperte Play e hospede (H).");
@@ -98,6 +99,20 @@ namespace BackRooms.EditorTools
 
             foreach (FluorescentHum hum in Object.FindObjectsByType<FluorescentHum>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 Object.DestroyImmediate(hum);
+        }
+
+        /// <summary>Mais longo que o apagão do Level 0, para o dia caber entre as rampas.</summary>
+        public const float DuskLitSeconds = 50f;
+
+        // O apagão aqui é o anoitecer (PoolWater.DaylightAt), pelo mesmo relógio e pela mesma conta
+        // do LightsOut: o primeiro escuro aos 60 s e 10 s de noite, como no Level 0. Mas o aviso
+        // (10 s), a descida (10 s) e a subida (10 s) não cabem nos 30 s de luz do Level 0 sem
+        // sobrar dia nenhum; com 50 s, sobram 20 s de dia pleno, o mesmo que o Level 0 tem antes
+        // de começar a piscar. O ciclo fica de 60 s em vez de 40.
+        static void UseDusk()
+        {
+            foreach (LightsOut clock in Object.FindObjectsByType<LightsOut>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                clock.litSeconds = DuskLitSeconds;
         }
 
         static void Apply(LevelBuilder builder, PoolMaterials m)
@@ -126,7 +141,7 @@ namespace BackRooms.EditorTools
             // Manchas (decalques), nesta ordem: limo, calcário, mofo, ferrugem. O construtor escolhe
             // onde: poucas e longe do início.
             builder.poolStainDecals = m.Stains;
-            // Marcações pintadas (Folha D), nesta ordem: 1.2 M, NO DIVING, DEEP END, T de raia.
+            // Marcações pintadas (Folha D), nesta ordem: 2.0 M, NO DIVING, DEEP END, T de raia.
             builder.poolMarkDecals = m.Marks;
 
             // Claraboias de vidro fosco: acesas de dia; no apagão, vidro azul-noite.
@@ -221,10 +236,18 @@ namespace BackRooms.EditorTools
                     problems.Add("falta algum material de mancha (Decal_Stain_*)");
                 if (builder.poolMarkDecals == null || builder.poolMarkDecals.Length != 4 || builder.poolMarkDecals.Any(m => m == null))
                     problems.Add("falta algum material de marcação (Decal_Mark_*)");
+                var clock = Object.FindFirstObjectByType<LightsOut>();
+                if (clock == null || !Mathf.Approximately(clock.litSeconds, DuskLitSeconds))
+                    problems.Add($"o LightsOut da cena não tem os {DuskLitSeconds} s de luz do anoitecer");
 
                 builder.seed = CheckSeeds[0];
                 builder.Rebuild();
                 lines.Add($"montagem da seed {builder.seed}: {builder.PoolStats}");
+                // Nenhuma luminária: o vidro de luz do dia não pisca (DaylightPanel, fora do CeilingLight).
+                int panels = builder.GetComponentsInChildren<DaylightPanel>(true).Length;
+                int fixtures = builder.GetComponentsInChildren<CeilingLight>(true).Length;
+                if (panels == 0) problems.Add("nenhum vidro de luz do dia (DaylightPanel)");
+                if (fixtures > 0) problems.Add($"{fixtures} luminária(s) (CeilingLight) nas Piscinas: piscariam no apagão");
                 lines.Add($"manchas e marcações: {builder.PoolDecalLog}");
                 lines.Add("fotos: " + Capture(builder));
             }
@@ -371,17 +394,14 @@ namespace BackRooms.EditorTools
                     Shot("caminho", from, to - from, 3f);
                 }
 
-                // Apagão ("anoitecer"), da sala inicial.
+                // Apagão ("anoitecer"), da sala inicial: o relógio forçado no meio da noite.
                 var lightsOut = Object.FindFirstObjectByType<LightsOut>();
-                if (lightsOut != null)
+                if (lightsOut != null && water != null)
                 {
-                    foreach (CeilingLight lamp in CeilingLight.All) lamp.SetPower(PowerPhase.Dark);
-                    lightsOut.SetDarkness(1f);
-                    if (water != null) water.ForceNight = 1f;
+                    water.ForceSeconds = lightsOut.firstDarkAt + lightsOut.darkSeconds * 0.5f;
                     Shot("apagao", builder.SpawnCenter, Vector3.forward, 4f);
-                    if (water != null) water.ForceNight = -1f;
-                    lightsOut.SetDarkness(0f);
-                    foreach (CeilingLight lamp in CeilingLight.All) lamp.SetPower(PowerPhase.Steady);
+                    water.ForceSeconds = -1.0;
+                    water.Snap(builder.SpawnCenter);
                 }
             }
             finally
@@ -519,7 +539,7 @@ namespace BackRooms.EditorTools
             public Material Tile, Mosaic, Accent, Coping, Water, Caustics, Window, GlassBlock, Lamp, Rail, SkylightOn, SkylightOff;
             /// <summary>Manchas, na ordem do LevelBuilder.poolStainDecals: limo, calcário, mofo, ferrugem.</summary>
             public Material[] Stains;
-            /// <summary>Marcações, na ordem do LevelBuilder.poolMarkDecals: 1.2 M, NO DIVING, DEEP END, T de raia.</summary>
+            /// <summary>Marcações, na ordem do LevelBuilder.poolMarkDecals: 2.0 M, NO DIVING, DEEP END, T de raia.</summary>
             public Material[] Marks;
         }
 
@@ -570,7 +590,8 @@ namespace BackRooms.EditorTools
             // Marcações da Folha D (tinta preta e o T azul-marinho, com falhas): é tinta, quase opaca.
             Material[] marks =
             {
-                Stain("Mark_Depth", Color.white, 0.92f, 0.45f),
+                // A da folha diz "1.2 M"; a água funda tem 2 m: "2.0 M" remontado a partir dela.
+                Stain("Mark_Depth", Color.white, 0.92f, 0.45f, DepthMark()),
                 Stain("Mark_NoDiving", Color.white, 0.92f, 0.45f),
                 Stain("Mark_DeepEnd", Color.white, 0.92f, 0.45f),
                 Stain("Mark_LaneEnd", Color.white, 0.95f, 0.6f),
@@ -749,11 +770,12 @@ namespace BackRooms.EditorTools
             HeightToNormal
         }
 
-        // Decalque (HDRP/Decal) com a textura de mesmo nome em Art/Fontes/Level2: manchas da Folha C
-        // e marcações da Folha D. Mistura pelo alfa da textura; só cor e brilho (sem relevo).
-        static Material Stain(string name, Color tint, float blend, float smoothness)
+        // Decalque (HDRP/Decal) com a textura de mesmo nome em Art/Fontes/Level2 (ou a de
+        // texturePath, derivada dela): manchas da Folha C e marcações da Folha D. Mistura pelo alfa
+        // da textura; só cor e brilho (sem relevo).
+        static Material Stain(string name, Color tint, float blend, float smoothness, string texturePath = null)
         {
-            string texturePath = $"{SourceFolder}/{name}.png";
+            texturePath ??= $"{SourceFolder}/{name}.png";
             var importer = AssetImporter.GetAtPath(texturePath) as TextureImporter;
             if (importer == null)
             {
@@ -797,6 +819,173 @@ namespace BackRooms.EditorTools
             if (created) AssetDatabase.CreateAsset(material, path);
             else EditorUtility.SetDirty(material);
             return material;
+        }
+
+        /// <summary>
+        /// A marcação de profundidade "2.0 M" (Art/Level2/Mark_Depth_2m.png). A da Folha D diz
+        /// "1.2 M", a altura antiga da água funda; esta é remontada com os glifos dela (o 2, o ponto
+        /// e o M, recortados pelas colunas de tinta, com as falhas que já têm) e um 0 pintado no
+        /// mesmo traço: um anel em pílula da altura e da largura do 2, com a haste da espessura das
+        /// do desenho, borda levemente irregular e algumas falhas de tinta. Mesma tinta (cor e alfa)
+        /// da fonte. Devolve o caminho; sem a fonte o arquivo não é criado, o material não sai e não há
+        /// marcação de profundidade (nunca a "1.2 M" em água de 2 m).
+        /// </summary>
+        static string DepthMark()
+        {
+            string sourcePath = $"{SourceFolder}/Mark_Depth.png";
+            string path = $"{ArtFolder}/Mark_Depth_2m.png";
+            if (!File.Exists(sourcePath))
+            {
+                Debug.LogWarning($"[BackRooms] Textura {sourcePath} não encontrada: sem marcação de profundidade.");
+                return path;
+            }
+
+            var source = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            source.LoadImage(File.ReadAllBytes(sourcePath));
+            int sw = source.width, sh = source.height;
+            Color32[] src = source.GetPixels32();
+            Object.DestroyImmediate(source);
+
+            // Glifos: colunas seguidas com tinta. A fonte tem quatro: "1", ".", "2", "M".
+            var runs = new List<(int x0, int x1)>();
+            int start = -1;
+            for (int x = 0; x <= sw; x++)
+            {
+                bool ink = false;
+                if (x < sw)
+                    for (int y = 0; y < sh && !ink; y++) ink = src[y * sw + x].a > 128;
+                if (ink && start < 0) start = x;
+                if (!ink && start >= 0) { runs.Add((start, x - 1)); start = -1; }
+            }
+            if (runs.Count != 4)
+            {
+                Debug.LogWarning($"[BackRooms] {sourcePath}: esperava 4 glifos (1 . 2 M), achou {runs.Count}; sem marcação de profundidade.");
+                return path;
+            }
+            (int x0, int x1) one = runs[0], dot = runs[1], two = runs[2], em = runs[3];
+
+            // Altura do 2 (linhas com tinta nas colunas dele) e a tinta (cor e alfa cheio).
+            int bottom = sh, top = -1;
+            Color32 ink32 = new Color32(7, 7, 5, 251);
+            for (int y = 0; y < sh; y++)
+                for (int x = two.x0; x <= two.x1; x++)
+                {
+                    Color32 c = src[y * sw + x];
+                    if (c.a <= 128) continue;
+                    bottom = Mathf.Min(bottom, y);
+                    top = Mathf.Max(top, y);
+                    if (c.a > ink32.a) ink32 = c;
+                }
+
+            int margin = one.x0, gap = dot.x0 - one.x1 - 1, space = em.x0 - two.x1 - 1;
+            int w2 = two.x1 - two.x0 + 1, wd = dot.x1 - dot.x0 + 1, wm = em.x1 - em.x0 + 1;
+            int width = margin * 2 + w2 + gap + wd + gap + w2 + space + wm;
+            var pixels = new Color32[width * sh];
+            for (int i = 0; i < pixels.Length; i++) pixels[i] = new Color32(ink32.r, ink32.g, ink32.b, 0);
+
+            void Copy((int x0, int x1) glyph, int to)
+            {
+                for (int y = 0; y < sh; y++)
+                    for (int x = glyph.x0; x <= glyph.x1; x++)
+                        pixels[y * width + to + x - glyph.x0] = src[y * sw + x];
+            }
+
+            int cursor = margin;
+            Copy(two, cursor);
+            cursor += w2 + gap;
+            Copy(dot, cursor);
+            cursor += wd + gap;
+            PaintZero(pixels, width, sh, cursor, w2, bottom, top, ink32);
+            cursor += w2 + space;
+            Copy(em, cursor);
+
+            var texture = new Texture2D(width, sh, TextureFormat.RGBA32, false);
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            byte[] png = texture.EncodeToPNG();
+            Object.DestroyImmediate(texture);
+            if (!File.Exists(path) || !File.ReadAllBytes(path).SequenceEqual(png))
+            {
+                File.WriteAllBytes(path, png);
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+            }
+            return path;
+        }
+
+        // O 0 condensado: por fora, um retângulo de cantos bem arredondados da largura do 2 e da
+        // altura dele; por dentro, uma fenda de pontas redondas. Haste lateral de 32% da largura e a
+        // de cima e de baixo um pouco mais fina, como nas fontes pesadas de placa. Borda com um
+        // ruído de menos de 1 px e falhas onde a tinta não pegou.
+        static void PaintZero(Color32[] pixels, int width, int height, int left, int w, int bottom, int top, Color32 ink)
+        {
+            float r = w * 0.5f, cx = left + r, cy = (bottom + top + 1) * 0.5f, hh = (top + 1 - bottom) * 0.5f;
+            float stem = Mathf.Round(w * 0.32f), cap = stem * 0.86f;
+            float corner = r * 0.82f, innerR = r - stem;
+            float segLow = bottom + r, segHigh = top - r;
+            float RoundBox(float px, float py)
+            {
+                float qx = Mathf.Abs(px - cx) - (r - corner), qy = Mathf.Abs(py - cy) - (hh - corner);
+                return new Vector2(Mathf.Max(qx, 0f), Mathf.Max(qy, 0f)).magnitude + Mathf.Min(Mathf.Max(qx, qy), 0f) - corner;
+            }
+            float Slot(float px, float py)
+            {
+                float qy = Mathf.Clamp(py, bottom + cap + innerR, top + 1 - cap - innerR);
+                return new Vector2(px - cx, py - qy).magnitude - innerR;
+            }
+
+            var rng = new System.Random(2020);
+            var chips = new List<(Vector2 c, Vector2 axis, float a, float b)>();
+            for (int k = 0; k < 4; k++)
+            {
+                // Na metade da espessura da haste, num ponto qualquer da volta.
+                float t = (float)rng.NextDouble();
+                float side = rng.Next(2) == 0 ? -1f : 1f;
+                Vector2 c = t < 0.6f
+                    ? new Vector2(cx + side * (r - stem * 0.5f), Mathf.Lerp(segLow, segHigh, (float)rng.NextDouble()))
+                    : new Vector2(cx + side * (float)rng.NextDouble() * r * 0.6f, rng.Next(2) == 0 ? top - cap * 0.5f : bottom + cap * 0.5f);
+                float angle = (float)rng.NextDouble() * Mathf.PI;
+                chips.Add((c, new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)), 6f + (float)rng.NextDouble() * 10f, 3f + (float)rng.NextDouble() * 4f));
+            }
+
+            float Noise(int x, int y)
+            {
+                unchecked
+                {
+                    int h = x * 374761393 + y * 668265263;
+                    h = (h ^ (h >> 13)) * 1274126177;
+                    return ((h ^ (h >> 16)) & 0xffff) / 65535f - 0.5f;
+                }
+            }
+            // Ruído de valor suave (passo de 14 px) para a borda.
+            float Smooth(float x, float y)
+            {
+                int ix = Mathf.FloorToInt(x / 14f), iy = Mathf.FloorToInt(y / 14f);
+                float fx = x / 14f - ix, fy = y / 14f - iy;
+                fx = fx * fx * (3f - 2f * fx);
+                fy = fy * fy * (3f - 2f * fy);
+                float a = Mathf.Lerp(Noise(ix, iy), Noise(ix + 1, iy), fx), b = Mathf.Lerp(Noise(ix, iy + 1), Noise(ix + 1, iy + 1), fx);
+                return Mathf.Lerp(a, b, fy);
+            }
+
+            for (int y = Mathf.Max(0, bottom - 3); y <= Mathf.Min(height - 1, top + 3); y++)
+                for (int x = left - 3; x <= left + w + 3; x++)
+                {
+                    if (x < 0 || x >= width) continue;
+                    float px = x + 0.5f, py = y + 0.5f;
+                    float wobble = Smooth(px, py) * 1.6f;
+                    float outer = RoundBox(px, py) + wobble;
+                    float inner = Slot(px, py) - wobble;
+                    float cover = Mathf.Clamp01(0.5f - outer) * Mathf.Clamp01(0.5f + inner);
+                    foreach (var (c, axis, a, b) in chips)
+                    {
+                        Vector2 d = new Vector2(px, py) - c;
+                        float u = Vector2.Dot(d, axis) / a, v = (d.x * -axis.y + d.y * axis.x) / b;
+                        float e = Mathf.Sqrt(u * u + v * v) + Smooth(px * 2f, py * 2f) * 0.6f;
+                        cover *= Mathf.Clamp01((e - 0.85f) * 4f);
+                    }
+                    if (cover <= 0f) continue;
+                    pixels[y * width + x] = new Color32(ink.r, ink.g, ink.b, (byte)Mathf.RoundToInt(ink.a * cover));
+                }
         }
 
         static Texture2D Source(string name)

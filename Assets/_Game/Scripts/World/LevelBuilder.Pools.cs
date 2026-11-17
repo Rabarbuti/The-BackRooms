@@ -17,7 +17,8 @@ namespace BackRooms.World
     /// malhas com MeshCollider da MESMA malha. Toda face de caixa que um raio alcança tem a face
     /// visível no mesmo lugar (Level0ColliderCheck).
     ///
-    /// Medidas em metros; célula de 4 m; água em Y = 0. Tudo depende só de <see cref="Data"/>.
+    /// Medidas em metros; célula de 4 m; pisos na grade de 20 cm a partir de Y = 0 e água 5 cm
+    /// acima (<see cref="LevelData.WaterLevel"/>). Tudo depende só de <see cref="Data"/>.
     /// </summary>
     public sealed partial class LevelBuilder
     {
@@ -33,8 +34,12 @@ namespace BackRooms.World
         const float CoveRadius = 0.4f;
         const int CoveSegments = 8;
         const float CopingWidth = 0.3f;
+        // Comprimento de uma repetição da textura da capa ao longo da borda (a imagem é quadrada e
+        // vira 0,3 m de largura por 0,6 m de comprimento: a pedra não tem desenho que mostre o esticão).
+        const float CopingRepeat = 0.6f;
         const float RoundWellRadius = 1.6f;
-        const float RoundWellDeck = -1.2f;
+        // O deque do poço redondo é o piso da água funda em volta dele.
+        static float RoundWellDeck => LevelData.DepthFloor(PoolDepth.Deep);
         const float ShaftHeight = 1f;
         const float GlassRecess = 0.15f;
         // Pontos por meia volta nas aberturas redondas (a volta inteira tem o dobro).
@@ -43,6 +48,9 @@ namespace BackRooms.World
         const int ColumnSides = 24;
         const int VaultSegments = 24;
         const float CausticsLift = 0.01f;
+        const float WaterY = LevelData.WaterLevel;
+        /// <summary>Base da fiada de azulejo (20 cm) que a linha d'água corta.</summary>
+        static float WaterlineCourse => Mathf.Floor(WaterY / LevelData.StepRise) * LevelData.StepRise;
         // Manchas: no máximo uma a cada tantas células com piso, e um teto para o mapa inteiro.
         const int CellsPerStain = 10;
         const int MaxStains = 10;
@@ -118,7 +126,6 @@ namespace BackRooms.World
             public bool AlongX;
             public int Line, Index, Side;
             public Vector3 Normal, Center;
-            public LightState State = LightState.On;
             public List<GlassPiece> Glass = new List<GlassPiece>();
         }
 
@@ -147,7 +154,6 @@ namespace BackRooms.World
         }
 
         PoolKit _kit;
-        static readonly Dictionary<Material, Material> DarkCopies = new Dictionary<Material, Material>();
 
         // ---------------------------------------------------------------- Montagem
 
@@ -161,7 +167,8 @@ namespace BackRooms.World
                 Worn = new MeshBuilder(poolTileMeters),
                 Bottom = new MeshBuilder(poolMosaicMeters),
                 Accent = new MeshBuilder(poolTileMeters),
-                Coping = new MeshBuilder(0.6f),
+                // A capa passa a UV pronta (AddCoping), já na escala da textura.
+                Coping = new MeshBuilder(1f),
                 CurvedWall = new MeshBuilder(poolTileMeters),
                 CurvedAccent = new MeshBuilder(poolTileMeters),
                 CurvedBottom = new MeshBuilder(poolMosaicMeters),
@@ -191,12 +198,13 @@ namespace BackRooms.World
                 _kit.WornRoom[r] = poolWornTileMaterial != null && LevelGenerator.WearAt(Data, cx, cz) > 0.6f;
                 _kit.AccentRoom[r] = room.Accent && poolAccentMaterial != null;
 
-                // A primeira fiada azul fica logo acima da água; em sala com piso seco, rente a ele.
+                // A primeira fiada azul é a da linha d'água (a fiada de azulejo que a água corta,
+                // como numa piscina de verdade); em sala com piso seco, rente a ele.
                 bool dry = false;
                 for (int z = room.Z0; z < room.Z0 + room.Height; z++)
                     for (int x = room.X0; x < room.X0 + room.Width; x++)
                         if (OpenCell(x, z) && Data.Depth[x, z] == PoolDepth.Dry) dry = true;
-                _kit.Band[r] = dry ? LevelData.DepthFloor(PoolDepth.Dry) : 0f;
+                _kit.Band[r] = dry ? LevelData.DepthFloor(PoolDepth.Dry) : WaterlineCourse;
             }
 
             FindRoundWells();
@@ -228,7 +236,7 @@ namespace BackRooms.World
             PoolStats = $"{renderers} malhas desenhadas, {vertices} vértices, {boxes} caixas de colisão, " +
                         $"{_kit.Lights} luzes ({_kit.ShadowLights} com sombra de uma face em cache, resolução {resolution}); " +
                         $"manchas {st[0] + st[1] + st[2] + st[3] + st[4]} (limo {st[0]}, calcário {st[1]}, mofo {st[2]}, mofo no teto {st[3]}, ferrugem {st[4]}), " +
-                        $"marcações {mk[0] + mk[1] + mk[2] + mk[3]} (1.2 M {mk[0]}, NO DIVING {mk[1]}, DEEP END {mk[2]}, T de raia {mk[3]})";
+                        $"marcações {mk[0] + mk[1] + mk[2] + mk[3]} (2.0 M {mk[0]}, NO DIVING {mk[1]}, DEEP END {mk[2]}, T de raia {mk[3]})";
             PoolDecalLog = string.Join("; ", _kit.DecalLog);
             _kit = null;
         }
@@ -362,9 +370,9 @@ namespace BackRooms.World
             if (look.NoCaustics || look.Room < 0 || poolCausticsMaterial == null) return;
             float lowest = float.MaxValue;
             foreach (Vector3 p in poly) lowest = Mathf.Min(lowest, p.y);
-            if (lowest >= -0.001f) return;
+            if (lowest >= WaterY - 0.001f) return;
 
-            List<Vector3> wet = ClipY(poly, float.NegativeInfinity, 0f);
+            List<Vector3> wet = ClipY(poly, float.NegativeInfinity, WaterY);
             if (wet.Count < 3) return;
             for (int k = 0; k < wet.Count; k++) wet[k] += normal * CausticsLift;
             _kit.Caustics.AddPolygon(wet, normal);
@@ -537,7 +545,6 @@ namespace BackRooms.World
                     Index = alongX ? i : j,
                     Side = s.Lit,
                     Normal = s.Across * s.Lit,
-                    State = LightState.On,
                 };
                 float glass = s.Lit * (HalfWall - GlassRecess);
                 foreach (Hole hole in s.Holes)
@@ -894,6 +901,41 @@ namespace BackRooms.World
                 }
         }
 
+        // Lados na ordem de PoolSides (0 = sul, 1 = norte, 2 = oeste, 3 = leste). Cantos da célula:
+        // 0 = sudoeste, 1 = sudeste, 2 = noroeste, 3 = nordeste; cada um junta um lado sul/norte
+        // (CornerZ) e um oeste/leste (CornerX).
+        static int CornerZ(int corner) => corner < 2 ? 0 : 1;
+        static int CornerX(int corner) => corner % 2 == 0 ? 2 : 3;
+
+        /// <summary>
+        /// Aquele lado da célula tem borda com capa? Piso seco que dá, sem parede, para um piso
+        /// aberto mais baixo. A escada corta a capa só no trecho dela (<see cref="StairSpan"/>).
+        /// </summary>
+        bool HasCoping(int x, int z, WallSide side)
+        {
+            if (!OpenCell(x, z) || Data.Depth[x, z] != PoolDepth.Dry || HasWallBox(x, z, side)) return false;
+            if (!Data.Neighbor(x, z, side, out int nx, out int nz) || !OpenCell(nx, nz)) return false;
+            return FloorTop(nx, nz) < FloorTop(x, z) - 1e-3f;
+        }
+
+        /// <summary>Trecho (na coordenada ao longo do lado) que a escada daquele lado ocupa.</summary>
+        bool StairSpan(int x, int z, WallSide side, out float from, out float to)
+        {
+            from = to = float.NaN;
+            if (!Data.StairAt(x, z, side, out PoolStair stair)) return false;
+            float middle = side == WallSide.South || side == WallSide.North ? (x + 0.5f) * Cell : (z + 0.5f) * Cell;
+            from = middle - stair.Width * 0.5f;
+            to = middle + stair.Width * 0.5f;
+            return true;
+        }
+
+        /// <summary>Tem capa naquele lado, no ponto <paramref name="along"/> dele (fora da escada)?</summary>
+        bool HasCopingAt(int x, int z, WallSide side, float along)
+        {
+            if (!HasCoping(x, z, side)) return false;
+            return !StairSpan(x, z, side, out float from, out float to) || along < from - 1e-3f || along > to + 1e-3f;
+        }
+
         void BuildFloorSurface(int x, int z, float x0, float x1, float z0, float z1)
         {
             float y = FloorTop(x, z);
@@ -904,30 +946,33 @@ namespace BackRooms.World
             var coping = new bool[4];
             var stairFrom = new float[4];
             var stairTo = new float[4];
+            // Canto da piscina: a água faz a ponta na diagonal e as capas das duas vizinhas se
+            // encontram no canto desta célula; ele leva a peça de canto (CopingWidth x CopingWidth).
+            var wrap = new bool[4];
             if (depth == PoolDepth.Dry)
             {
                 for (int k = 0; k < 4; k++)
                 {
-                    WallSide side = PoolSides[k];
-                    stairFrom[k] = stairTo[k] = float.NaN;
-                    if (HasWallBox(x, z, side) || !Data.Neighbor(x, z, side, out int nx, out int nz) || !OpenCell(nx, nz)) continue;
-                    if (FloorTop(nx, nz) >= y - 1e-3f) continue;
-                    coping[k] = true;
-                    if (Data.StairAt(x, z, side, out PoolStair stair))
-                    {
-                        float middle = side == WallSide.South || side == WallSide.North ? (x + 0.5f) * Cell : (z + 0.5f) * Cell;
-                        stairFrom[k] = middle - stair.Width * 0.5f;
-                        stairTo[k] = middle + stair.Width * 0.5f;
-                    }
+                    coping[k] = HasCoping(x, z, PoolSides[k]);
+                    if (!coping[k] || !StairSpan(x, z, PoolSides[k], out stairFrom[k], out stairTo[k])) stairFrom[k] = stairTo[k] = float.NaN;
+                }
+                for (int c = 0; c < 4; c++)
+                {
+                    int kz = CornerZ(c), kx = CornerX(c);
+                    WallSide sz = PoolSides[kz], sx = PoolSides[kx];
+                    if (coping[kz] || coping[kx] || HasWallBox(x, z, sz) || HasWallBox(x, z, sx)) continue;
+                    if (!Data.Neighbor(x, z, sx, out int ax, out int az) || !Data.Neighbor(x, z, sz, out int bx, out int bz)) continue;
+                    float cornerX = kx == 2 ? x * Cell : (x + 1) * Cell, cornerZ = kz == 0 ? z * Cell : (z + 1) * Cell;
+                    wrap[c] = HasCopingAt(ax, az, sz, cornerX) && HasCopingAt(bx, bz, sx, cornerZ);
                 }
             }
 
             var xs = new List<float> { x0, x1 };
             var zs = new List<float> { z0, z1 };
-            if (coping[2]) xs.Add(x0 + CopingWidth);
-            if (coping[3]) xs.Add(x1 - CopingWidth);
-            if (coping[0]) zs.Add(z0 + CopingWidth);
-            if (coping[1]) zs.Add(z1 - CopingWidth);
+            if (coping[2] || wrap[0] || wrap[2]) xs.Add(x0 + CopingWidth);
+            if (coping[3] || wrap[1] || wrap[3]) xs.Add(x1 - CopingWidth);
+            if (coping[0] || wrap[0] || wrap[1]) zs.Add(z0 + CopingWidth);
+            if (coping[1] || wrap[2] || wrap[3]) zs.Add(z1 - CopingWidth);
             for (int k = 0; k < 4; k++)
             {
                 if (!coping[k] || float.IsNaN(stairFrom[k])) continue;
@@ -938,26 +983,104 @@ namespace BackRooms.World
             Clean(xs, x0, x1);
             Clean(zs, z0, z1);
 
+            var sides = new List<int>(2);
             for (int a = 0; a + 1 < xs.Count; a++)
                 for (int b = 0; b + 1 < zs.Count; b++)
                 {
                     float mx = (xs[a] + xs[a + 1]) * 0.5f, mz = (zs[b] + zs[b + 1]) * 0.5f;
-                    bool isCoping = false;
-                    for (int k = 0; k < 4 && !isCoping; k++)
+                    List<Vector3> poly = Poly(new Vector3(xs[a], y, zs[b]), new Vector3(xs[a], y, zs[b + 1]),
+                                              new Vector3(xs[a + 1], y, zs[b + 1]), new Vector3(xs[a + 1], y, zs[b]));
+                    sides.Clear();
+                    for (int k = 0; k < 4; k++)
                     {
-                        if (!coping[k]) continue;
-                        float distance = k == 0 ? mz - z0 : k == 1 ? z1 - mz : k == 2 ? mx - x0 : x1 - mx;
-                        if (distance > CopingWidth) continue;
+                        if (!coping[k] || EdgeDistance(k, mx, mz, x0, x1, z0, z1) > CopingWidth) continue;
                         float along = k < 2 ? mx : mz;
                         if (!float.IsNaN(stairFrom[k]) && along > stairFrom[k] && along < stairTo[k]) continue;
-                        isCoping = true;
+                        sides.Add(k);
                     }
 
-                    Look piece = look;
-                    if (isCoping) piece.Kind = Surface.Coping;
-                    Emit(Poly(new Vector3(xs[a], y, zs[b]), new Vector3(xs[a], y, zs[b + 1]),
-                              new Vector3(xs[a + 1], y, zs[b + 1]), new Vector3(xs[a + 1], y, zs[b])), Vector3.up, piece);
+                    int corner = -1;
+                    for (int c = 0; c < 4 && sides.Count == 0; c++)
+                        if (wrap[c] && EdgeDistance(CornerZ(c), mx, mz, x0, x1, z0, z1) < CopingWidth && EdgeDistance(CornerX(c), mx, mz, x0, x1, z0, z1) < CopingWidth)
+                            corner = c;
+
+                    if (sides.Count == 1) AddCoping(poly, sides[0], x0, x1, z0, z1);
+                    else if (sides.Count == 2) Miter(poly, sides[0], sides[1], false, x0, x1, z0, z1);
+                    else if (corner >= 0) Miter(poly, CornerZ(corner), CornerX(corner), true, x0, x1, z0, z1);
+                    else Emit(poly, Vector3.up, look);
                 }
+        }
+
+        /// <summary>Distância do ponto até o lado <paramref name="k"/> do retângulo do piso.</summary>
+        static float EdgeDistance(int k, float px, float pz, float x0, float x1, float z0, float z1)
+        {
+            switch (k)
+            {
+                case 0: return pz - z0;
+                case 1: return z1 - pz;
+                case 2: return px - x0;
+                default: return x1 - px;
+            }
+        }
+
+        /// <summary>
+        /// Canto de duas capas em meia-esquadria, cortado na diagonal que sai do canto do piso. Na
+        /// ponta do seco (capa nos dois lados), cada metade é da capa do lado mais perto; no canto
+        /// da piscina (<paramref name="wrap"/>, as capas vêm das vizinhas), da capa que chega pelo
+        /// outro lado (a que encosta na metade).
+        /// </summary>
+        void Miter(List<Vector3> poly, int kz, int kx, bool wrap, float x0, float x1, float z0, float z1)
+        {
+            float sz = kz == 0 ? 1f : -1f, sx = kx == 2 ? 1f : -1f;
+            float ez = kz == 0 ? z0 : z1, ex = kx == 2 ? x0 : x1;
+            // dz = sz * (z - ez) e dx = sx * (x - ex): distâncias até os dois lados.
+            List<Vector3> nearZ = ClipLinear(poly, sx, -sz, sz * ez - sx * ex);   // dx - dz >= 0
+            List<Vector3> nearX = ClipLinear(poly, -sx, sz, sx * ex - sz * ez);   // dz - dx >= 0
+            AddCoping(nearZ, wrap ? kx : kz, x0, x1, z0, z1);
+            AddCoping(nearX, wrap ? kz : kx, x0, x1, z0, z1);
+        }
+
+        /// <summary>Parte do polígono (no plano XZ) onde a * x + b * z + c >= 0.</summary>
+        static List<Vector3> ClipLinear(List<Vector3> poly, float a, float b, float c)
+        {
+            var output = new List<Vector3>(poly.Count + 2);
+            for (int k = 0; k < poly.Count; k++)
+            {
+                Vector3 p = poly[k], q = poly[(k + 1) % poly.Count];
+                float fp = a * p.x + b * p.z + c, fq = a * q.x + b * q.z + c;
+                if (fp >= 0f) AddDistinct(output, p);
+                if ((fp >= 0f) != (fq >= 0f)) AddDistinct(output, Vector3.Lerp(p, q, fp / (fp - fq)));
+            }
+            if (output.Count > 1 && (output[0] - output[output.Count - 1]).sqrMagnitude < 1e-10f) output.RemoveAt(output.Count - 1);
+            return output;
+        }
+
+        /// <summary>
+        /// Pedaço de capa com a UV da faixa do lado <paramref name="k"/>: U ao longo da borda (em
+        /// metros, contínuo de uma célula para a outra) e V atravessando a faixa, de 0 no lado da
+        /// água (onde a textura tem a aresta arredondada, embaixo da imagem) a 1 no lado do piso.
+        /// Olhando de cima, (U, V) gira junto com a borda: a textura nunca fica espelhada.
+        /// </summary>
+        void AddCoping(List<Vector3> poly, int k, float x0, float x1, float z0, float z1)
+        {
+            if (poly.Count < 3) return;
+            MeshBuilder mesh = _kit.Coping;
+            int first = mesh.VertexCount;
+            foreach (Vector3 p in poly)
+            {
+                float u, v;
+                switch (k)
+                {
+                    case 0: u = p.x; v = p.z - z0; break;
+                    case 1: u = -p.x; v = z1 - p.z; break;
+                    case 2: u = -p.z; v = p.x - x0; break;
+                    default: u = p.z; v = x1 - p.x; break;
+                }
+                // Um centímetro de folga em cada ponta de V: a amostra bilinear não pega a outra borda da imagem.
+                v = Mathf.Lerp(0.01f, 0.99f, Mathf.Clamp01(v / CopingWidth));
+                mesh.AddVertex(p, Vector3.up, new Vector2(u / CopingRepeat, v));
+            }
+            for (int i = 1; i + 1 < poly.Count; i++) mesh.AddTriangleFacing(first, first + i, first + i + 1, Vector3.up);
         }
 
         static void Clean(List<float> cuts, float min, float max)
@@ -988,7 +1111,7 @@ namespace BackRooms.World
         }
 
         /// <summary>
-        /// Poço redondo: deque de piso fundo (-1,2 m) com um furo de raio 1,6 m no meio, que desce
+        /// Poço redondo: deque de piso fundo (-2,0 m) com um furo de raio 1,6 m no meio, que desce
         /// até o fundo do poço (-6 m), escuro, com uma grade de ralo.
         /// </summary>
         void BuildRoundWell(int x, int z, float x0, float x1, float z0, float z1)
@@ -1518,11 +1641,11 @@ namespace BackRooms.World
                     mesh.AddTriangleFacing(i, i + 1, i + 3, facing);
                     mesh.AddTriangleFacing(i, i + 3, i + 2, facing);
 
-                    if (poolCausticsMaterial == null || bottom >= 0f) continue;
+                    if (poolCausticsMaterial == null || bottom >= WaterY) continue;
                     float ta = Mathf.PI * 2f * k / ColumnSides, tb = Mathf.PI * 2f * (k + 1) / ColumnSides;
                     float rr = column.Radius + CausticsLift;
                     Vector3 pa = center + new Vector3(Mathf.Cos(ta), 0f, Mathf.Sin(ta)) * rr, pb = center + new Vector3(Mathf.Cos(tb), 0f, Mathf.Sin(tb)) * rr;
-                    float wet = Mathf.Min(0f, top);
+                    float wet = Mathf.Min(WaterY, top);
                     _kit.Caustics.AddPolygon(Poly(pa + Vector3.up * bottom, pa + Vector3.up * wet, pb + Vector3.up * wet, pb + Vector3.up * bottom), facing);
                 }
             }
@@ -1530,7 +1653,9 @@ namespace BackRooms.World
 
         // ---------------------------------------------------------------- Água
 
-        // Lâmina em Y = 0, vista de cima e de baixo, só sobre as células com piso abaixo da água.
+        // Lâmina vista de cima e de baixo, só sobre as células com piso abaixo da água. A malha fica
+        // em Y = 0 do objeto "Agua", que sobe até LevelData.WaterLevel (CreatePoolRenderers): a
+        // altura da superfície é a do objeto (PoolWater.SurfaceY), e a maré só vai movê-lo.
         // Sem colisor: o jogador decide sozinho se anda, vadeia ou nada (PlayerController).
         void BuildPoolWater()
         {
@@ -1539,7 +1664,7 @@ namespace BackRooms.World
                 int runStart = -1;
                 for (int x = 0; x <= Data.Width; x++)
                 {
-                    bool wet = x < Data.Width && OpenCell(x, z) && FloorTop(x, z) < 0f;
+                    bool wet = x < Data.Width && OpenCell(x, z) && FloorTop(x, z) < WaterY;
                     if (wet && runStart < 0) runStart = x;
                     if (wet || runStart < 0) continue;
 
@@ -1584,6 +1709,7 @@ namespace BackRooms.World
             if (!_kit.Water.IsEmpty)
             {
                 MeshRenderer water = CreateRenderer("Agua", _kit.Water.ToMesh("Agua"), waterMaterial, ShadowCastingMode.Off);
+                water.transform.localPosition = new Vector3(0f, WaterY, 0f);
                 water.gameObject.AddComponent<PoolWater>();
             }
         }
@@ -1640,7 +1766,7 @@ namespace BackRooms.World
                     foreach (WallSide side in PoolSides)
                     {
                         if (!PlainWall(x, z, side)) continue;
-                        if (FloorTop(x, z) < 0f && Data.Depth[x, z] != PoolDepth.Well) slime.Add((x, z, side));
+                        if (FloorTop(x, z) < WaterY && Data.Depth[x, z] != PoolDepth.Well) slime.Add((x, z, side));
                         if (!room.Vault && roomSky[room.Id]) lime.Add((x, z, side));
                         if (shaded) mould.Add((x, z, side));
                     }
@@ -1717,9 +1843,9 @@ namespace BackRooms.World
                 switch (type)
                 {
                     case 0:
-                        // Faixa de limo: a linha escura da textura (62% abaixo do topo) em Y = 0.
+                        // Faixa de limo: a linha escura da textura (62% abaixo do topo) na linha d'água.
                         placed = WallDecal(Root(), material, x, z, side, HalfWall, Mathf.Round(Mathf.Lerp(-0.6f, 0.6f, r0) / 0.2f) * 0.2f,
-                                           0.62f * 0.5f - 0.25f, new Vector2(2.4f, 0.5f), flip, obstacles, "limo");
+                                           WaterY + 0.62f * 0.5f - 0.25f, new Vector2(2.4f, 0.5f), flip, obstacles, "limo");
                         break;
                     case 1:
                         // Calcário: o topo da textura (que não esmaece) colado no começo da sanca,
@@ -1735,7 +1861,7 @@ namespace BackRooms.World
                         Vector3 dir = SideDir(side);
                         Vector3 tangent = Mathf.Abs(dir.x) > 0.5f ? Vector3.forward : Vector3.right;
                         float rightSign = Mathf.Sign(Vector3.Dot(Vector3.Cross(Vector3.up, dir), tangent)) * (flip ? -1f : 1f);
-                        float lineY = Mathf.Round((Mathf.Max(FloorTop(x, z), 0f) + 0.8f + r1 * 1.2f) / tile) * tile;
+                        float lineY = Mathf.Round((Mathf.Max(FloorTop(x, z), WaterY) + 0.8f + r1 * 1.2f) / tile) * tile;
                         float lineAlong = Mathf.Round(Mathf.Lerp(-1.2f, 1.2f, r0) / tile) * tile;
                         placed = WallDecal(Root(), material, x, z, side, HalfWall, lineAlong - rightSign * MouldLineRight * size,
                                            lineY - MouldLineUp * size, new Vector2(size, size), flip, obstacles, "mofo");
@@ -1876,20 +2002,22 @@ namespace BackRooms.World
         // ---------------------------------------------------------------- Marcações
 
         // Largura de cada marcação, em metros, e a proporção largura/altura do desenho
-        // (Art/Fontes/Level2/Mark_*.png): 0 profundidade, 1 proibido mergulhar, 2 DEEP END, 3 T de raia.
-        static readonly float[] MarkWidth = { 0.7f, 0.7f, 1.1f, 1.0f };
-        static readonly float[] MarkAspect = { 1.777f, 0.928f, 2.482f, 0.704f };
-        static readonly string[] MarkLabel = { "1.2 M", "NO DIVING", "DEEP END", "T de raia" };
+        // (Art/Fontes/Level2/Mark_*.png; a de profundidade, "2.0 M", é Art/Level2/Mark_Depth_2m.png,
+        // 923 x 480, remontada pelo Level2Setup com letras da mesma altura da "1.2 M" da fonte):
+        // 0 profundidade, 1 proibido mergulhar, 2 DEEP END, 3 T de raia.
+        static readonly float[] MarkWidth = { 0.76f, 0.7f, 1.1f, 1.0f };
+        static readonly float[] MarkAspect = { 1.923f, 0.928f, 2.482f, 0.704f };
+        static readonly string[] MarkLabel = { "2.0 M", "NO DIVING", "DEEP END", "T de raia" };
         const int MaxDepthMarks = 6;
         const int MaxNoDivingMarks = 4;
-        // Distância do pé dos desenhos de piso à borda (1.2 M: logo depois da capa) e do T à ponta da raia.
+        // Distância do pé dos desenhos de piso à borda (2.0 M: logo depois da capa) e do T à ponta da raia.
         const float DepthMarkGap = CopingWidth + 0.05f;
         const float LaneMarkGap = 0.6f;
 
         static float MarkHeight(int kind) => MarkWidth[kind] / MarkAspect[kind];
 
         /// <summary>
-        /// Marcações pintadas, poucas e onde uma piscina de verdade as tem: "1.2 M" no deque seco
+        /// Marcações pintadas, poucas e onde uma piscina de verdade as tem: "2.0 M" no deque seco
         /// rente à área funda (ou na parede logo acima da água de uma área funda), NO DIVING em
         /// parede cega de sala rasa com deque ou escada, DEEP END em parede cega de sala com poço e
         /// o T azul no fundo, nas duas pontas de uma raia funda. Nada sobre abertura, escada,
@@ -1944,7 +2072,7 @@ namespace BackRooms.World
                     Shuffle(spots, rng);
                     if (roll)
                         foreach (var (x, z, side) in spots)
-                            if (WallMark(Root(), Mark(1), 1, x, z, side, Mathf.Max(FloorTop(x, z), 0f) + 1.6f, obstacles))
+                            if (WallMark(Root(), Mark(1), 1, x, z, side, Mathf.Max(FloorTop(x, z), WaterY) + 1.6f, obstacles))
                                 break;
                 }
 
@@ -1969,7 +2097,7 @@ namespace BackRooms.World
                         for (int k = 0; k < spots.Count; k++)
                         {
                             var (x, z, side, _, _) = spots[(first + k) % spots.Count];
-                            if (WallMark(Root(), Mark(2), 2, x, z, side, Mathf.Max(FloorTop(x, z), 0f) + 1.5f, obstacles)) break;
+                            if (WallMark(Root(), Mark(2), 2, x, z, side, Mathf.Max(FloorTop(x, z), WaterY) + 1.5f, obstacles)) break;
                         }
                     }
                 }
@@ -2038,7 +2166,7 @@ namespace BackRooms.World
             return spots;
         }
 
-        // "1.2 M" no deque: lido por quem está no deque olhando para a água (o topo do desenho para a água).
+        // "2.0 M" no deque: lido por quem está no deque olhando para a água (o topo do desenho para a água).
         bool DeckDepthMark(Transform root, Material material, int x, int z, WallSide side, List<Bounds> obstacles)
         {
             Vector3 toWater = SideDir(side);
@@ -2051,11 +2179,11 @@ namespace BackRooms.World
                               false, obstacles, $"{MarkLabel[0]} no deque ({x},{z},{side})");
         }
 
-        // "1.2 M" na parede de uma célula funda, logo acima da água (e da faixa azul, se a sala tem).
+        // "2.0 M" na parede de uma célula funda, logo acima da água (e da faixa azul, se a sala tem).
         bool WallDepthMark(Transform root, Material material, int x, int z, WallSide side, List<Bounds> obstacles)
         {
             int room = Data.Room[x, z];
-            float bottom = (_kit.AccentRoom[room] ? _kit.Band[room] + 0.2f : 0f) + 0.12f;
+            float bottom = (_kit.AccentRoom[room] ? _kit.Band[room] + 0.2f : WaterY) + 0.12f;
             return WallMark(root, material, 0, x, z, side, bottom + MarkHeight(0) * 0.5f, obstacles);
         }
 
@@ -2070,7 +2198,7 @@ namespace BackRooms.World
                 if (centerY + height * 0.5f > 2f - 0.05f && centerY - height * 0.5f < 2.2f + 0.05f) centerY = 2f - 0.05f - height * 0.5f;
                 if (centerY - height * 0.5f < band + 0.2f + 0.05f && centerY + height * 0.5f > band - 0.05f) centerY = band + 0.25f + height * 0.5f;
             }
-            if (centerY - height * 0.5f < Mathf.Max(FloorTop(x, z), 0f) + 0.05f) return false;
+            if (centerY - height * 0.5f < Mathf.Max(FloorTop(x, z), WaterY) + 0.05f) return false;
             if (!WallDecal(root, material, x, z, side, HalfWall, 0f, centerY, new Vector2(width, height), false, obstacles, MarkLabel[kind])) return false;
             _kit.MarkCount[kind] += kind == 0 ? 0 : 1;
             return true;
@@ -2096,7 +2224,7 @@ namespace BackRooms.World
         /// T azul no fundo, nas duas pontas de uma raia: a trave do T a 0,6 m da parede ou da borda
         /// da ponta e a haste para o meio da raia. Raia = fileira de células fundas ao longo do lado
         /// maior da sala (na piscina, a do meio; no canal e na raia longa, a funda). Se a escada
-        /// ocupa a ponta, o T vai para depois do pé dela (até 2,4 m); se não couber, fica sem.
+        /// ocupa a ponta, o T vai para depois do pé dela (até 3,6 m); se não couber, fica sem.
         /// </summary>
         void LaneMarks(Transform root, Material material, PoolRoom room, List<Bounds> obstacles)
         {
@@ -2138,7 +2266,8 @@ namespace BackRooms.World
             {
                 float line = end == 0 ? startLine : endLine;
                 Vector3 toEnd = end == 0 ? -axis : axis;
-                for (float gap = LaneMarkGap; gap <= 2.4f + 1e-3f; gap += 0.3f)
+                // Até 3,6 m da ponta: passa do pé de uma escada de 11 degraus (3 m) que ocupe a ponta.
+                for (float gap = LaneMarkGap; gap <= 3.6f + 1e-3f; gap += 0.3f)
                 {
                     float along = line - (end == 0 ? -1f : 1f) * (gap + height * 0.5f);
                     if (end == 0 ? along + height * 0.5f > middle : along - height * 0.5f < middle) break;
@@ -2158,10 +2287,7 @@ namespace BackRooms.World
 
         void CountShadowLights(out int count)
         {
-            count = 0;
-            foreach (SkyItem item in SkyItems())
-                if (item.State != LightState.Dead) count++;
-            count += GroupLitOpenings().Count;
+            count = SkyItems().Count + GroupLitOpenings().Count;
         }
 
         // Luzes de caixa e spots: uma face de sombra cada. A maior resolução que cabe no atlas.
@@ -2198,56 +2324,93 @@ namespace BackRooms.World
             hd.SetShadowResolution(resolution);
         }
 
-        static Material DarkCopy(Material lit)
+        // Vidro de noite (DaylightPanel): a cor e o brilho do material de claraboia apagada, o
+        // azul-noite (#223048 com emissão fraca). Vale também para as janelas.
+        void NightGlass(out Color baseColor, out Color emissive)
         {
-            if (lit == null) return null;
-            if (DarkCopies.TryGetValue(lit, out Material dark) && dark != null) return dark;
-            dark = new Material(lit) { name = lit.name + " (apagado)", hideFlags = HideFlags.DontSave };
-            if (dark.HasProperty("_EmissiveColor")) dark.SetColor("_EmissiveColor", Color.black);
-            if (dark.HasProperty("_EmissiveColorLDR")) dark.SetColor("_EmissiveColorLDR", Color.black);
-            if (dark.HasProperty("_BaseColor")) dark.SetColor("_BaseColor", dark.GetColor("_BaseColor") * 0.45f);
-            DarkCopies[lit] = dark;
-            return dark;
+            Material night = panelOffMaterial;
+            baseColor = night != null && night.HasProperty("_BaseColor") ? night.GetColor("_BaseColor") : new Color(0.13f, 0.19f, 0.28f);
+            emissive = night != null && night.HasProperty("_EmissiveColor") ? night.GetColor("_EmissiveColor") : new Color(0.25f, 0.45f, 1f) * 16f;
         }
 
         sealed class SkyItem
         {
             public PoolSky Sky;
-            public int X0, X1, Z;  // células X0..X1 (Full em faixa) na fileira Z
-            public LightState State;
+            public int X0, X1, Z0, Z1;  // células X0..X1 x Z0..Z1 (Full: uma faixa; as outras: uma célula)
         }
 
-        // Claraboias: uma por célula; as Full vizinhas na mesma fileira e sala viram uma faixa só.
+        // Claraboias: uma por célula. As Full vizinhas da mesma sala formam um teto de vidro; ele
+        // vira faixas no sentido mais comprido dele (uma luz cada): a faixa de vidro de uma raia
+        // inteira é uma luz só, corra ela em X ou em Z.
         List<SkyItem> SkyItems()
         {
+            int w = Data.Width, h = Data.Height;
+            // Sentido de cada teto de vidro: o mais comprido da caixa da sala inteira de Full.
+            var alongZ = new bool[w, h];
+            var seen = new bool[w, h];
+            for (int z = 0; z < h; z++)
+                for (int x = 0; x < w; x++)
+                {
+                    if (seen[x, z] || !IsFullSky(x, z)) continue;
+                    var cells = new List<Vector2Int>();
+                    var queue = new Queue<Vector2Int>();
+                    seen[x, z] = true;
+                    queue.Enqueue(new Vector2Int(x, z));
+                    int bx0 = x, bx1 = x, bz0 = z, bz1 = z;
+                    while (queue.Count > 0)
+                    {
+                        Vector2Int cell = queue.Dequeue();
+                        cells.Add(cell);
+                        bx0 = Mathf.Min(bx0, cell.x); bx1 = Mathf.Max(bx1, cell.x);
+                        bz0 = Mathf.Min(bz0, cell.y); bz1 = Mathf.Max(bz1, cell.y);
+                        foreach (WallSide side in PoolSides)
+                        {
+                            if (HasWallBox(cell.x, cell.y, side) || !Data.Neighbor(cell.x, cell.y, side, out int nx, out int nz)) continue;
+                            if (seen[nx, nz] || !IsFullSky(nx, nz) || Data.Room[nx, nz] != Data.Room[cell.x, cell.y]) continue;
+                            seen[nx, nz] = true;
+                            queue.Enqueue(new Vector2Int(nx, nz));
+                        }
+                    }
+                    bool longZ = bz1 - bz0 > bx1 - bx0;
+                    foreach (Vector2Int cell in cells) alongZ[cell.x, cell.y] = longZ;
+                }
+
+            bool SameStrip(int x, int z, int nx, int nz) =>
+                nx >= 0 && nz >= 0 && IsFullSky(nx, nz) && Data.Room[nx, nz] == Data.Room[x, z] && alongZ[nx, nz] == alongZ[x, z];
+
             var items = new List<SkyItem>();
-            for (int z = 0; z < Data.Height; z++)
-                for (int x = 0; x < Data.Width; x++)
+            var stripAt = new SkyItem[w, h];
+            for (int z = 0; z < h; z++)
+                for (int x = 0; x < w; x++)
                 {
                     PoolSky sky = Data.Sky[x, z];
                     if (sky == PoolSky.None || !OpenCell(x, z) || RoomAt(x, z).Vault) continue;
-                    LightState state = Data.Lights[x, z] == LightState.None ? LightState.On : Data.Lights[x, z];
-
-                    if (sky == PoolSky.Full && items.Count > 0)
+                    if (sky == PoolSky.Full)
                     {
-                        SkyItem last = items[items.Count - 1];
-                        if (last.Sky == PoolSky.Full && last.Z == z && last.X1 == x - 1 && Data.Room[x - 1, z] == Data.Room[x, z])
+                        // Continua a faixa da célula anterior (a oeste ou ao sul, conforme o sentido).
+                        int px = alongZ[x, z] ? x : x - 1, pz = alongZ[x, z] ? z - 1 : z;
+                        if (SameStrip(x, z, px, pz) && stripAt[px, pz] != null && !HasWallBox(x, z, alongZ[x, z] ? WallSide.South : WallSide.West))
                         {
-                            last.X1 = x;
-                            if (state != LightState.Dead) last.State = LightState.On;
+                            SkyItem strip = stripAt[px, pz];
+                            strip.X1 = Mathf.Max(strip.X1, x);
+                            strip.Z1 = Mathf.Max(strip.Z1, z);
+                            stripAt[x, z] = strip;
                             continue;
                         }
                     }
-                    items.Add(new SkyItem { Sky = sky, X0 = x, X1 = x, Z = z, State = state });
+                    var item = new SkyItem { Sky = sky, X0 = x, X1 = x, Z0 = z, Z1 = z };
+                    if (sky == PoolSky.Full) stripAt[x, z] = item;
+                    items.Add(item);
                 }
             return items;
         }
 
         /// <summary>
-        /// Vidro fosco aceso em cada claraboia (com o CeilingLight, que o apaga no apagão) e luzes
-        /// de caixa do HDRP: raios paralelos inclinados, o mesmo "sol" no mapa todo. As células Full
-        /// vizinhas da mesma sala formam um teto de vidro só (uma malha, UV contínua, sem costura),
-        /// com uma luz por faixa de células numa fileira.
+        /// Vidro fosco aceso em cada claraboia e luzes de caixa do HDRP: raios paralelos inclinados,
+        /// o mesmo "sol" no mapa todo. As células Full vizinhas da mesma sala formam um teto de vidro
+        /// só (uma malha, UV contínua, sem costura), com uma luz por faixa de células numa fileira.
+        /// Toda claraboia nasce acesa (nada de claraboia "queimada": canto escuro é sala sem
+        /// claraboia); o <see cref="DaylightPanel"/> leva o vidro e as luzes pelo anoitecer.
         /// </summary>
         void BuildSkylights(int resolution)
         {
@@ -2256,7 +2419,7 @@ namespace BackRooms.World
             Transform root = CreateChild("Claraboias").transform;
 
             Material on = panelOnMaterial != null ? panelOnMaterial : ceilingMaterial;
-            Material off = panelOffMaterial != null ? panelOffMaterial : DarkCopy(on);
+            NightGlass(out Color nightBase, out Color nightEmissive);
 
             // Teto de vidro: componentes ligadas de células Full da mesma sala.
             int w = Data.Width, h = Data.Height;
@@ -2308,33 +2471,33 @@ namespace BackRooms.World
 
                 string name = $"Claraboia_{list[0].x}_{list[0].y}_teto";
                 Mesh mesh = glass.ToMesh(name);
-                MeshRenderer panel = CreateRenderer(name, mesh, off, ShadowCastingMode.Off, root);
+                MeshRenderer panel = CreateRenderer(name, mesh, on, ShadowCastingMode.Off, root);
                 panel.gameObject.AddComponent<MeshCollider>().sharedMesh = mesh;
                 _kit.Objects++;
 
                 var lights = new List<HDAdditionalLightData>();
                 foreach (SkyItem item in items)
                 {
-                    if (item.Sky != PoolSky.Full || component[item.X0, item.Z] != k || item.State == LightState.Dead) continue;
+                    if (item.Sky != PoolSky.Full || component[item.X0, item.Z0] != k) continue;
                     var corners = new List<Vector3>();
-                    for (int x = item.X0; x <= item.X1; x++)
-                    {
-                        CellRect(x, item.Z, out float x0, out float x1, out float z0, out float z1);
-                        corners.Add(new Vector3(x0, c, z0)); corners.Add(new Vector3(x1, c, z1));
-                        corners.Add(new Vector3(x0, c, z1)); corners.Add(new Vector3(x1, c, z0));
-                    }
-                    lights.Add(CreateSun(panel.transform, corners, c, item.X0, item.Z, resolution));
+                    for (int z = item.Z0; z <= item.Z1; z++)
+                        for (int x = item.X0; x <= item.X1; x++)
+                        {
+                            CellRect(x, z, out float x0, out float x1, out float z0, out float z1);
+                            corners.Add(new Vector3(x0, c, z0)); corners.Add(new Vector3(x1, c, z1));
+                            corners.Add(new Vector3(x0, c, z1)); corners.Add(new Vector3(x1, c, z0));
+                        }
+                    lights.Add(CreateSun(panel.transform, corners, c, item.X0, item.Z0, resolution));
                 }
 
-                LightState state = lights.Count > 0 ? LightState.On : LightState.Dead;
-                panel.gameObject.AddComponent<CeilingLight>().Init(state, lights.Count > 0 ? lights.ToArray() : null, panel, on, off);
+                panel.gameObject.AddComponent<DaylightPanel>().Init(lights.ToArray(), panel, on, nightBase, nightEmissive);
             }
 
             // Claraboias recortadas (quadrada, redonda, rasgos): vidro no alto do poço de luz.
             foreach (SkyItem item in items)
             {
                 if (item.Sky == PoolSky.Full) continue;
-                int x = item.X0, z = item.Z;
+                int x = item.X0, z = item.Z0;
                 float c = Data.Ceiling[x, z];
                 float glassY = c + ShaftHeight;
                 var glass = new MeshBuilder(1f);
@@ -2353,13 +2516,12 @@ namespace BackRooms.World
 
                 string name = $"Claraboia_{x}_{z}";
                 Mesh mesh = glass.ToMesh(name);
-                MeshRenderer panel = CreateRenderer(name, mesh, off, ShadowCastingMode.Off, root);
+                MeshRenderer panel = CreateRenderer(name, mesh, on, ShadowCastingMode.Off, root);
                 panel.gameObject.AddComponent<MeshCollider>().sharedMesh = mesh;
                 _kit.Objects++;
 
-                HDAdditionalLightData[] lights = null;
-                if (item.State != LightState.Dead) lights = new[] { CreateSun(panel.transform, corners, glassY, x, z, resolution) };
-                panel.gameObject.AddComponent<CeilingLight>().Init(item.State, lights, panel, on, off);
+                var lights = new[] { CreateSun(panel.transform, corners, glassY, x, z, resolution) };
+                panel.gameObject.AddComponent<DaylightPanel>().Init(lights, panel, on, nightBase, nightEmissive);
             }
         }
 
@@ -2446,8 +2608,9 @@ namespace BackRooms.World
         }
 
         /// <summary>
-        /// Janelão, frestas, vigia acesa e tijolo de vidro: o vidro aceso (que apaga no apagão,
-        /// com um material sem emissão criado aqui) e um spot com sombra entrando na sala.
+        /// Janelão, frestas, vigia acesa e tijolo de vidro: o vidro aceso e um spot com sombra
+        /// entrando na sala; no anoitecer os dois seguem a mesma rampa das claraboias
+        /// (<see cref="DaylightPanel"/>), e o vidro termina no mesmo azul-noite.
         /// </summary>
         void BuildLitOpenings(int resolution)
         {
@@ -2456,13 +2619,13 @@ namespace BackRooms.World
             Transform root = CreateChild("Janelas").transform;
 
             Material fallback = poolWindowMaterial != null ? poolWindowMaterial : panelOnMaterial != null ? panelOnMaterial : wallMaterial;
+            NightGlass(out Color nightBase, out Color nightEmissive);
 
             foreach (List<LitOpening> group in groups)
             {
                 LitOpening first = group[0];
                 bool blocks = first.Type == PoolEdge.GlassBlock;
                 Material on = blocks && poolGlassBlockMaterial != null ? poolGlassBlockMaterial : fallback;
-                Material off = DarkCopy(on);
 
                 // Tijolo de vidro: 1,2 m por repetição, pela UV do mundo. Os outros: 0 a 1 em cada vidro.
                 var glass = new MeshBuilder(blocks ? 1.2f : 1f);
@@ -2493,7 +2656,7 @@ namespace BackRooms.World
                 center /= group.Count;
 
                 string name = $"Janela_{(first.AlongX ? "X" : "Z")}{first.Line}_{first.Index}";
-                MeshRenderer panel = CreateRenderer(name, glass.ToMesh(name), off, ShadowCastingMode.Off, root);
+                MeshRenderer panel = CreateRenderer(name, glass.ToMesh(name), on, ShadowCastingMode.Off, root);
                 _kit.Objects++;
 
                 // A luz entra pela janela, um pouco para baixo.
@@ -2513,7 +2676,7 @@ namespace BackRooms.World
                 _kit.Lights++;
                 if (ceilingShadows) _kit.ShadowLights++;
 
-                panel.gameObject.AddComponent<CeilingLight>().Init(LightState.On, new[] { hd }, panel, on, off);
+                panel.gameObject.AddComponent<DaylightPanel>().Init(new[] { hd }, panel, on, nightBase, nightEmissive);
             }
         }
 

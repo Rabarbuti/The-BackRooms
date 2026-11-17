@@ -106,7 +106,9 @@ Packages/packages-lock.json linguist-generated
 *.aiff                  lfs
 *.it                    lfs
 *.mod                   lfs
-*.mp3                   lfs
+# MP3 fica direto no Git, como os PNG: a conta está sem orçamento de LFS. Hoje é só a música
+# do menu (Audio/Musica, ~1,7 MB). Para voltar ao LFS, troque "binary" por "lfs".
+*.mp3                   binary
 *.ogg                   lfs
 *.s3m                   lfs
 *.wav                   lfs

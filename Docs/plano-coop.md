@@ -69,12 +69,16 @@ juntas pelo relógio `GameSession.SessionSeconds`.
 - **Lanterna** (F), por enquanto com bateria infinita. Passos sintetizados em código.
 - **Traje** (`PlayerBody`): o que os outros veem é um explorador de traje de proteção amarelo,
   que anda, agacha, acompanha o olhar e mostra a caneta e a lanterna nas mãos.
-- **Mão em primeira pessoa** (`ItemHand`) segurando o item em uso.
+- **Mão em primeira pessoa** (`ItemHand`) segurando o item em uso. Perto de uma superfície o
+  braço encolhe e a ponta da caneta vai ao ponto mirado; nenhuma peça passa da superfície. O
+  traje que os outros veem encolhe o braço do mesmo jeito diante de uma parede.
 
 ### Caneta
 
-Único item. Tecla 1 pega e guarda, botão esquerdo risca paredes, chão e teto a até 2,2 m, R
-ou 3 passa para a cor seguinte e 2 volta para a anterior (preto, vermelho, azul). Todos começam com ela. Os riscos (`DrawingBoard`) aparecem
+Único item. Uma tecla por caneta: 1 preta, 2 azul, 3 vermelha (sem caneta na mão, puxa
+aquela; com outra cor, troca; com a mesma, guarda). Botão esquerdo risca paredes, chão e teto a
+até 2,2 m. A cor vai pela rede (`PlayerNetwork`), e o traje que os outros veem segura a caneta da
+mesma tinta. Todos começam com ela. Os riscos (`DrawingBoard`) aparecem
 para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 1500 traços.
 
 ### Entidade
