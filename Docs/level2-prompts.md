@@ -1,5 +1,11 @@
 # Level 2 — prompts das texturas (Higgsfield)
 
+**As quatro folhas já foram geradas e recortadas (12/11/2026).** Cada quarto está em
+`Assets/_Game/Art/Fontes/Level2/<nome>.png`: A `Tile_White`, `Mosaic_Pool`, `Tile_White_Worn`,
+`Coping`; B `Water_Height`, `Caustics`, `Window_Frosted`, `Glass_Block`; C `Stain_Waterline`,
+`Stain_Limescale`, `Stain_GroutMold`, `Stain_Rust`; D `Mark_Depth`, `Mark_NoDiving`, `Mark_DeepEnd`,
+`Mark_LaneEnd`. Os prompts abaixo ficam para gerar de novo alguma delas.
+
 Para colar no chat do Claude (ou no Cowork, ou no ChatGPT) com o Higgsfield conectado. No Claude
 Code o ilimitado do teste é bloqueado. O que cada folha vira está em `level2-piscinas.md`,
 seção 10.

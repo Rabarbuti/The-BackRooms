@@ -46,7 +46,10 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 17;
+        public const int ContentVersion = 18;
+
+        /// <summary>Música da tela inicial (cópia do arquivo mandado pelo usuário; não é gerada).</summary>
+        public const string MenuMusicPath = "Assets/_Game/Audio/Musica/Menu_Tema.mp3";
 
         [MenuItem("BackRooms/Montar Level 0 (sala de teste)")]
         public static void Build()
@@ -217,6 +220,11 @@ namespace BackRooms.EditorTools
 
             // Cena
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            // Ajustes feitos à mão na cena do Level 0 em 12/11/2026 e trazidos para cá; só nela,
+            // para as cenas do Level 1 e do Level 2 saírem como estão.
+            bool level0 = options.scenePath == ScenePath;
+            // Sem o céu do Unity: o HDRP não usa este material (o céu dele vem do Volume).
+            if (level0) RenderSettings.skybox = null;
 
             var volumeObject = new GameObject("Global Volume");
             var volume = volumeObject.AddComponent<Volume>();
@@ -227,6 +235,12 @@ namespace BackRooms.EditorTools
             var ambience = new GameObject("Ambiencia");
             ambience.AddComponent<AudioSource>().playOnAwake = false;
             ambience.AddComponent<FluorescentHum>();
+
+            // Música do menu: um objeto na raiz de cada cena; em Play o primeiro sobrevive às
+            // trocas de fase e os outros se apagam (MenuMusic).
+            var music = new GameObject("MusicaDoMenu");
+            music.AddComponent<AudioSource>().playOnAwake = false;
+            music.AddComponent<MenuMusic>().clip = EnsureMenuMusic();
 
             // Tintas da caneta, na ordem das cores (PenTool.ColorNames).
             Material[] inks =
@@ -303,6 +317,14 @@ namespace BackRooms.EditorTools
             var sessionObject = new GameObject("Sessao");
             var manager = sessionObject.AddComponent<NetworkManager>();
             var transport = sessionObject.AddComponent<UnityTransport>();
+            if (level0)
+            {
+                // Valor de cena sem efeito: GameSession.Host define o endereço de escuta ao
+                // hospedar (0.0.0.0, ou 127.0.0.1 só na sessão local) e Join o de conexão.
+                var connection = transport.ConnectionData;
+                connection.ServerListenAddress = "127.0.0.1";
+                transport.ConnectionData = connection;
+            }
             if (manager.NetworkConfig == null) manager.NetworkConfig = new NetworkConfig();
             manager.NetworkConfig.NetworkTransport = transport;
             manager.NetworkConfig.PlayerPrefab = playerPrefab;
@@ -380,6 +402,41 @@ namespace BackRooms.EditorTools
             var pass = volume.AddPassOfType<CamcorderPass>();
             pass.name = "VHS";
             pass.material = material;
+        }
+
+        // A música do menu é longa (2,5 min): sai do disco aos poucos (Streaming), em Vorbis,
+        // estéreo e na taxa original. Decompress On Load ocuparia ~50 MB de memória.
+        static AudioClip EnsureMenuMusic()
+        {
+            if (!File.Exists(MenuMusicPath))
+            {
+                Debug.LogWarning("[BackRooms] Música do menu não encontrada em " + MenuMusicPath + ": o menu fica sem música.");
+                return null;
+            }
+
+            AssetDatabase.ImportAsset(MenuMusicPath);
+            if (AssetImporter.GetAtPath(MenuMusicPath) is AudioImporter importer)
+            {
+                AudioImporterSampleSettings settings = importer.defaultSampleSettings;
+                bool changed = settings.loadType != AudioClipLoadType.Streaming ||
+                               settings.compressionFormat != AudioCompressionFormat.Vorbis ||
+                               !Mathf.Approximately(settings.quality, 0.7f) ||
+                               settings.sampleRateSetting != AudioSampleRateSetting.PreserveSampleRate ||
+                               importer.forceToMono || !importer.loadInBackground;
+                if (changed)
+                {
+                    settings.loadType = AudioClipLoadType.Streaming;
+                    settings.compressionFormat = AudioCompressionFormat.Vorbis;
+                    settings.quality = 0.7f;
+                    settings.sampleRateSetting = AudioSampleRateSetting.PreserveSampleRate;
+                    importer.defaultSampleSettings = settings;
+                    importer.forceToMono = false;
+                    importer.loadInBackground = true;
+                    importer.SaveAndReimport();
+                }
+            }
+
+            return AssetDatabase.LoadAssetAtPath<AudioClip>(MenuMusicPath);
         }
 
         static PanelSettings EnsurePanelSettings()
@@ -643,12 +700,21 @@ namespace BackRooms.EditorTools
             fog.enableVolumetricFog.Override(true);
             fog.albedo.Override(new Color(0.9f, 0.85f, 0.6f));
             fog.anisotropy.Override(0.2f);
+            // Valor do ajuste à mão de 12/11/2026, sem override: não vale enquanto a qualidade da
+            // névoa vier do perfil do HDRP. Só para o arquivo gerado sair igual ao commitado.
+            fog.volumetricFogBudget = 0.5f;
 
             var occlusion = Add<ScreenSpaceAmbientOcclusion>(profile);
             occlusion.intensity.Override(1.2f);
             occlusion.radius.Override(1.5f);
-            // Desligada em 12/11/2026, pelo mesmo ajuste à mão.
+            // Desligada em 12/11/2026, pelo mesmo ajuste à mão: o quadro caiu de 27 para cerca de
+            // 20 ms junto com o céu desligado (Docs/desempenho-level0.md).
             occlusion.active = false;
+            // Também do ajuste à mão, sem override e só da oclusão por traçado de raios (que o
+            // jogo não usa): sem efeito, repetidos para o arquivo gerado sair igual.
+            occlusion.rayLength = 3f;
+            occlusion.sampleCount = 2;
+            occlusion.denoiserRadius = 0.5f;
 
             // Pós de filmadora.
             var bloom = Add<Bloom>(profile);

@@ -1,19 +1,22 @@
 using System;
 using System.IO;
 using BackRooms.Entities;
+using BackRooms.Player;
 using UnityEditor;
 using UnityEngine;
 
 namespace BackRooms.EditorTools
 {
     /// <summary>
-    /// Grava em arquivos WAV os sons da entidade, que no jogo são sintetizados na hora. Serve
-    /// para ouvir e ajustar cada um sem precisar jogar até ela aparecer.
-    /// Menu BackRooms > Exportar sons da entidade (salva em Logs/Sons, fora do Git).
+    /// Grava em arquivos WAV os sons da entidade e os passos do jogador por superfície (carpete,
+    /// azulejo, água rasa, nado, debaixo d'água e o espirro de entrada), que no jogo são
+    /// sintetizados na hora. Serve para ouvir e ajustar cada um sem precisar jogar.
+    /// Menu BackRooms > Exportar sons (entidade e passos), salva em Logs/Sons, fora do Git.
+    /// Linha de comando: EntitySounds.BatchExport.
     /// </summary>
     public static class EntitySounds
     {
-        [MenuItem("BackRooms/Exportar sons da entidade")]
+        [MenuItem("BackRooms/Exportar sons (entidade e passos)")]
         public static void ExportFromMenu()
         {
             EditorUtility.RevealInFinder(Export(DefaultFolder()));
@@ -54,7 +57,19 @@ namespace BackRooms.EditorTools
             Save(folder, "entidade_passo", EntityAudio.CreateStep());
             Save(folder, "entidade_ronco", EntityAudio.CreateDrone());
 
-            Debug.Log("[BackRooms] Sons da entidade salvos em " + folder);
+            // Passos do jogador por superfície (Footsteps), três variações de cada, e o espirro
+            // de entrar ou sair da água. O volume relativo já está no clipe (pico de cada um).
+            for (int i = 0; i < 3; i++)
+            {
+                Save(folder, "passo_carpete_" + i, Footsteps.CreateClip(StepSurface.Carpet, i));
+                Save(folder, "passo_azulejo_" + i, Footsteps.CreateClip(StepSurface.Tile, i));
+                Save(folder, "passo_agua_rasa_" + i, Footsteps.CreateClip(StepSurface.Wade, i));
+                Save(folder, "nado_bracada_" + i, Footsteps.CreateClip(StepSurface.Swim, i));
+                Save(folder, "debaixo_dagua_" + i, Footsteps.CreateClip(StepSurface.Underwater, i));
+            }
+            for (int i = 0; i < 2; i++) Save(folder, "espirro_entrada_" + i, Footsteps.CreateSplash(i));
+
+            Debug.Log("[BackRooms] Sons da entidade e dos passos salvos em " + folder);
             return folder;
         }
 

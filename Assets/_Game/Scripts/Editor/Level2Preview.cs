@@ -1,0 +1,1316 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using BackRooms.World;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.HighDefinition;
+using Object = UnityEngine.Object;
+
+namespace BackRooms.EditorTools
+{
+    /// <summary>
+    /// Fotos do Level 2 (As Piscinas) para conferir a forma: planta vista de cima sem os tetos,
+    /// duas fotos na altura dos olhos por sala (da porta para dentro e do meio para a parede mais
+    /// longa) e closes de arco, vigia, escada entrando na água, poço redondo, claraboia e debaixo
+    /// d'água. Saem em Logs/Previews/level2_*.png, em 1280 x 720.
+    ///
+    /// Linha de comando: -executeMethod BackRooms.EditorTools.Level2Preview.BatchCapture
+    /// [-seed N] (padrão 1998). Monta a cena (Level2Setup.BuildScene), reconstrói com a seed e
+    /// escreve "[BackRooms] Fotos do Level 2: ..." no log. Sai com 0 se tirou as fotos.
+    /// </summary>
+    public static class Level2Preview
+    {
+        const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
+        const float Eye = 1.65f;
+
+        [MenuItem("BackRooms/Fotografar Level 2")]
+        public static void CaptureFromMenu()
+        {
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            string report = Capture(1998, out _);
+            Debug.Log("[BackRooms] Fotos do Level 2: " + report);
+        }
+
+        public static void BatchCapture()
+        {
+            int code = 1;
+            try
+            {
+                string report = Capture(SeedArgument(1998), out bool ok);
+                Debug.Log("[BackRooms] Fotos do Level 2: " + report);
+                code = ok ? 0 : 3;
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+            Level1Setup.ExitWithLevel0Open(code);
+        }
+
+        /// <summary>
+        /// Linha de comando, modo enxuto: -executeMethod BackRooms.EditorTools.Level2Preview.BatchCloseups
+        /// [-seed N]. Só os closes do acabamento (tijolo de vidro, janelão, poço redondo, teto de
+        /// vidro Full, manchas, marcações, uma sala com elas e a vista longa de uma raia), em
+        /// Logs/Previews/level2_s{seed}_*.png, sem apagar as outras fotos. Também procura, nas seeds
+        /// de conferência, quais têm poço redondo, tijolo de vidro e janelão.
+        /// </summary>
+        public static void BatchCloseups()
+        {
+            int code = 1;
+            try
+            {
+                string report = Closeups(SeedArgument(1998), out bool ok);
+                Debug.Log("[BackRooms] Closes do Level 2: " + report);
+                code = ok ? 0 : 3;
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+            Level1Setup.ExitWithLevel0Open(code);
+        }
+
+        /// <summary>
+        /// Linha de comando: -executeMethod BackRooms.EditorTools.Level2Preview.BatchCeilings
+        /// [-seed N] (sem -seed: 1998 e 7). O teto como o jogador o vê: em cada salão de pilares,
+        /// raia, piscina com deque, galeria, canal, escadaria, patamar, saída e corredor de janelas,
+        /// uma foto do meio de uma ponta olhando o comprimento da sala para cima (30°) e uma do canto
+        /// olhando a diagonal, sem a filmadora. Em Logs/Previews/level2_s{seed}_teto_*.png; apaga
+        /// antes só as fotos de teto da mesma seed.
+        /// </summary>
+        public static void BatchCeilings()
+        {
+            int code = 1;
+            try
+            {
+                int seed = SeedArgument(int.MinValue);
+                int[] seeds = seed == int.MinValue ? new[] { 1998, 7 } : new[] { seed };
+                string report = Ceilings(seeds, out bool ok);
+                Debug.Log("[BackRooms] Fotos do teto do Level 2: " + report);
+                code = ok ? 0 : 3;
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+            Level1Setup.ExitWithLevel0Open(code);
+        }
+
+        static readonly PoolRoomKind[] CeilingKinds =
+        {
+            PoolRoomKind.Hall, PoolRoomKind.Lane, PoolRoomKind.Basin, PoolRoomKind.Gallery, PoolRoomKind.Canal,
+            PoolRoomKind.Terrace, PoolRoomKind.Start, PoolRoomKind.Exit, PoolRoomKind.WindowGallery
+        };
+
+        static string Ceilings(int[] seeds, out bool ok)
+        {
+            ok = false;
+            Level2Setup.BuildScene();
+            EditorSceneManager.OpenScene(Level2Setup.ScenePath, OpenSceneMode.Single);
+            var builder = Object.FindFirstObjectByType<LevelBuilder>();
+            if (builder == null || !builder.poolsEnabled) return "a cena não tem LevelBuilder com as Piscinas ligadas";
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
+            if (prefab == null) return "sem o prefab do jogador";
+
+            string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Logs", "Previews"));
+            Directory.CreateDirectory(folder);
+            GameObject rig = Level0Preview.CreateCameraRig(prefab, out Camera camera);
+            bool asyncBefore = ShaderUtil.allowAsyncCompilation;
+            ShaderUtil.allowAsyncCompilation = false;
+            var target = new RenderTexture(1280, 720, 24, RenderTextureFormat.ARGB32);
+            var readback = new Texture2D(target.width, target.height, TextureFormat.RGBA32, false);
+            var names = new List<string>();
+            CustomPassVolume[] camcorderPasses = Object.FindObjectsByType<CustomPassVolume>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var stats = new List<string>();
+
+            try
+            {
+                camera.targetTexture = target;
+                camera.farClipPlane = Mathf.Max(camera.farClipPlane, 150f);
+                foreach (CustomPassVolume pass in camcorderPasses) pass.enabled = false;
+
+                foreach (int seed in seeds)
+                {
+                    builder.seed = seed;
+                    builder.Rebuild();
+                    LevelData d = builder.Data;
+                    WakeWater(builder);
+                    foreach (HDAdditionalLightData light in builder.GetComponentsInChildren<HDAdditionalLightData>(true))
+                        light.shadowUpdateMode = ShadowUpdateMode.EveryFrame;
+                    stats.Add($"seed {seed}: {builder.PoolStats}");
+                    foreach (string old in Directory.GetFiles(folder, $"level2_s{seed}_teto_*.png")) File.Delete(old);
+
+                    void Shot(string name, Vector3 foot, Vector3 look, float pitch)
+                    {
+                        look.y = 0f;
+                        if (look.sqrMagnitude < 1e-6f) look = Vector3.forward;
+                        rig.transform.SetPositionAndRotation(builder.transform.TransformPoint(foot), Quaternion.LookRotation(look.normalized, Vector3.up));
+                        camera.transform.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+                        string file = $"level2_s{seed}_teto_{name}.png";
+                        Shoot(camera, target, readback, Path.Combine(folder, file));
+                        names.Add(file);
+                    }
+
+                    foreach (PoolRoom room in d.Rooms)
+                    {
+                        if (Array.IndexOf(CeilingKinds, room.Kind) < 0) continue;
+                        string label = $"sala{room.Id:00}_{room.Kind.ToString().ToLowerInvariant()}";
+                        bool alongX = room.Width > room.Height;
+                        // Ponta: célula do meio da largura (à esquerda do meio, se for par: o meio de
+                        // uma galeria é a fila de pilares), a 0,8 m da parede, olhando o comprimento.
+                        int across = alongX ? room.Height : room.Width;
+                        int mid = across % 2 == 1 ? across / 2 : across / 2 - 1;
+                        int cx = alongX ? room.X0 : room.X0 + mid, cz = alongX ? room.Z0 + mid : room.Z0;
+                        Vector3 along = alongX ? Vector3.right : Vector3.forward;
+                        Vector3 foot = CellCenter(d, cx, cz) - along * (LevelBuilder.Cell * 0.5f - 0.8f);
+                        foot.y = StandHeight(d, cx, cz);
+                        Shot(label + "_ponta", foot, along, -30f);
+
+                        // Canto: a 1 m das duas paredes, olhando o canto oposto.
+                        Vector3 corner = new Vector3(room.X0 * LevelBuilder.Cell + 1f, 0f, room.Z0 * LevelBuilder.Cell + 1f);
+                        Vector3 far = new Vector3((room.X0 + room.Width) * LevelBuilder.Cell - 1f, 0f, (room.Z0 + room.Height) * LevelBuilder.Cell - 1f);
+                        corner.y = StandHeight(d, room.X0, room.Z0);
+                        Shot(label + "_canto", corner, far - corner, -30f);
+                    }
+                }
+                ok = names.Count > 0;
+            }
+            finally
+            {
+                foreach (CustomPassVolume pass in camcorderPasses) if (pass != null) pass.enabled = true;
+                camera.targetTexture = null;
+                RenderTexture.active = null;
+                Object.DestroyImmediate(target);
+                Object.DestroyImmediate(readback);
+                Object.DestroyImmediate(rig);
+                ShaderUtil.allowAsyncCompilation = asyncBefore;
+            }
+            return $"{names.Count} fotos em {folder}; {string.Join("; ", stats)}";
+        }
+
+        static readonly int[] ScanSeeds = { 1998, 7, 4242, 31337, 90210, 5, 21 };
+
+        static string Closeups(int seed, out bool ok)
+        {
+            ok = false;
+            WallSide[] sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
+
+            // Que seed tem o quê (só a planta: rápido).
+            var scan = new List<string>();
+            foreach (int s in ScanSeeds)
+            {
+                LevelData plan = LevelGenerator.Generate(s, 16, 16, false, false, true);
+                var wells = new List<string>();
+                int glass = 0, window = 0, full = 0, archEdges = 0;
+                for (int z = 0; z < plan.Height; z++)
+                    for (int x = 0; x < plan.Width; x++)
+                    {
+                        if (LevelBuilder.IsRoundWell(plan, x, z)) wells.Add($"({x},{z}) {plan.Rooms[plan.Room[x, z]].Kind}");
+                        if (plan.IsSolid(x, z)) continue;
+                        if (plan.Sky[x, z] == PoolSky.Full) full++;
+                        foreach (WallSide side in sides)
+                        {
+                            PoolEdge edge = plan.EdgeAt(x, z, side);
+                            if (edge == PoolEdge.GlassBlock) glass++;
+                            if (edge == PoolEdge.Window) window++;
+                            // Borda seca sem escada por baixo de arco ou vão (a capa não entra lá).
+                            if ((edge == PoolEdge.Arch || edge == PoolEdge.WideArch || edge == PoolEdge.Doorway) && plan.Depth[x, z] == PoolDepth.Dry &&
+                                !plan.StairAt(x, z, side, out _) && plan.Neighbor(x, z, side, out int nx, out int nz) && OpenCell(plan, nx, nz) &&
+                                plan.FloorHeight(nx, nz) < plan.FloorHeight(x, z) - 1e-3f) archEdges++;
+                        }
+                    }
+                scan.Add($"seed {s}: poço redondo {(wells.Count > 0 ? string.Join(" ", wells) : "nenhum")}, tijolo de vidro {glass}, janelão {window}, células Full {full}, borda sob arco {archEdges}");
+            }
+            Debug.Log("[BackRooms] Procura nas seeds:\n" + string.Join("\n", scan));
+
+            Level2Setup.BuildScene();
+            EditorSceneManager.OpenScene(Level2Setup.ScenePath, OpenSceneMode.Single);
+            var builder = Object.FindFirstObjectByType<LevelBuilder>();
+            if (builder == null || !builder.poolsEnabled) return "a cena não tem LevelBuilder com as Piscinas ligadas";
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
+            if (prefab == null) return "sem o prefab do jogador";
+
+            builder.seed = seed;
+            builder.Rebuild();
+            LevelData d = builder.Data;
+            WakeWater(builder);
+            foreach (HDAdditionalLightData light in builder.GetComponentsInChildren<HDAdditionalLightData>(true))
+                light.shadowUpdateMode = ShadowUpdateMode.EveryFrame;
+            Debug.Log($"[BackRooms] Seed {seed}: {builder.PoolStats}\nManchas e marcações: {builder.PoolDecalLog}");
+            string ascii = PlanText(d);
+            if (!string.IsNullOrEmpty(ascii)) Debug.Log($"[BackRooms] Planta das Piscinas, seed {seed}:\n{ascii}");
+
+            // -so borda: só os closes da capa da borda; -so fundo: só os da água funda (e só essas
+            // fotos são apagadas antes).
+            string only = ArgumentAfter("-so");
+            bool edgesOnly = only == "borda", deepOnly = only == "fundo";
+            string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Logs", "Previews"));
+            Directory.CreateDirectory(folder);
+            string pattern = edgesOnly ? $"level2_s{seed}_borda_*.png" : deepOnly ? $"level2_s{seed}_fundo_*.png" : $"level2_s{seed}_*.png";
+            foreach (string old in Directory.GetFiles(folder, pattern)) File.Delete(old);
+
+            GameObject rig = Level0Preview.CreateCameraRig(prefab, out Camera camera);
+            bool asyncBefore = ShaderUtil.allowAsyncCompilation;
+            ShaderUtil.allowAsyncCompilation = false;
+            var target = new RenderTexture(1280, 720, 24, RenderTextureFormat.ARGB32);
+            var readback = new Texture2D(target.width, target.height, TextureFormat.RGBA32, false);
+            var names = new List<string>();
+            var missing = new List<string>();
+            var camcorder = Object.FindFirstObjectByType<BackRooms.UI.Camcorder>();
+            var water = builder.GetComponentInChildren<PoolWater>();
+            Volume under = null;
+            if (water != null)
+                foreach (Volume v in water.GetComponentsInChildren<Volume>(true))
+                    if (v.gameObject.name == "DebaixoDagua") under = v;
+            float underBefore = under != null ? under.weight : 0f;
+
+            try
+            {
+                if (camcorder != null) camcorder.Draw(true, 61.4f, 61.4f, 0.95f, false);
+                camera.targetTexture = target;
+                camera.farClipPlane = Mathf.Max(camera.farClipPlane, 150f);
+
+                void Shot(string name, Vector3 foot, Vector3 look, float pitch, bool underwater = false)
+                {
+                    look.y = 0f;
+                    if (look.sqrMagnitude < 1e-6f) look = Vector3.forward;
+                    if (under != null) under.weight = underwater ? 1f : underBefore;
+                    // Debaixo d'água, o painel como num mergulho no poço: WATER, a barra AIR e a dica de tecla.
+                    if (camcorder != null) camcorder.Draw(true, 61.4f, 61.4f, 0.95f, false, underwater: underwater, air: underwater ? 0.6f : 1f,
+                                                          swimHint: underwater ? "HOLD SPACE" : null);
+                    rig.transform.SetPositionAndRotation(builder.transform.TransformPoint(foot), Quaternion.LookRotation(look.normalized, Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+                    string file = $"level2_s{seed}_{name}.png";
+                    Shoot(camera, target, readback, Path.Combine(folder, file));
+                    names.Add(file);
+                }
+
+                // Olhando de onde está o pé para um ponto (pitch para baixo positivo).
+                float PitchTo(Vector3 foot, Vector3 point)
+                {
+                    Vector3 flat = point - foot;
+                    flat.y = 0f;
+                    return Mathf.Clamp(Mathf.Atan2(foot.y + Eye - point.y, Mathf.Max(0.3f, flat.magnitude)) * Mathf.Rad2Deg, -70f, 70f);
+                }
+
+                (int x, int z) CellOf(Vector3 p) => (Mathf.Clamp(Mathf.FloorToInt(p.x / LevelBuilder.Cell), 0, d.Width - 1),
+                                                     Mathf.Clamp(Mathf.FloorToInt(p.z / LevelBuilder.Cell), 0, d.Height - 1));
+
+                // Sem a filmadora: o chuvisco esconderia duas faces piscando no mesmo plano.
+                CustomPassVolume[] camcorderPasses = Object.FindObjectsByType<CustomPassVolume>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+                void CleanShot(string name, Vector3 foot, Vector3 look, float pitch)
+                {
+                    foreach (CustomPassVolume pass in camcorderPasses) pass.enabled = false;
+                    try { Shot(name, foot, look, pitch); }
+                    finally { foreach (CustomPassVolume pass in camcorderPasses) pass.enabled = true; }
+                }
+
+                // Capa da borda: as quatro orientações, os dois cantos, o encontro com a escada e a
+                // volta de uma piscina e de um canal.
+                if (!deepOnly) ShootEdges(d, (name, foot, look, pitch) => CleanShot("borda_" + name, foot, look, pitch), PitchTo, missing);
+                if (edgesOnly)
+                {
+                    ok = names.Count > 0;
+                    return $"seed {seed}, só a borda: {names.Count} fotos em {folder}: {string.Join(", ", names)}" +
+                           (missing.Count > 0 ? $"; não há nesta seed: {string.Join(", ", missing)}" : "");
+                }
+
+                // Água funda (de nadar): piscina do deque, boiando e de dentro d'água, a escada mais
+                // longa do seco para a funda e uma do raso para a funda, a raia funda de um salão e o
+                // poço redondo dentro da área funda.
+                ShootDeep(d, (name, foot, look, pitch, underwater) => Shot("fundo_" + name, foot, look, pitch, underwater), PitchTo, missing);
+                if (deepOnly)
+                {
+                    ok = names.Count > 0;
+                    return $"seed {seed}, só a água funda: {names.Count} fotos em {folder}: {string.Join(", ", names)}" +
+                           (missing.Count > 0 ? $"; não há nesta seed: {string.Join(", ", missing)}" : "");
+                }
+
+                // Tijolo de vidro e janelão, de frente, a 3 m.
+                foreach (PoolEdge kind in new[] { PoolEdge.GlassBlock, PoolEdge.Window })
+                {
+                    string name = kind == PoolEdge.Window ? "janelao" : "tijolo_de_vidro";
+                    bool found = false;
+                    for (int z = 0; z < d.Height && !found; z++)
+                        for (int x = 0; x < d.Width && !found; x++)
+                        {
+                            if (d.IsSolid(x, z)) continue;
+                            foreach (WallSide side in sides)
+                            {
+                                if (d.EdgeAt(x, z, side) != kind) continue;
+                                Vector3 dir = Dir(side);
+                                Vector3 foot = CellCenter(d, x, z) + dir * (LevelBuilder.Cell * 0.5f - 3.2f);
+                                foot.y = StandHeight(d, x, z);
+                                Shot(name, foot, dir, -6f);
+                                Vector3 oblique = Vector3.Cross(Vector3.up, dir) * 1.6f;
+                                Shot(name + "_obliquo", foot + oblique, dir - oblique * 0.35f, -2f);
+                                found = true;
+                                break;
+                            }
+                        }
+                    if (!found) missing.Add(name);
+                }
+
+                // Poço redondo: da superfície, na funda ao lado, e de dentro d'água, olhando o furo.
+                bool well = false;
+                for (int z = 0; z < d.Height && !well; z++)
+                    for (int x = 0; x < d.Width && !well; x++)
+                    {
+                        if (!LevelBuilder.IsRoundWell(d, x, z)) continue;
+                        foreach (WallSide side in sides)
+                        {
+                            if (!d.IsOpen(x, z, side) || !d.Neighbor(x, z, side, out int nx, out int nz) || d.Depth[nx, nz] != PoolDepth.Deep) continue;
+                            Vector3 dir = Dir(side);
+                            Vector3 center = CellCenter(d, x, z);
+                            Vector3 foot = center + dir * 3f;
+                            foot.y = StandHeight(d, nx, nz);
+                            Shot("poco_redondo", foot, -dir, 45f);
+                            Vector3 diver = center + dir * 2.4f;
+                            diver.y = MidWater(d, nx, nz) - Eye;
+                            Shot("poco_redondo_debaixo", diver, -dir, 50f, underwater: true);
+                            well = true;
+                            break;
+                        }
+                    }
+                if (!well) missing.Add("poço redondo");
+
+                // Degrau na linha d'água: o primeiro degrau de uma escada que desce do seco para a
+                // água, de frente (rente à água, de dentro dela) e de cima (do seco), sem a filmadora.
+                bool waterStep = false;
+                float surface = water != null ? water.SurfaceY : 0f;
+                foreach (PoolStair stair in d.Stairs)
+                {
+                    if (!d.Neighbor(stair.X, stair.Z, stair.Side, out int ux, out int uz) || d.IsSolid(ux, uz) || d.Depth[ux, uz] != PoolDepth.Dry) continue;
+                    PoolDepth lower = d.Depth[stair.X, stair.Z];
+                    if (lower != PoolDepth.Shallow && lower != PoolDepth.Deep) continue;
+                    Vector3 toUpper = Dir(stair.Side);
+                    // O primeiro degrau ocupa os 30 cm junto da divisa (ou da face da parede, num arco).
+                    Vector3 step = CellCenter(d, stair.X, stair.Z) + toUpper * (LevelBuilder.Cell * 0.5f - 0.25f);
+                    step.y = LevelData.DepthFloor(PoolDepth.Dry) - LevelData.StepRise;
+                    Vector3 front = step - toUpper * 2.2f;
+                    front.y = surface + 0.35f - Eye;
+                    CleanShot("degrau_na_agua_frente", front, toUpper, PitchTo(front, step));
+                    Vector3 above = step + toUpper * 1.1f;
+                    above.y = LevelData.DepthFloor(PoolDepth.Dry);
+                    CleanShot("degrau_na_agua_cima", above, -toUpper, PitchTo(above, step));
+                    waterStep = true;
+                    break;
+                }
+                if (!waterStep) missing.Add("escada do seco para a água");
+
+                // Teto de vidro Full: a emenda entre duas células vizinhas da mesma sala, e a faixa toda de uma ponta.
+                bool roof = false;
+                for (int z = 0; z < d.Height && !roof; z++)
+                    for (int x = 0; x + 1 < d.Width && !roof; x++)
+                    {
+                        if (d.IsSolid(x, z) || d.IsSolid(x + 1, z) || d.Sky[x, z] != PoolSky.Full || d.Sky[x + 1, z] != PoolSky.Full) continue;
+                        if (d.Room[x, z] != d.Room[x + 1, z] || d.Rooms[d.Room[x, z]].Vault) continue;
+                        float seam = (x + 1) * LevelBuilder.Cell;
+                        Vector3 foot = new Vector3(seam - 2.6f, StandHeight(d, x, z), (z + 0.5f) * LevelBuilder.Cell);
+                        Shot("teto_full_emenda", foot, Vector3.right, -62f);
+                        int first = x;
+                        while (first > 0 && d.Sky[first - 1, z] == PoolSky.Full && d.Room[first - 1, z] == d.Room[x, z]) first--;
+                        Vector3 end = CellCenter(d, first, z) + Vector3.left * 1.4f;
+                        end.y = StandHeight(d, first, z);
+                        Shot("teto_full_faixa", end, Vector3.right, -38f);
+
+                        // Aceso, o vidro estoura e não mostra emenda nenhuma: apagado (vidro azul-noite
+                        // com a textura de vidro fosco), uma repetição por célula apareceria.
+                        var lightsOut = Object.FindFirstObjectByType<LightsOut>();
+                        if (lightsOut != null && water != null)
+                        {
+                            water.ForceSeconds = lightsOut.firstDarkAt + lightsOut.darkSeconds * 0.5f;
+                            water.Snap(builder.transform.TransformPoint(foot));
+                            Shot("teto_full_emenda_apagado", foot, Vector3.right, -62f);
+                            water.ForceSeconds = -1.0;
+                            water.Snap(builder.transform.TransformPoint(foot));
+                        }
+                        roof = true;
+                    }
+                if (!roof) missing.Add("teto Full com duas células");
+
+                // Anoitecer: a mesma vista de uma sala clara com piscina, com o relógio forçado em
+                // cinco momentos (dia, meio do aviso, meio da descida, noite, meio da subida), com e
+                // sem a filmadora. O estado de cada uma vai para o log.
+                var duskClock = Object.FindFirstObjectByType<LightsOut>();
+                PoolRoom bright = null;
+                foreach (PoolRoomKind kind in new[] { PoolRoomKind.Basin, PoolRoomKind.Lane, PoolRoomKind.Hall })
+                {
+                    foreach (PoolRoom room in d.Rooms)
+                        if (room.Kind == kind && !room.Dark) { bright = room; break; }
+                    if (bright != null) break;
+                }
+                if (bright != null && duskClock != null && water != null && FindDoor(d, bright, out int duskX, out int duskZ, out WallSide bside))
+                {
+                    Vector3 dir = Dir(bside);
+                    Vector3 foot = CellCenter(d, duskX, duskZ) + dir * (LevelBuilder.Cell * 0.5f - 0.7f);
+                    foot.y = StandHeight(d, duskX, duskZ);
+                    var middle = new Vector3((bright.X0 + bright.Width * 0.5f) * LevelBuilder.Cell, foot.y, (bright.Z0 + bright.Height * 0.5f) * LevelBuilder.Cell);
+                    Vector3 look = middle - foot;
+                    if (new Vector2(look.x, look.z).sqrMagnitude < 1f) look = -dir;
+                    double dark = duskClock.firstDarkAt;
+                    var moments = new (string label, double seconds)[]
+                    {
+                        ("0_dia", dark - water.duskFade - water.duskWarning - 10.0),
+                        ("1_aviso", dark - water.duskFade - water.duskWarning * 0.5),
+                        ("2_descida", dark - water.duskFade * 0.5),
+                        ("3_noite", dark + duskClock.darkSeconds * 0.5),
+                        ("4_subida", dark + duskClock.darkSeconds + water.dawnFade * 0.5),
+                    };
+                    var states = new List<string>();
+                    Vector3 viewer = builder.transform.TransformPoint(foot);
+                    foreach (var (label, seconds) in moments)
+                    {
+                        water.ForceSeconds = Math.Max(0.0, seconds);
+                        water.Snap(viewer);
+                        Daylight light = water.CurrentDaylight;
+                        states.Add($"{label} ({seconds:F0} s): sol {light.Sun:F2}, quente {light.Warmth:F2}, noite {light.Night:F2}");
+                        Shot("anoitecer_" + label, foot, look, 6f);
+                        CleanShot("anoitecer_" + label + "_limpa", foot, look, 6f);
+                    }
+                    water.ForceSeconds = -1.0;
+                    water.Snap(viewer);
+                    Debug.Log($"[BackRooms] Anoitecer na sala {bright.Id} ({bright.Kind}): " + string.Join("; ", states));
+                }
+                else missing.Add("sala clara com piscina para o anoitecer");
+
+                // Decalques: um close de cada material, de frente (parede) ou de trás do desenho (piso).
+                var seen = new HashSet<string>();
+                var perRoom = new Dictionary<int, int>();
+                foreach (string group in new[] { "Manchas", "Marcacoes" })
+                {
+                    Transform parent = builder.transform.Find(group);
+                    if (parent == null) { missing.Add(group); continue; }
+                    foreach (DecalProjector decal in parent.GetComponentsInChildren<DecalProjector>())
+                    {
+                        Vector3 local = builder.transform.InverseTransformPoint(decal.transform.position);
+                        Vector3 into = builder.transform.InverseTransformDirection(decal.transform.forward);
+                        Vector3 up = builder.transform.InverseTransformDirection(decal.transform.up);
+                        var (cx, cz) = CellOf(local - (Mathf.Abs(into.y) < 0.5f ? into * 0.5f : Vector3.zero));
+                        int room = d.Room[cx, cz];
+                        if (room >= 0) perRoom[room] = (perRoom.TryGetValue(room, out int n) ? n : 0) + 1;
+
+                        string material = decal.material != null ? decal.material.name.Replace("Decal_", "").ToLowerInvariant() : "decal";
+                        if (!seen.Add(material)) continue;
+
+                        if (into.y > 0.5f)
+                        {
+                            // No teto: de baixo.
+                            Vector3 foot = local - up * 2.4f;
+                            var (fx, fz) = CellOf(foot);
+                            foot.y = StandHeight(d, fx, fz);
+                            Shot("close_" + material, foot, up, PitchTo(foot, local));
+                        }
+                        else if (into.y < -0.5f)
+                        {
+                            // No piso: de quem lê o desenho (atrás do pé dele).
+                            Vector3 foot = local - up * 1.9f;
+                            var (fx, fz) = CellOf(foot);
+                            foot.y = StandHeight(d, fx, fz);
+                            Shot("close_" + material, foot, up, PitchTo(foot, local));
+                            // A mesma, de longe: a marcação na sala.
+                            Vector3 back = local - up * 5f;
+                            var (bx, bz) = CellOf(back);
+                            if (!d.IsSolid(bx, bz) && d.Room[bx, bz] == room)
+                            {
+                                back.y = StandHeight(d, bx, bz);
+                                Shot("sala_" + material, back, up, PitchTo(back, local) * 0.6f);
+                            }
+                            if (local.y < -0.1f)
+                            {
+                                Vector3 diver = local - up * 2.2f;
+                                diver.y = -0.4f - Eye;
+                                Shot("close_" + material + "_debaixo", diver, up, PitchTo(diver, local), underwater: true);
+                            }
+                        }
+                        else
+                        {
+                            // De frente, a 2,4 m; o que está alto, de mais longe (no máximo 45° para cima).
+                            Vector3 foot = local - into * 2.4f;
+                            var (fx, fz) = CellOf(foot);
+                            float rise = local.y - (StandHeight(d, fx, fz) + Eye);
+                            if (rise > 2.4f)
+                            {
+                                foot = local - into * Mathf.Min(rise, 7f);
+                                (fx, fz) = CellOf(foot);
+                            }
+                            foot.y = StandHeight(d, fx, fz);
+                            if (local.y < -0.3f)
+                            {
+                                // Debaixo d'água: de frente, nadando na altura dela.
+                                foot = local - into * 2f;
+                                foot.y = local.y - Eye;
+                                Shot("close_" + material, foot, into, 0f, underwater: true);
+                            }
+                            else Shot("close_" + material, foot, into, PitchTo(foot, local));
+                        }
+                    }
+                }
+
+                // As duas salas com mais decalques, em contexto: da passagem para o meio.
+                var rooms = new List<int>(perRoom.Keys);
+                rooms.Sort((a, b) => perRoom[b] != perRoom[a] ? perRoom[b].CompareTo(perRoom[a]) : a.CompareTo(b));
+                for (int k = 0; k < Mathf.Min(2, rooms.Count); k++)
+                {
+                    PoolRoom room = d.Rooms[rooms[k]];
+                    string kind = room.Kind.ToString().ToLowerInvariant();
+                    Vector3 middle = new Vector3((room.X0 + room.Width * 0.5f) * LevelBuilder.Cell, 0f, (room.Z0 + room.Height * 0.5f) * LevelBuilder.Cell);
+                    middle.y = StandHeight(d, Mathf.Min(room.X0 + room.Width / 2, d.Width - 1), Mathf.Min(room.Z0 + room.Height / 2, d.Height - 1));
+                    if (FindDoor(d, room, out int dx, out int dz, out WallSide side))
+                    {
+                        Vector3 dir = Dir(side);
+                        Vector3 foot = CellCenter(d, dx, dz) + dir * (LevelBuilder.Cell * 0.5f - 0.7f);
+                        foot.y = StandHeight(d, dx, dz);
+                        Vector3 look = middle - foot;
+                        if (new Vector2(look.x, look.z).sqrMagnitude < 1f) look = -dir;
+                        Shot($"contexto_sala{room.Id:00}_{kind}", foot, look, 10f);
+                    }
+                    Vector3 toWall = room.Width >= room.Height ? Vector3.forward : Vector3.right;
+                    Shot($"contexto_sala{room.Id:00}_{kind}_meio", middle - toWall * (Mathf.Min(room.Width, room.Height) * LevelBuilder.Cell * 0.35f), toWall, 6f);
+                }
+
+                // Vista longa (a luz das claraboias some longe sem atravessar parede): ao longo da
+                // sala mais comprida, de uma ponta, e do início para o lado mais longe do mapa.
+                PoolRoom longest = null;
+                foreach (PoolRoom room in d.Rooms)
+                    if (longest == null || Mathf.Max(room.Width, room.Height) > Mathf.Max(longest.Width, longest.Height)) longest = room;
+                if (longest != null)
+                {
+                    bool alongX = longest.Width >= longest.Height;
+                    int x0 = alongX ? longest.X0 : longest.X0 + longest.Width / 2, z0 = alongX ? longest.Z0 + longest.Height / 2 : longest.Z0;
+                    Vector3 foot = CellCenter(d, x0, z0) - (alongX ? Vector3.right : Vector3.forward) * 1.6f;
+                    foot.y = StandHeight(d, x0, z0);
+                    Shot($"vista_longa_{longest.Kind.ToString().ToLowerInvariant()}", foot, alongX ? Vector3.right : Vector3.forward, 3f);
+                }
+                Vector3 spawn = builder.transform.InverseTransformPoint(builder.SpawnCenter);
+                Shot("vista_do_inicio", spawn, new Vector3(d.Width, 0f, d.Height) * (LevelBuilder.Cell * 0.5f) - spawn, 2f);
+
+                ok = names.Count > 0;
+            }
+            finally
+            {
+                if (under != null) under.weight = underBefore;
+                camera.targetTexture = null;
+                RenderTexture.active = null;
+                Object.DestroyImmediate(target);
+                Object.DestroyImmediate(readback);
+                Object.DestroyImmediate(rig);
+                ShaderUtil.allowAsyncCompilation = asyncBefore;
+            }
+
+            return $"seed {seed}, {names.Count} fotos em {folder}: {string.Join(", ", names)}" +
+                   (missing.Count > 0 ? $"; não há nesta seed: {string.Join(", ", missing)}" : "");
+        }
+
+        static int SeedArgument(int fallback)
+        {
+            string[] args = Environment.GetCommandLineArgs();
+            for (int i = 0; i + 1 < args.Length; i++)
+                if (args[i] == "-seed" && int.TryParse(args[i + 1], out int seed)) return seed;
+            return fallback;
+        }
+
+        static string ArgumentAfter(string flag)
+        {
+            string[] args = Environment.GetCommandLineArgs();
+            for (int i = 0; i + 1 < args.Length; i++)
+                if (args[i] == flag) return args[i + 1];
+            return null;
+        }
+
+        // ---------------------------------------------------------------- Capa da borda
+
+        static bool OpenCell(LevelData d, int x, int z) => x >= 0 && z >= 0 && x < d.Width && z < d.Height && !d.IsSolid(x, z) && d.Room[x, z] >= 0;
+
+        /// <summary>
+        /// Aquele lado da célula leva capa? Piso seco que dá, sem parede, para um piso aberto mais
+        /// baixo (a mesma regra do LevelBuilder; a escada corta a capa só no meio do lado).
+        /// </summary>
+        static bool CopingSide(LevelData d, int x, int z, WallSide side)
+        {
+            if (!OpenCell(d, x, z) || d.Depth[x, z] != PoolDepth.Dry || d.EdgeAt(x, z, side) != PoolEdge.Open) return false;
+            if (!d.Neighbor(x, z, side, out int nx, out int nz) || !OpenCell(d, nx, nz)) return false;
+            return d.FloorHeight(nx, nz) < d.FloorHeight(x, z) - 1e-3f;
+        }
+
+        static Vector3 Along(WallSide side) => side == WallSide.South || side == WallSide.North ? Vector3.right : Vector3.forward;
+
+        /// <summary>
+        /// Closes da capa da borda (piso seco contra água mais baixa): uma reta de cada orientação,
+        /// um canto em ponta do seco (capa em dois lados da célula), um canto da piscina (a água faz
+        /// a ponta e o seco a contorna), o encontro com uma escada e a volta de uma piscina (Basin) e
+        /// de um canal. Fotos de cima, a 1,3 a 1,8 m da aresta.
+        /// </summary>
+        static void ShootEdges(LevelData d, Action<string, Vector3, Vector3, float> shot, Func<Vector3, Vector3, float> pitchTo, List<string> missing)
+        {
+            WallSide[] sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
+            string[] names = { "sul", "norte", "oeste", "leste" };
+            float dry = LevelData.DepthFloor(PoolDepth.Dry);
+            const float half = LevelBuilder.Cell * 0.5f;
+
+            // Retas: a célula com capa naquele lado, sem escada, de preferência com as duas vizinhas do
+            // mesmo lado também com capa (meio de uma reta).
+            for (int k = 0; k < 4; k++)
+            {
+                WallSide side = sides[k];
+                int bestX = -1, bestZ = -1, bestScore = -1;
+                for (int z = 0; z < d.Height; z++)
+                    for (int x = 0; x < d.Width; x++)
+                    {
+                        if (!CopingSide(d, x, z, side) || d.StairAt(x, z, side, out _)) continue;
+                        Vector3 along = Along(side);
+                        int score = 0;
+                        foreach (int s in new[] { -1, 1 })
+                        {
+                            int ax = x + Mathf.RoundToInt(along.x) * s, az = z + Mathf.RoundToInt(along.z) * s;
+                            if (OpenCell(d, ax, az) && CopingSide(d, ax, az, side) && d.EdgeAt(x, z, s < 0 ? (side == WallSide.South || side == WallSide.North ? WallSide.West : WallSide.South) : (side == WallSide.South || side == WallSide.North ? WallSide.East : WallSide.North)) == PoolEdge.Open) score++;
+                        }
+                        if (score > bestScore) { bestScore = score; bestX = x; bestZ = z; }
+                    }
+                if (bestX < 0) { missing.Add("borda virada para " + names[k]); continue; }
+                Vector3 dir = Dir(side);
+                Vector3 edge = CellCenter(d, bestX, bestZ) + dir * half;
+                Vector3 foot = edge - dir * 1.3f;
+                shot("reta_" + names[k], foot, dir, pitchTo(foot, edge));
+            }
+
+            // Ponta do seco: capa em dois lados vizinhos da mesma célula.
+            bool point = false;
+            for (int z = 0; z < d.Height && !point; z++)
+                for (int x = 0; x < d.Width && !point; x++)
+                    foreach (WallSide a in new[] { WallSide.South, WallSide.North })
+                    {
+                        foreach (WallSide b in new[] { WallSide.West, WallSide.East })
+                        {
+                            if (!CopingSide(d, x, z, a) || !CopingSide(d, x, z, b) || d.StairAt(x, z, a, out _) || d.StairAt(x, z, b, out _)) continue;
+                            Vector3 diagonal = Dir(a) + Dir(b);
+                            Vector3 corner = CellCenter(d, x, z) + diagonal * half;
+                            Vector3 foot = corner - diagonal.normalized * 1.6f;
+                            shot("canto_ponta_do_seco", foot, diagonal, pitchTo(foot, corner));
+                            point = true;
+                            break;
+                        }
+                        if (point) break;
+                    }
+            if (!point) missing.Add("canto em ponta do seco");
+
+            // Canto da piscina: a célula seca não tem capa naqueles dois lados, mas as duas vizinhas
+            // têm, viradas para a diagonal (mais baixa).
+            bool pool = false;
+            for (int z = 0; z < d.Height && !pool; z++)
+                for (int x = 0; x < d.Width && !pool; x++)
+                {
+                    if (!OpenCell(d, x, z) || d.Depth[x, z] != PoolDepth.Dry) continue;
+                    foreach (WallSide a in new[] { WallSide.South, WallSide.North })
+                    {
+                        foreach (WallSide b in new[] { WallSide.West, WallSide.East })
+                        {
+                            if (CopingSide(d, x, z, a) || CopingSide(d, x, z, b)) continue;
+                            if (d.EdgeAt(x, z, a) != PoolEdge.Open || d.EdgeAt(x, z, b) != PoolEdge.Open) continue;
+                            if (!d.Neighbor(x, z, b, out int bx, out int bz) || !CopingSide(d, bx, bz, a) || d.StairAt(bx, bz, a, out _)) continue;
+                            if (!d.Neighbor(x, z, a, out int ax, out int az) || !CopingSide(d, ax, az, b) || d.StairAt(ax, az, b, out _)) continue;
+                            Vector3 diagonal = Dir(a) + Dir(b);
+                            Vector3 corner = CellCenter(d, x, z) + diagonal * half;
+                            Vector3 foot = corner - diagonal.normalized * 1.8f;
+                            shot("canto_da_piscina", foot, diagonal, pitchTo(foot, corner));
+                            pool = true;
+                            break;
+                        }
+                        if (pool) break;
+                    }
+                }
+            if (!pool) missing.Add("canto da piscina");
+
+            // Encontro com a escada: o lado da escada que não ocupa a divisa inteira.
+            bool stairShot = false;
+            for (int z = 0; z < d.Height && !stairShot; z++)
+                for (int x = 0; x < d.Width && !stairShot; x++)
+                    foreach (WallSide side in sides)
+                    {
+                        if (!CopingSide(d, x, z, side) || !d.StairAt(x, z, side, out PoolStair stair) || stair.Width > LevelBuilder.Cell - 0.6f) continue;
+                        Vector3 dir = Dir(side), along = Along(side);
+                        Vector3 junction = CellCenter(d, x, z) + dir * half + along * (stair.Width * 0.5f);
+                        Vector3 foot = junction - dir * 1.5f + along * 0.9f;
+                        shot("escada", foot, junction - foot, pitchTo(foot, junction));
+                        stairShot = true;
+                        break;
+                    }
+            if (!stairShot) missing.Add("escada no meio de uma borda com capa");
+
+            // Fim da capa contra a parede: capa num lado e parede (com pilarete) no lado vizinho.
+            bool wallEnd = false;
+            for (int z = 0; z < d.Height && !wallEnd; z++)
+                for (int x = 0; x < d.Width && !wallEnd; x++)
+                    foreach (WallSide side in sides)
+                    {
+                        if (!CopingSide(d, x, z, side) || d.StairAt(x, z, side, out _)) continue;
+                        WallSide end = side == WallSide.South || side == WallSide.North ? WallSide.West : WallSide.South;
+                        if (d.EdgeAt(x, z, end) == PoolEdge.Open) continue;
+                        Vector3 dir = Dir(side), toEnd = Dir(end);
+                        Vector3 corner = CellCenter(d, x, z) + dir * half + toEnd * half;
+                        Vector3 foot = corner - dir * 1.4f - toEnd * 1.4f;
+                        shot("fim_na_parede", foot, corner - foot, pitchTo(foot, corner));
+                        wallEnd = true;
+                        break;
+                    }
+            if (!wallEnd) missing.Add("capa terminando numa parede");
+
+            // Borda por baixo de arco, arco largo ou vão reto (seco de um lado, mais baixo do outro,
+            // sem escada): o que fica na soleira. Conta quantas há.
+            int underArch = 0;
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                    foreach (WallSide side in sides)
+                    {
+                        if (!OpenCell(d, x, z) || d.Depth[x, z] != PoolDepth.Dry || d.StairAt(x, z, side, out _)) continue;
+                        PoolEdge edge = d.EdgeAt(x, z, side);
+                        if (edge != PoolEdge.Arch && edge != PoolEdge.WideArch && edge != PoolEdge.Doorway) continue;
+                        if (!d.Neighbor(x, z, side, out int nx, out int nz) || !OpenCell(d, nx, nz) || d.FloorHeight(nx, nz) >= d.FloorHeight(x, z) - 1e-3f) continue;
+                        if (underArch++ > 0) continue;
+                        Vector3 dir = Dir(side);
+                        Vector3 sill = CellCenter(d, x, z) + dir * half;
+                        Vector3 foot = sill - dir * 1.6f;
+                        shot("sob_arco", foot, dir, pitchTo(foot, sill));
+                    }
+            Debug.Log($"[BackRooms] Bordas sem escada por baixo de arco ou vão nesta seed: {underArch}");
+
+            // A volta de uma piscina e de um canal: do piso seco mais longe do meio da sala.
+            foreach (PoolRoomKind kind in new[] { PoolRoomKind.Basin, PoolRoomKind.Canal })
+            {
+                bool done = false;
+                foreach (PoolRoom room in d.Rooms)
+                {
+                    if (room.Kind != kind || done) continue;
+                    var middle = new Vector3((room.X0 + room.Width * 0.5f) * LevelBuilder.Cell, 0f, (room.Z0 + room.Height * 0.5f) * LevelBuilder.Cell);
+                    int fx = -1, fz = -1;
+                    float far = -1f;
+                    for (int z = room.Z0; z < room.Z0 + room.Height; z++)
+                        for (int x = room.X0; x < room.X0 + room.Width; x++)
+                        {
+                            if (!OpenCell(d, x, z) || d.Depth[x, z] != PoolDepth.Dry) continue;
+                            float distance = Vector3.Distance(CellCenter(d, x, z) - Vector3.up * dry, middle);
+                            if (distance > far) { far = distance; fx = x; fz = z; }
+                        }
+                    // Sem piso seco na sala (canal todo raso): da passagem para o meio.
+                    if (fx < 0 && FindDoor(d, room, out int doorX, out int doorZ, out WallSide doorSide))
+                    {
+                        Vector3 door = CellCenter(d, doorX, doorZ) + Dir(doorSide) * (half - 0.7f);
+                        door.y = StandHeight(d, doorX, doorZ);
+                        Vector3 toMiddle = middle - door;
+                        toMiddle.y = 0f;
+                        if (toMiddle.sqrMagnitude < 1f) toMiddle = -Dir(doorSide);
+                        shot($"{(kind == PoolRoomKind.Basin ? "piscina" : "canal")}_sala{room.Id:00}_passagem", door, toMiddle, 20f);
+                        done = true;
+                        continue;
+                    }
+                    if (fx < 0) continue;
+                    Vector3 foot = CellCenter(d, fx, fz);
+                    Vector3 look = middle - foot;
+                    look.y = 0f;
+                    if (look.sqrMagnitude < 1f) look = Vector3.forward;
+                    string label = kind == PoolRoomKind.Basin ? "piscina" : "canal";
+                    shot($"{label}_sala{room.Id:00}", foot, look, 32f);
+                    shot($"{label}_sala{room.Id:00}_perto", foot + look.normalized * 1.2f, look, 55f);
+                    done = true;
+                }
+                if (!done) missing.Add($"sala {kind} com piso seco");
+            }
+        }
+
+        static string Capture(int seed, out bool ok)
+        {
+            ok = false;
+            Level2Setup.BuildScene();
+            EditorSceneManager.OpenScene(Level2Setup.ScenePath, OpenSceneMode.Single);
+
+            var builder = Object.FindFirstObjectByType<LevelBuilder>();
+            if (builder == null || !builder.poolsEnabled) return "a cena não tem LevelBuilder com as Piscinas ligadas";
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
+            if (prefab == null) return "sem o prefab do jogador";
+
+            builder.seed = seed;
+            builder.Rebuild();
+            LevelData d = builder.Data;
+            WakeWater(builder);
+
+            // Fora do Play o quadro não avança (Time.frameCount parado) e as sombras "em cache" de
+            // toda luz já vista voltam a ser desenhadas a cada Render: as fotos ficavam cada vez mais
+            // lentas. Na prévia, a sombra é refeita a cada quadro só para as luzes à vista.
+            foreach (HDAdditionalLightData light in builder.GetComponentsInChildren<HDAdditionalLightData>(true))
+                light.shadowUpdateMode = ShadowUpdateMode.EveryFrame;
+
+            string ascii = PlanText(d);
+            if (!string.IsNullOrEmpty(ascii)) Debug.Log($"[BackRooms] Planta das Piscinas, seed {seed}:\n{ascii}");
+
+            string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Logs", "Previews"));
+            Directory.CreateDirectory(folder);
+            foreach (string old in Directory.GetFiles(folder, "level2_*.png")) File.Delete(old);
+
+            GameObject rig = Level0Preview.CreateCameraRig(prefab, out Camera camera);
+            bool asyncBefore = ShaderUtil.allowAsyncCompilation;
+            ShaderUtil.allowAsyncCompilation = false;
+            var target = new RenderTexture(1280, 720, 24, RenderTextureFormat.ARGB32);
+            var readback = new Texture2D(target.width, target.height, TextureFormat.RGBA32, false);
+            var names = new List<string>();
+            var times = new List<string>();
+
+            try
+            {
+                var camcorder = Object.FindFirstObjectByType<BackRooms.UI.Camcorder>();
+                if (camcorder != null) camcorder.Draw(true, 61.4f, 61.4f, 0.95f, false);
+                camera.targetTexture = target;
+                camera.farClipPlane = Mathf.Max(camera.farClipPlane, 150f);
+
+                void Shot(string name, Vector3 foot, Vector3 look, float pitch)
+                {
+                    look.y = 0f;
+                    if (look.sqrMagnitude < 1e-6f) look = Vector3.forward;
+                    rig.transform.SetPositionAndRotation(builder.transform.TransformPoint(foot), Quaternion.LookRotation(look.normalized, Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+                    var clock = System.Diagnostics.Stopwatch.StartNew();
+                    Shoot(camera, target, readback, Path.Combine(folder, name));
+                    names.Add(name);
+                    times.Add($"{name.Replace("level2_", "").Replace(".png", "")} {clock.Elapsed.TotalSeconds:F1}s");
+                    Debug.Log($"[BackRooms] Foto {name}: {clock.Elapsed.TotalSeconds:F1} s");
+                }
+
+                ShootPlan(builder, rig, camera, target, readback, folder, names);
+
+                // Duas por sala: de uma passagem olhando para dentro e do meio para a parede mais longa.
+                foreach (PoolRoom room in d.Rooms)
+                {
+                    string kind = room.Kind.ToString().ToLowerInvariant();
+                    Vector3 middle = new Vector3((room.X0 + room.Width * 0.5f) * LevelBuilder.Cell, 0f, (room.Z0 + room.Height * 0.5f) * LevelBuilder.Cell);
+                    middle.y = StandHeight(d, Mathf.Min(room.X0 + room.Width / 2, d.Width - 1), Mathf.Min(room.Z0 + room.Height / 2, d.Height - 1));
+
+                    if (FindDoor(d, room, out int dx, out int dz, out WallSide side))
+                    {
+                        Vector3 dir = Dir(side);
+                        Vector3 foot = CellCenter(d, dx, dz) + dir * (LevelBuilder.Cell * 0.5f - 0.7f);
+                        foot.y = StandHeight(d, dx, dz);
+                        Vector3 look = middle - foot;
+                        if (new Vector2(look.x, look.z).sqrMagnitude < 1f) look = -dir;
+                        Shot($"level2_sala{room.Id:00}_{kind}_porta.png", foot, look, 4f);
+                    }
+
+                    Vector3 toWall = room.Width >= room.Height ? Vector3.forward : Vector3.right;
+                    Vector3 from = middle - toWall * (Mathf.Min(room.Width, room.Height) * LevelBuilder.Cell * 0.35f);
+                    Shot($"level2_sala{room.Id:00}_{kind}_meio.png", from, toWall, 2f);
+                }
+
+                ShootCloses(builder, d, Shot, camcorder);
+                ok = names.Count > 0;
+            }
+            finally
+            {
+                camera.targetTexture = null;
+                RenderTexture.active = null;
+                Object.DestroyImmediate(target);
+                Object.DestroyImmediate(readback);
+                Object.DestroyImmediate(rig);
+                ShaderUtil.allowAsyncCompilation = asyncBefore;
+            }
+
+            return $"seed {seed}, {names.Count} fotos em {folder}; {builder.PoolStats}; tempos: {string.Join(", ", times)}";
+        }
+
+        // Como Level0Preview.Shoot, com menos quadros (a névoa e o antisserrilhamento já assentam em 8).
+        static void Shoot(Camera camera, RenderTexture target, Texture2D readback, string path)
+        {
+            for (int i = 0; i < 8; i++) camera.Render();
+            RenderTexture.active = target;
+            readback.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
+            readback.Apply();
+            File.WriteAllBytes(path, readback.EncodeToPNG());
+        }
+
+        // Fora do Play o PoolWater não roda o Start: cria agora a luz rebatida (como no jogo).
+        static void WakeWater(LevelBuilder builder)
+        {
+            var water = builder.GetComponentInChildren<PoolWater>();
+            if (water == null || water.GetComponentsInChildren<Volume>(true).Length > 0) return;
+            MethodInfo start = typeof(PoolWater).GetMethod("Start", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            start?.Invoke(water, null);
+        }
+
+        // A planta em texto, se o gerador souber desenhá-la (PoolGenerator.Ascii).
+        static string PlanText(LevelData d)
+        {
+            MethodInfo ascii = typeof(PoolGenerator).GetMethod("Ascii", BindingFlags.Static | BindingFlags.Public);
+            if (ascii == null || ascii.GetParameters().Length != 1) return null;
+            return ascii.Invoke(null, new object[] { d }) as string;
+        }
+
+        static Vector3 Dir(WallSide side)
+        {
+            switch (side)
+            {
+                case WallSide.South: return Vector3.back;
+                case WallSide.North: return Vector3.forward;
+                case WallSide.West: return Vector3.left;
+                default: return Vector3.right;
+            }
+        }
+
+        static Vector3 CellCenter(LevelData d, int x, int z) => new Vector3((x + 0.5f) * LevelBuilder.Cell, d.FloorHeight(x, z), (z + 0.5f) * LevelBuilder.Cell);
+
+        // Onde os pés ficam: onde dá pé, no piso; onde não dá (funda e poço), boiando, com os pés
+        // 1,4 m abaixo da superfície (o floatDepth do jogador) e os olhos 25 cm acima dela.
+        static float StandHeight(LevelData d, int x, int z)
+        {
+            if (d.IsSolid(x, z)) return 0.2f;
+            return Mathf.Max(d.FloorHeight(x, z), FloatFeet);
+        }
+
+        const float FloatFeet = LevelData.WaterLevel - 1.4f;
+
+        // Meio da coluna d'água da célula (no poço, só até 3 m abaixo da superfície): onde fica o olho de quem mergulha.
+        static float MidWater(LevelData d, int x, int z) => (Mathf.Max(d.FloorHeight(x, z), LevelData.WaterLevel - 6f) + LevelData.WaterLevel) * 0.5f;
+
+        /// <summary>
+        /// Closes da água funda: a piscina (Basin) do deque, boiando no meio e de dentro d'água; a escada
+        /// mais longa do seco para a funda e a mais longa do raso para a funda (de cima, de quem boia na
+        /// frente e de lado, debaixo d'água); a raia funda de um salão (ou de uma raia longa, ou um canal),
+        /// da ponta e de dentro d'água. As alturas saem da planta, então a mesma função serve antes e
+        /// depois de mudar a profundidade.
+        /// </summary>
+        static void ShootDeep(LevelData d, Action<string, Vector3, Vector3, float, bool> shot, Func<Vector3, Vector3, float> pitchTo, List<string> missing)
+        {
+            WallSide[] sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
+            const float half = LevelBuilder.Cell * 0.5f;
+            bool Deep(int x, int z) => OpenCell(d, x, z) && d.Depth[x, z] == PoolDepth.Deep;
+
+            // Piscina: o seco do deque de frente para a água funda, longe de escada.
+            bool basin = false;
+            foreach (PoolRoom room in d.Rooms)
+            {
+                if (room.Kind != PoolRoomKind.Basin || basin) continue;
+                for (int z = room.Z0; z < room.Z0 + room.Height && !basin; z++)
+                    for (int x = room.X0; x < room.X0 + room.Width && !basin; x++)
+                    {
+                        if (!OpenCell(d, x, z) || d.Depth[x, z] != PoolDepth.Dry) continue;
+                        foreach (WallSide side in sides)
+                        {
+                            if (d.EdgeAt(x, z, side) != PoolEdge.Open || d.StairAt(x, z, side, out _)) continue;
+                            if (!d.Neighbor(x, z, side, out int nx, out int nz) || !Deep(nx, nz) || !room.Contains(nx, nz)) continue;
+                            // Do outro lado, mais água funda (o meio da piscina, não um canto).
+                            if (!d.Neighbor(nx, nz, side, out int fx, out int fz) || !OpenCell(d, fx, fz) || d.Depth[fx, fz] == PoolDepth.Dry) continue;
+                            Vector3 dir = Dir(side);
+                            Vector3 edge = CellCenter(d, x, z) + dir * half;
+                            Vector3 foot = edge - dir * 1.2f;
+                            Vector3 bottom = CellCenter(d, nx, nz) + dir * 0.5f;
+                            shot($"piscina_sala{room.Id:00}_deque", foot, dir, pitchTo(foot, bottom), false);
+                            shot($"piscina_sala{room.Id:00}_deque_longe", edge - dir * 3.4f, dir, 14f, false);
+                            Vector3 swim = CellCenter(d, nx, nz);
+                            swim.y = StandHeight(d, nx, nz);
+                            shot($"piscina_sala{room.Id:00}_boiando", swim, dir, 22f, false);
+                            Vector3 diver = CellCenter(d, nx, nz) - dir * 1.2f;
+                            diver.y = MidWater(d, nx, nz) - Eye;
+                            shot($"piscina_sala{room.Id:00}_debaixo", diver, dir, 12f, true);
+                            basin = true;
+                            break;
+                        }
+                    }
+            }
+            if (!basin) missing.Add("piscina (Basin) com deque seco");
+
+            // Escadas que sobem da água funda: a mais longa para o seco e a mais longa para o raso.
+            foreach (PoolDepth top in new[] { PoolDepth.Dry, PoolDepth.Shallow })
+            {
+                PoolStair best = default;
+                bool found = false;
+                foreach (PoolStair s in d.Stairs)
+                {
+                    if (!Deep(s.X, s.Z) || !d.Neighbor(s.X, s.Z, s.Side, out int ux, out int uz) || !OpenCell(d, ux, uz) || d.Depth[ux, uz] != top) continue;
+                    if (!found || s.Steps > best.Steps) { best = s; found = true; }
+                }
+                string label = top == PoolDepth.Dry ? "seco" : "raso";
+                if (!found) { missing.Add($"escada da funda para o {label}"); continue; }
+                d.Neighbor(best.X, best.Z, best.Side, out int bx, out int bz);
+                Vector3 toUpper = Dir(best.Side), across = Along(best.Side);
+                Vector3 edge = CellCenter(d, best.X, best.Z) + toUpper * half;
+                float run = best.Steps * 0.3f;
+                string name = $"escada{best.Steps}_{label}";
+                // De cima: do piso de cima, olhando a escada descer.
+                Vector3 above = edge + toUpper * 1.3f;
+                above.y = d.FloorHeight(bx, bz);
+                Vector3 middle = edge - toUpper * (run * 0.5f);
+                middle.y = d.FloorHeight(best.X, best.Z) + best.Steps * 0.1f;
+                shot(name + "_cima", above, -toUpper, pitchTo(above, middle), false);
+                // Boiando de frente para ela, a 1,5 m do pé.
+                Vector3 front = edge - toUpper * Mathf.Min(run + 1.5f, LevelBuilder.Cell - 0.4f);
+                front.y = StandHeight(d, best.X, best.Z);
+                shot(name + "_agua", front, toUpper, 4f, false);
+                // De lado, debaixo d'água: os degraus somem no fundo.
+                Vector3 side = edge - toUpper * (run + 0.9f) + across * 1.4f;
+                side.y = MidWater(d, best.X, best.Z) - Eye;
+                Vector3 look = middle - side;
+                look.y = 0f;
+                shot(name + "_debaixo", side, look, 8f, true);
+            }
+
+            // Raia funda: de um salão, se houver; senão de uma raia longa ou de um canal.
+            bool lane = false;
+            foreach (PoolRoomKind kind in new[] { PoolRoomKind.Hall, PoolRoomKind.Lane, PoolRoomKind.Canal })
+            {
+                foreach (PoolRoom room in d.Rooms)
+                {
+                    if (room.Kind != kind || lane) continue;
+                    var cells = new List<Vector2Int>();
+                    for (int z = room.Z0; z < room.Z0 + room.Height; z++)
+                        for (int x = room.X0; x < room.X0 + room.Width; x++)
+                            if (Deep(x, z)) cells.Add(new Vector2Int(x, z));
+                    if (cells.Count < 2) continue;
+                    bool alongZ = cells[0].x == cells[cells.Count - 1].x;
+                    Vector3 along = alongZ ? Vector3.forward : Vector3.right;
+                    Vector2Int first = cells[0];
+                    Vector3 foot = CellCenter(d, first.x, first.y) - along * 1.6f;
+                    foot.y = StandHeight(d, first.x, first.y);
+                    // Da célula antes da ponta, se ela é da sala e não é funda (o raso de onde se olha a raia).
+                    int px = first.x - (alongZ ? 0 : 1), pz = first.y - (alongZ ? 1 : 0);
+                    if (OpenCell(d, px, pz) && room.Contains(px, pz) && !Deep(px, pz) && d.Depth[px, pz] != PoolDepth.Well)
+                    {
+                        foot = CellCenter(d, px, pz);
+                        foot.y = StandHeight(d, px, pz);
+                    }
+                    string label = $"raia_{kind.ToString().ToLowerInvariant()}_sala{room.Id:00}";
+                    shot(label, foot, along, 14f, false);
+                    Vector3 diver = CellCenter(d, first.x, first.y) - along * 1.4f;
+                    diver.y = MidWater(d, first.x, first.y) - Eye;
+                    shot(label + "_debaixo", diver, along, 6f, true);
+                    lane = true;
+                }
+                if (lane) break;
+            }
+            if (!lane) missing.Add("raia funda");
+
+            // Poço redondo dentro da área funda: boiando na funda ao lado, olhando o furo.
+            bool well = false;
+            for (int z = 0; z < d.Height && !well; z++)
+                for (int x = 0; x < d.Width && !well; x++)
+                {
+                    if (!LevelBuilder.IsRoundWell(d, x, z)) continue;
+                    foreach (WallSide side in sides)
+                    {
+                        if (!d.IsOpen(x, z, side) || !d.Neighbor(x, z, side, out int nx, out int nz) || !Deep(nx, nz)) continue;
+                        Vector3 dir = Dir(side);
+                        Vector3 center = CellCenter(d, x, z);
+                        Vector3 foot = center + dir * 3.6f;
+                        foot.y = StandHeight(d, nx, nz);
+                        Vector3 hole = center;
+                        hole.y = d.FloorHeight(nx, nz);
+                        shot("poco_redondo", foot, -dir, pitchTo(foot, hole), false);
+                        Vector3 diver = center + dir * 3f;
+                        diver.y = MidWater(d, nx, nz) - Eye;
+                        shot("poco_redondo_debaixo", diver, -dir, 35f, true);
+                        well = true;
+                        break;
+                    }
+                }
+            if (!well) missing.Add("poço redondo");
+        }
+
+        static bool Passable(PoolEdge edge) => edge == PoolEdge.Arch || edge == PoolEdge.WideArch || edge == PoolEdge.Doorway || edge == PoolEdge.Open;
+
+        // Uma célula da borda da sala com passagem para fora dela.
+        static bool FindDoor(LevelData d, PoolRoom room, out int x, out int z, out WallSide side)
+        {
+            WallSide[] sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
+            for (int cz = room.Z0; cz < room.Z0 + room.Height; cz++)
+                for (int cx = room.X0; cx < room.X0 + room.Width; cx++)
+                    foreach (WallSide s in sides)
+                    {
+                        if (!d.Neighbor(cx, cz, s, out int nx, out int nz) || room.Contains(nx, nz) || d.IsSolid(nx, nz)) continue;
+                        if (!Passable(d.EdgeAt(cx, cz, s))) continue;
+                        x = cx; z = cz; side = s;
+                        return true;
+                    }
+            x = z = 0;
+            side = WallSide.South;
+            return false;
+        }
+
+        static void ShootPlan(LevelBuilder builder, GameObject rig, Camera camera, RenderTexture target, Texture2D readback, string folder, List<string> names)
+        {
+            LevelData d = builder.Data;
+            var hidden = new List<Renderer>();
+            foreach (Renderer r in builder.GetComponentsInChildren<Renderer>())
+            {
+                string n = r.gameObject.name;
+                if (n == "Piscinas_Teto" || n == "Sanca" || n.StartsWith("Claraboia") || n == "Agua")
+                {
+                    if (r.enabled) hidden.Add(r);
+                    r.enabled = false;
+                }
+            }
+
+            var sunObject = new GameObject("SolDaPlanta");
+            Light sun = sunObject.AddComponent<Light>();
+            sun.type = LightType.Directional;
+            if (!sunObject.TryGetComponent(out HDAdditionalLightData hd)) hd = sunObject.AddComponent<HDAdditionalLightData>();
+            HDAdditionalLightData.InitDefaultHDAdditionalLightData(hd);
+            sun.intensity = 60f;
+            sun.shadows = LightShadows.None;
+            sunObject.transform.rotation = Quaternion.Euler(70f, 30f, 0f);
+
+            bool ortho = camera.orthographic;
+            float size = camera.orthographicSize;
+            try
+            {
+                float w = d.Width * LevelBuilder.Cell, h = d.Height * LevelBuilder.Cell;
+                camera.orthographic = true;
+                camera.orthographicSize = Mathf.Max(h * 0.5f, w * 0.5f * 720f / 1280f) * 1.04f;
+                rig.transform.SetPositionAndRotation(builder.transform.TransformPoint(new Vector3(w * 0.5f, 16f - 1.65f, h * 0.5f)), Quaternion.identity);
+                camera.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                Shoot(camera, target, readback, Path.Combine(folder, "level2_planta.png"));
+                names.Add("level2_planta.png");
+            }
+            finally
+            {
+                camera.orthographic = ortho;
+                camera.orthographicSize = size;
+                Object.DestroyImmediate(sunObject);
+                foreach (Renderer r in hidden) r.enabled = true;
+            }
+        }
+
+        static void ShootCloses(LevelBuilder builder, LevelData d, Action<string, Vector3, Vector3, float> shot, BackRooms.UI.Camcorder camcorder)
+        {
+            WallSide[] sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
+            bool arch = false, wideArch = false, porthole = false, roundWindow = false, window = false, glassBlock = false, slits = false;
+
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                {
+                    if (d.IsSolid(x, z)) continue;
+                    foreach (WallSide side in sides)
+                    {
+                        PoolEdge edge = d.EdgeAt(x, z, side);
+                        string name = null;
+                        if (edge == PoolEdge.Arch && !arch) { arch = true; name = "arco"; }
+                        else if (edge == PoolEdge.WideArch && !wideArch) { wideArch = true; name = "arco_largo"; }
+                        else if (edge == PoolEdge.Porthole && !porthole) { porthole = true; name = "vigia"; }
+                        else if (edge == PoolEdge.RoundWindow && !roundWindow) { roundWindow = true; name = "vigia_acesa"; }
+                        else if (edge == PoolEdge.Window && !window) { window = true; name = "janelao"; }
+                        else if (edge == PoolEdge.GlassBlock && !glassBlock) { glassBlock = true; name = "tijolo_de_vidro"; }
+                        else if (edge == PoolEdge.Slits && !slits) { slits = true; name = "frestas"; }
+                        if (name == null) continue;
+
+                        Vector3 dir = Dir(side);
+                        Vector3 foot = CellCenter(d, x, z) + dir * (LevelBuilder.Cell * 0.5f - 3f);
+                        foot.y = StandHeight(d, x, z);
+                        shot($"level2_close_{name}.png", foot, dir, -4f);
+                    }
+                }
+
+            // Uma escada que entra na água funda, vista de cima dela.
+            foreach (PoolStair stair in d.Stairs)
+            {
+                PoolDepth lower = d.Depth[stair.X, stair.Z];
+                if (lower != PoolDepth.Deep && lower != PoolDepth.Well) continue;
+                d.Neighbor(stair.X, stair.Z, stair.Side, out int ux, out int uz);
+                Vector3 toLower = -Dir(stair.Side);
+                Vector3 foot = CellCenter(d, ux, uz) - toLower * 0.6f;
+                foot.y = StandHeight(d, ux, uz);
+                Vector3 side = Vector3.Cross(Vector3.up, toLower) * 1.2f;
+                shot("level2_close_escada.png", foot + side, toLower - side * 0.3f, 24f);
+                break;
+            }
+
+            // O poço redondo, visto da borda (o poço com vizinhas só fundas e sem escada).
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                {
+                    if (d.IsSolid(x, z) || d.Depth[x, z] != PoolDepth.Well) continue;
+                    foreach (WallSide side in sides)
+                    {
+                        if (!d.IsOpen(x, z, side) || !d.Neighbor(x, z, side, out int nx, out int nz) || d.Depth[nx, nz] != PoolDepth.Deep) continue;
+                        Vector3 dir = Dir(side);
+                        Vector3 foot = CellCenter(d, x, z) + dir * 2.6f;
+                        foot.y = LevelData.DepthFloor(PoolDepth.Deep);
+                        shot("level2_close_poco.png", foot, -dir, 48f);
+                        goto WellDone;
+                    }
+                }
+            WellDone:
+
+            // Uma claraboia (não Full) vista de baixo, do lado oposto ao sol.
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                {
+                    PoolSky sky = d.Sky[x, z];
+                    if (d.IsSolid(x, z) || sky == PoolSky.None || sky == PoolSky.Full) continue;
+                    float heading = builder.poolSunHeading * Mathf.Deg2Rad;
+                    var toSun = -new Vector3(Mathf.Sin(heading), 0f, Mathf.Cos(heading));
+                    Vector3 foot = CellCenter(d, x, z) - toSun * 2.2f;
+                    foot.y = StandHeight(d, x, z);
+                    shot($"level2_close_claraboia_{sky.ToString().ToLowerInvariant()}.png", foot, toSun, -55f);
+                    goto SkyDone;
+                }
+            SkyDone:
+
+            // Uma faixa de teto Full, se houver.
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                {
+                    if (d.IsSolid(x, z) || d.Sky[x, z] != PoolSky.Full) continue;
+                    Vector3 foot = CellCenter(d, x, z);
+                    foot.y = StandHeight(d, x, z);
+                    shot("level2_close_teto_luminoso.png", foot + Vector3.back * 3f, Vector3.forward, -35f);
+                    goto FullDone;
+                }
+            FullDone:
+
+            // Até três manchas (decalques), de frente, a 2,4 m.
+            Transform stains = builder.transform.Find("Manchas");
+            if (stains != null)
+            {
+                int shots = 0;
+                foreach (DecalProjector decal in stains.GetComponentsInChildren<DecalProjector>())
+                {
+                    if (shots >= 3) break;
+                    Vector3 local = builder.transform.InverseTransformPoint(decal.transform.position);
+                    Vector3 into = builder.transform.InverseTransformDirection(decal.transform.forward);
+                    if (Mathf.Abs(into.y) > 0.5f) continue; // mofo no teto: fica para a foto da sala
+                    int cx = Mathf.Clamp(Mathf.FloorToInt((local.x - into.x * 0.5f) / LevelBuilder.Cell), 0, d.Width - 1);
+                    int cz = Mathf.Clamp(Mathf.FloorToInt((local.z - into.z * 0.5f) / LevelBuilder.Cell), 0, d.Height - 1);
+                    Vector3 foot = local - into * 2.4f;
+                    foot.y = StandHeight(d, cx, cz);
+                    float pitch = -Mathf.Atan2(local.y - (foot.y + Eye), 2.4f) * Mathf.Rad2Deg;
+                    string material = decal.material != null ? decal.material.name.ToLowerInvariant().Replace(' ', '_') : "mancha";
+                    shot($"level2_close_mancha_{shots}_{material}.png", foot, into, Mathf.Clamp(pitch, -60f, 60f));
+                    shots++;
+                }
+            }
+
+            // Debaixo d'água, numa área funda, olhando ao longo da sala.
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                {
+                    if (d.IsSolid(x, z) || d.Depth[x, z] != PoolDepth.Deep) continue;
+                    var water = builder.GetComponentInChildren<PoolWater>();
+                    Volume under = null;
+                    if (water != null)
+                        foreach (Volume v in water.GetComponentsInChildren<Volume>(true))
+                            if (v.gameObject.name == "DebaixoDagua") under = v;
+                    float before = under != null ? under.weight : 0f;
+                    if (under != null) under.weight = 1f;
+                    if (camcorder != null) camcorder.Draw(true, 61.4f, 61.4f, 0.95f, false, underwater: true, air: 0.6f);
+
+                    Vector3 foot = CellCenter(d, x, z);
+                    foot.y = -0.6f - Eye;
+                    PoolRoom room = d.Rooms[d.Room[x, z]];
+                    Vector3 look = new Vector3((room.X0 + room.Width * 0.5f) * LevelBuilder.Cell, 0f, (room.Z0 + room.Height * 0.5f) * LevelBuilder.Cell) - foot;
+                    shot("level2_debaixo_dagua.png", foot, look.sqrMagnitude > 1f ? look : Vector3.forward, 8f);
+
+                    if (under != null) under.weight = before;
+                    if (camcorder != null) camcorder.Draw(true, 61.4f, 61.4f, 0.95f, false);
+                    return;
+                }
+        }
+    }
+}

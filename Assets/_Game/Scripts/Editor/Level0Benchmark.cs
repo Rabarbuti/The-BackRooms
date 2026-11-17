@@ -452,14 +452,20 @@ namespace BackRooms.EditorTools
             return setups;
         }
 
-        // As Piscinas (Level 2): o que é próprio delas — a lâmina d'água, mais claraboias com
-        // alcance e força maiores que no Level 0, a luz rebatida — e as mesmas bases do Level 0.
+        // As Piscinas (Level 2): o que é próprio delas — a lâmina d'água (com refração), a
+        // cáustica, os fachos das claraboias na névoa, sombras e alcance das luzes. As luzes que
+        // contam aqui são as de CeilingLight: o sol de caixa de cada claraboia e o spot de cada
+        // janela (as lâmpadas submersas, sem sombra, ficam de fora).
         static List<Setup> PoolSetups(LevelBuilder level)
         {
+            int skies = 0;
+            foreach (Light lamp in Lamps) if (lamp.type == LightType.Box) skies++;
+            string count = $"{skies} sóis de claraboia e {Lamps.Count - skies} janelas";
+
             var setups = new List<Setup>
             {
-                new Setup { Name = "0 Primeira passada (sombras sendo calculadas)", Note = "Cada claraboia calcula a sombra ao entrar no alcance. Mede os engasgos, não entra na comparação." },
-                new Setup { Name = "1 Atual, sem lanterna", Note = "Como o Level 2 está hoje, com as sombras já prontas." },
+                new Setup { Name = "0 Primeira passada (sombras sendo calculadas)", Note = "Cada claraboia e janela calcula a sombra ao entrar no alcance. Mede os engasgos, não entra na comparação." },
+                new Setup { Name = "1 Atual, sem lanterna", Note = $"Como o Level 2 está hoje, com as sombras já prontas ({count})." },
                 new Setup { Name = "2 Atual, com lanterna", Torch = true, Note = "Base de comparação." }
             };
 
@@ -468,7 +474,7 @@ namespace BackRooms.EditorTools
             {
                 Name = "3 Sem a lamina d'agua",
                 Torch = true,
-                Note = "A lâmina transparente do mapa inteiro escondida.",
+                Note = "A lâmina transparente do mapa inteiro escondida (some também a refração).",
                 Apply = () =>
                 {
                     if (water != null) water.gameObject.SetActive(false);
@@ -476,29 +482,50 @@ namespace BackRooms.EditorTools
                 }
             });
 
+            MeshRenderer surface = water != null ? water.GetComponent<MeshRenderer>() : null;
             setups.Add(new Setup
             {
-                Name = "4 Claraboias com alcance e forca do Level 0",
+                Name = "4 Agua sem refracao",
                 Torch = true,
-                Note = "15 m e 2300 cd em vez de 18 m e 3200 cd: cada pixel recebe menos luzes.",
+                Note = "A mesma lâmina, com uma cópia do material sem refração (sem a pirâmide de cor da tela).",
                 Apply = () =>
                 {
-                    var range = new float[Lamps.Count];
-                    var intensity = new float[Lamps.Count];
-                    for (int i = 0; i < Lamps.Count; i++)
-                    {
-                        range[i] = Lamps[i].range; intensity[i] = Lamps[i].intensity;
-                        Lamps[i].range = 15f; Lamps[i].intensity = 2300f;
-                    }
-                    return () => { for (int i = 0; i < Lamps.Count; i++) { Lamps[i].range = range[i]; Lamps[i].intensity = intensity[i]; } };
+                    if (surface == null || surface.sharedMaterial == null) return null;
+                    Material original = surface.sharedMaterial;
+                    var copy = new Material(original) { name = original.name + " (sem refracao)" };
+                    copy.SetFloat("_RefractionModel", 0f);
+                    HDMaterial.ValidateMaterial(copy);
+                    surface.sharedMaterial = copy;
+                    return () => { surface.sharedMaterial = original; UnityEngine.Object.Destroy(copy); };
                 }
             });
 
             setups.Add(new Setup
             {
-                Name = "5 Claraboias sem sombra",
+                Name = "5 Sem fachos na nevoa",
                 Torch = true,
-                Note = "Mede o custo das sombras das claraboias (a luz vaza pelas paredes).",
+                Note = "Os sóis das claraboias não acendem a névoa volumétrica (poolSkyBeams desligado).",
+                Apply = () => Fade(null, false, null)
+            });
+
+            Transform caustics = level.transform.Find("Causticas");
+            setups.Add(new Setup
+            {
+                Name = "6 Sem caustica",
+                Torch = true,
+                Note = "A camada de cáustica (uma malha transparente sobre tudo o que está submerso) escondida.",
+                Apply = () =>
+                {
+                    if (caustics != null) caustics.gameObject.SetActive(false);
+                    return () => { if (caustics != null) caustics.gameObject.SetActive(true); };
+                }
+            });
+
+            setups.Add(new Setup
+            {
+                Name = "7 Claraboias e janelas sem sombra",
+                Torch = true,
+                Note = "Mede o custo das sombras (a luz vaza pelas paredes).",
                 Apply = () =>
                 {
                     var shadows = new LightShadows[Lamps.Count];
@@ -509,29 +536,22 @@ namespace BackRooms.EditorTools
 
             setups.Add(new Setup
             {
-                Name = "6 Claraboias ate 20 m (corte do HDRP)",
+                Name = "8 Luz some a 45 m, sombra a 54 m",
                 Torch = true,
-                Note = "O HDRP deixa de contar as que passam de 20 m.",
-                Apply = () => Fade(NearRadius, null, null)
-            });
-
-            setups.Add(new Setup
-            {
-                Name = "7 Metade das claraboias",
-                Torch = true,
-                Note = "Uma sim, uma não: perto do que o Level 0 tem por área.",
+                Note = "A regra do Level 0 (lightFadeDistance): hoje as Piscinas usam 90/70 m nos sóis e 80/60 m nas janelas, com a sombra sumindo antes da luz.",
                 Apply = () =>
                 {
-                    for (int i = 1; i < Lamps.Count; i += 2) Lamps[i].enabled = false;
-                    return () => { foreach (Light lamp in Lamps) lamp.enabled = true; };
+                    Action undo = Fade(45f, null, null);
+                    foreach (HDAdditionalLightData data in LampData) data.shadowFadeDistance = 54f;
+                    return undo;
                 }
             });
 
             setups.Add(new Setup
             {
-                Name = "8 So a lanterna",
+                Name = "9 So a lanterna",
                 Torch = true,
-                Note = "Nenhuma claraboia acesa.",
+                Note = "Nenhuma claraboia nem janela acesa (as lâmpadas submersas continuam).",
                 Apply = () =>
                 {
                     foreach (Light lamp in Lamps) lamp.enabled = false;

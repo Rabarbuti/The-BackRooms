@@ -84,6 +84,10 @@ namespace BackRooms.EditorTools
                     if (filter.GetComponentInParent<PitSmoke>() != null) continue;
                     // A água das Piscinas também: o jogador entra nela.
                     if (filter.GetComponent<PoolWater>() != null) continue;
+                    // Enfeites das Piscinas sem colisor, por projeto: sanca (lá no alto), cáustica
+                    // (1 cm à frente do azulejo), corrimãos, ralo do poço e discos das lâmpadas.
+                    if (filter.name == "Sanca" || filter.name == "Causticas" || filter.name == "Corrimaos" ||
+                        filter.name == "Ralo" || filter.name == "LampadasSubmersas") continue;
 
                     var go = new GameObject("Visual_" + filter.name) { layer = VisualLayer };
                     go.transform.SetPositionAndRotation(filter.transform.position, filter.transform.rotation);

@@ -10,7 +10,7 @@ namespace BackRooms.World
     /// colisores primitivos, luminárias, esconderijos, buracos, marcas nas paredes e a saída.
     /// O mapa só existe durante o Play.
     /// </summary>
-    public sealed class LevelBuilder : MonoBehaviour
+    public sealed partial class LevelBuilder : MonoBehaviour
     {
         public const float Cell = 4f;
         // Pé-direito de 4,05 m: 1,5 vez o de um escritório comum (2,7 m).
@@ -30,14 +30,6 @@ namespace BackRooms.World
         const float PitFallLine = -2.5f;
 
         const float CeilingTile = 0.6f;
-        // Nas Piscinas, paredes, pilares e colisores de piso descem até aqui (abaixo do poço).
-        public const float PoolBase = -7f;
-        // Escada das Piscinas: largura e profundidade de cada degrau.
-        const float StairWidth = 1.2f;
-        const float StairRun = 0.3f;
-        // Capa da borda: largura e altura.
-        const float CopingWidth = 0.3f;
-        const float CopingHeight = 0.06f;
         const float BaseboardHeight = 0.1f;
         const float PillarSize = 0.8f;
         const float PanelWidth = 0.6f;
@@ -101,6 +93,40 @@ namespace BackRooms.World
         public float poolTileMeters = 1.2f;
         [Tooltip("Metros que a textura de pastilha cobre.")]
         public float poolMosaicMeters = 0.7f;
+        [Tooltip("Azulejo gasto, usado longe do início (LevelGenerator.WearAt). Vazio = o azulejo comum em tudo.")]
+        public Material poolWornTileMaterial;
+        [Tooltip("Azulejo azul das faixas (PoolRoom.Accent) e do fundo dos poços. Vazio = sem faixa.")]
+        public Material poolAccentMaterial;
+        [Tooltip("Janelão de vidro fosco aceso (PoolEdge.Window). A textura cobre o janelão inteiro (UV 0 a 1).")]
+        public Material poolWindowMaterial;
+        [Tooltip("Tijolo de vidro aceso (PoolEdge.GlassBlock). A textura cobre 1,2 m (6 x 6 tijolos).")]
+        public Material poolGlassBlockMaterial;
+        [Tooltip("Disco aceso das luzes de dentro d'água (PoolLamp).")]
+        public Material poolLampMaterial;
+        [Tooltip("Cáustica: malha por cima do fundo e das paredes submersas, somada à imagem. Vazio = sem cáustica.")]
+        public Material poolCausticsMaterial;
+        [Tooltip("Metal dos corrimãos das escadas que entram na água. Vazio = sem corrimão.")]
+        public Material poolRailMaterial;
+        [Tooltip("Luz do dia de cada claraboia, em lux (luz de caixa, raios paralelos e inclinados).")]
+        public float poolSkyLux = 900f;
+        [Tooltip("Temperatura da luz do dia, em kelvin.")]
+        public float poolSkyTemperature = 5600f;
+        [Tooltip("Cookie das luzes das claraboias (cáustica). Vazio = sem cookie.")]
+        public Texture poolSkyCookie;
+        [Tooltip("As luzes das claraboias acendem a névoa volumétrica (fachos de sol visíveis). Custa tempo de quadro.")]
+        public bool poolSkyBeams = true;
+        [Tooltip("Inclinação do sol que ninguém vê, em graus a partir da vertical, e para onde ele aponta (graus em volta de Y).")]
+        public float poolSunTilt = 28f;
+        public float poolSunHeading = 35f;
+        [Tooltip("Luz de cada janelão e parede de tijolo de vidro, em candela.")]
+        public float poolWindowCandela = 900f;
+        [Tooltip("Luz de cada lâmpada de dentro d'água, em candela, e a cor dela.")]
+        public float poolLampCandela = 260f;
+        public Color poolLampColor = new Color(0.55f, 0.95f, 1f);
+        [Tooltip("Decalques de mancha, nesta ordem: 0 limo da linha d'água, 1 escorrido de calcário, 2 mofo no rejunte, 3 ferrugem. Vazio = sem manchas.")]
+        public Material[] poolStainDecals;
+        [Tooltip("Marcações pintadas, nesta ordem: 0 profundidade (2.0 M), 1 proibido mergulhar, 2 DEEP END, 3 T de fim de raia. Vazio = sem marcações.")]
+        public Material[] poolMarkDecals;
 
         [Header("Luminárias")]
         [Tooltip("Intensidade em candela.")]
@@ -240,18 +266,24 @@ namespace BackRooms.World
 
         void Build()
         {
-            Data = LevelGenerator.Generate(seed, width, height, pitsEnabled, alcovesEnabled, poolsEnabled);
-            bool pools = Data.HasPools;
+            // As Piscinas (Level 2) têm planta e construtor próprios (LevelBuilder.Pools.cs).
+            if (poolsEnabled)
+            {
+                Data = PoolGenerator.Generate(seed, width, height);
+                BuildPools();
+                return;
+            }
+
+            Data = LevelGenerator.Generate(seed, width, height, pitsEnabled, alcovesEnabled);
 
             float sizeX = Data.Width * Cell;
             float sizeZ = Data.Height * Cell;
 
-            // A textura do carpete cobre 2 m, para a repetição aparecer menos. Nas Piscinas tudo é
-            // azulejo, com a textura cobrindo um número inteiro de azulejos.
-            var floor = new MeshBuilder(pools ? poolTileMeters : 2f);
-            var ceiling = new MeshBuilder(pools ? poolTileMeters : CeilingTile);
+            // A textura do carpete cobre 2 m, para a repetição aparecer menos.
+            var floor = new MeshBuilder(2f);
+            var ceiling = new MeshBuilder(CeilingTile);
             // O papel de parede também cobre 2 m por repetição.
-            var walls = new MeshBuilder(pools ? poolTileMeters : 2f);
+            var walls = new MeshBuilder(2f);
             var baseboards = new MeshBuilder(1f);
             // Sala inicial: mesmas peças, com materiais limpos.
             var cleanFloor = new MeshBuilder(2f);
@@ -265,8 +297,7 @@ namespace BackRooms.World
             // Piso: um quad por célula, para a sala inicial poder usar outro material e os
             // buracos ficarem sem nenhum. O colisor é espesso, para ninguém atravessar, e vai
             // em trechos: um por sequência de células com piso em cada fileira.
-            if (pools) BuildPoolFloors(floor, colliders);
-            else for (int z = 0; z < Data.Height; z++)
+            for (int z = 0; z < Data.Height; z++)
             {
                 int runStart = -1;
 
@@ -311,7 +342,7 @@ namespace BackRooms.World
 
                     if (Data.DoorSouth[x, z])
                     {
-                        AddDoorway(pools ? walls : cleanWalls, baseboards, colliders, origin, Vector3.right, Vector3.forward);
+                        AddDoorway(cleanWalls, baseboards, colliders, origin, Vector3.right, Vector3.forward);
                         continue;
                     }
 
@@ -321,7 +352,7 @@ namespace BackRooms.World
                         AddAlcove(walls, baseboards, colliders, hidingSpots, origin, Vector3.right, Vector3.forward,
                                   Data.AlcoveSouth[x, z] == 1 ? -1f : 1f);
                     else
-                        AddWall(Data.RoomSouth[x, z] && !pools ? cleanWalls : walls, baseboards, colliders, origin,
+                        AddWall(Data.RoomSouth[x, z] ? cleanWalls : walls, baseboards, colliders, origin,
                                 new Vector3(wallLength, WallHeight, WallThickness));
                 }
             }
@@ -334,7 +365,7 @@ namespace BackRooms.World
 
                     if (Data.DoorWest[x, z])
                     {
-                        AddDoorway(pools ? walls : cleanWalls, baseboards, colliders, origin, Vector3.forward, Vector3.right);
+                        AddDoorway(cleanWalls, baseboards, colliders, origin, Vector3.forward, Vector3.right);
                         continue;
                     }
 
@@ -344,7 +375,7 @@ namespace BackRooms.World
                         AddAlcove(walls, baseboards, colliders, hidingSpots, origin, Vector3.forward, Vector3.right,
                                   Data.AlcoveWest[x, z] == 1 ? -1f : 1f);
                     else
-                        AddWall(Data.RoomWest[x, z] && !pools ? cleanWalls : walls, baseboards, colliders, origin,
+                        AddWall(Data.RoomWest[x, z] ? cleanWalls : walls, baseboards, colliders, origin,
                                 new Vector3(WallThickness, WallHeight, wallLength));
                 }
             }
@@ -380,159 +411,11 @@ namespace BackRooms.World
                                pitMaterial != null ? pitMaterial : baseboardMaterial, ShadowCastingMode.TwoSided);
 
             BuildLights();
-            // As marcas (sangue, palavras, setas, sujeira, grelhas) supõem piso em Y = 0; as
-            // Piscinas são limpas (e terão manchas próprias).
-            if (!pools) BuildDecorations();
+            BuildDecorations();
             BuildExit();
-            if (pools) BuildWater(sizeX, sizeZ);
 
             // Móveis do Level 1: a camada de objetos lê a mesma planta e mobília por cima.
             if (TryGetComponent(out PropLayer props)) props.Place(this);
-        }
-
-        // ---------------------------------------------------------------- Piscinas
-
-        /// <summary>
-        /// Pisos das Piscinas: um quad por célula na altura da profundidade (azulejo no seco e no
-        /// raso, pastilha no fundo e no poço), a face vertical onde a vizinha é mais baixa, a capa
-        /// na borda das áreas fundas e as escadas. Colisor de piso: uma caixa por trecho de células
-        /// da mesma altura em cada fileira, do piso até <see cref="PoolBase"/>, que já fecha a face
-        /// vertical do desnível.
-        /// </summary>
-        void BuildPoolFloors(MeshBuilder tile, GameObject colliders)
-        {
-            var bottom = new MeshBuilder(poolMosaicMeters);
-            var coping = new MeshBuilder(0.6f);
-            int w = Data.Width, h = Data.Height;
-
-            for (int z = 0; z < h; z++)
-            {
-                int runStart = 0;
-                for (int x = 0; x <= w; x++)
-                {
-                    if (x < w)
-                    {
-                        float y = Data.FloorHeight(x, z);
-                        PoolDepth depth = Data.Depth[x, z];
-                        MeshBuilder top = depth == PoolDepth.Deep || depth == PoolDepth.Well ? bottom : tile;
-                        float fx = x * Cell, fz = z * Cell;
-                        top.AddQuad(new Vector3(fx, y, fz), new Vector3(fx, y, fz + Cell),
-                                    new Vector3(fx + Cell, y, fz + Cell), new Vector3(fx + Cell, y, fz), Vector3.up);
-
-                        AddPoolEdges(tile, coping, colliders, x, z, y);
-                    }
-
-                    // Fecha o trecho quando a altura muda ou a fileira acaba.
-                    if (x == w || (x > runStart && Data.FloorHeight(x, z) != Data.FloorHeight(runStart, z)))
-                    {
-                        float y = Data.FloorHeight(runStart, z);
-                        float length = (x - runStart) * Cell;
-                        AddCollider(colliders, new Vector3(runStart * Cell + length * 0.5f, (y + PoolBase) * 0.5f, (z + 0.5f) * Cell),
-                                    new Vector3(length, y - PoolBase, Cell));
-                        runStart = x;
-                    }
-                }
-            }
-
-            foreach (PoolStair stair in Data.Stairs) AddPoolStair(tile, colliders, stair);
-
-            if (!bottom.IsEmpty)
-                CreateRenderer("FundoDasPiscinas", bottom.ToMesh("FundoDasPiscinas"),
-                               poolBottomMaterial != null ? poolBottomMaterial : floorMaterial, ShadowCastingMode.Off);
-            if (!coping.IsEmpty)
-                CreateRenderer("Bordas", coping.ToMesh("Bordas"),
-                               copingMaterial != null ? copingMaterial : floorMaterial, ShadowCastingMode.On);
-        }
-
-        // Face vertical para cada vizinha mais baixa por uma passagem aberta, e a capa da borda
-        // quando a vizinha é funda ou poço.
-        void AddPoolEdges(MeshBuilder tile, MeshBuilder coping, GameObject colliders, int x, int z, float y)
-        {
-            float fx = x * Cell, fz = z * Cell;
-
-            foreach (WallSide side in new[] { WallSide.South, WallSide.North, WallSide.West, WallSide.East })
-            {
-                if (!Data.IsOpen(x, z, side) || !Data.Neighbor(x, z, side, out int nx, out int nz)) continue;
-                float lower = Data.FloorHeight(nx, nz);
-                if (lower >= y) continue;
-
-                // Os dois cantos da divisa, na ordem que deixa a face virada para a vizinha.
-                Vector3 a, b, normal;
-                switch (side)
-                {
-                    case WallSide.South: a = new Vector3(fx, 0f, fz); b = new Vector3(fx + Cell, 0f, fz); normal = Vector3.back; break;
-                    case WallSide.North: a = new Vector3(fx, 0f, fz + Cell); b = new Vector3(fx + Cell, 0f, fz + Cell); normal = Vector3.forward; break;
-                    case WallSide.West: a = new Vector3(fx, 0f, fz); b = new Vector3(fx, 0f, fz + Cell); normal = Vector3.left; break;
-                    default: a = new Vector3(fx + Cell, 0f, fz); b = new Vector3(fx + Cell, 0f, fz + Cell); normal = Vector3.right; break;
-                }
-
-                tile.AddQuad(a + Vector3.up * lower, a + Vector3.up * y, b + Vector3.up * y, b + Vector3.up * lower, normal);
-
-                PoolDepth depth = Data.Depth[nx, nz];
-                if (depth != PoolDepth.Deep && depth != PoolDepth.Well) continue;
-
-                // Capa: tira de 30 cm em cima do piso, rente à borda. Nas bordas em Z ela para
-                // antes dos cantos onde também há capa em X, para as duas não se sobreporem.
-                bool alongX = side == WallSide.South || side == WallSide.North;
-                float start = 0f, end = Cell;
-                if (!alongX)
-                {
-                    if (HasCoping(x, z, WallSide.South)) start = CopingWidth;
-                    if (HasCoping(x, z, WallSide.North)) end = Cell - CopingWidth;
-                }
-
-                Vector3 inward = -normal;
-                Vector3 edgeMid = (a + b) * 0.5f;
-                Vector3 along = alongX ? Vector3.right : Vector3.forward;
-                Vector3 center = (alongX ? new Vector3(fx, 0f, edgeMid.z) : new Vector3(edgeMid.x, 0f, fz))
-                                 + along * ((start + end) * 0.5f) + inward * (CopingWidth * 0.5f) + Vector3.up * (y + CopingHeight * 0.5f);
-                Vector3 size = along * (end - start) + Abs(inward) * CopingWidth + Vector3.up * CopingHeight;
-                coping.AddBox(center, size, caps: true);
-                AddCollider(colliders, center, size);
-            }
-        }
-
-        bool HasCoping(int x, int z, WallSide side)
-        {
-            if (!Data.IsOpen(x, z, side) || !Data.Neighbor(x, z, side, out int nx, out int nz)) return false;
-            PoolDepth depth = Data.Depth[nx, nz];
-            return (depth == PoolDepth.Deep || depth == PoolDepth.Well) && Data.FloorHeight(nx, nz) < Data.FloorHeight(x, z);
-        }
-
-        // Escada na célula de baixo, encostada na divisa e centrada nela: degraus de 20 cm de
-        // altura e 30 cm de piso, do piso de cima até o de baixo. Um azulejo por degrau.
-        void AddPoolStair(MeshBuilder tile, GameObject colliders, PoolStair stair)
-        {
-            Data.Neighbor(stair.X, stair.Z, stair.Side, out int ux, out int uz);
-            float upper = Data.FloorHeight(ux, uz);
-            float lower = Data.FloorHeight(stair.X, stair.Z);
-
-            Vector3 cellCenter = new Vector3((stair.X + 0.5f) * Cell, 0f, (stair.Z + 0.5f) * Cell);
-            Vector3 toUpper = stair.Side == WallSide.South ? Vector3.back : stair.Side == WallSide.North ? Vector3.forward
-                            : stair.Side == WallSide.West ? Vector3.left : Vector3.right;
-            Vector3 across = Abs(Vector3.Cross(Vector3.up, toUpper));
-            Vector3 edge = cellCenter + toUpper * (Cell * 0.5f);
-
-            for (int k = 1; k < stair.Steps; k++)
-            {
-                float top = upper - k * LevelData.StepRise;
-                Vector3 center = edge - toUpper * (StairRun * (k - 0.5f)) + Vector3.up * ((top + lower) * 0.5f);
-                Vector3 size = across * StairWidth + Abs(toUpper) * StairRun + Vector3.up * (top - lower);
-                tile.AddBox(center, size, caps: true);
-                AddCollider(colliders, center, size);
-            }
-        }
-
-        // Uma lâmina d'água no mapa inteiro, em Y = 0, vista de cima e de baixo. Sem colisor: o
-        // jogador decide sozinho se anda, vadeia ou nada (PlayerController).
-        void BuildWater(float sizeX, float sizeZ)
-        {
-            var mesh = new MeshBuilder(4f);
-            mesh.AddQuad(new Vector3(0f, 0f, 0f), new Vector3(0f, 0f, sizeZ), new Vector3(sizeX, 0f, sizeZ), new Vector3(sizeX, 0f, 0f), Vector3.up);
-            mesh.AddQuad(new Vector3(0f, 0f, 0f), new Vector3(0f, 0f, sizeZ), new Vector3(sizeX, 0f, sizeZ), new Vector3(sizeX, 0f, 0f), Vector3.down);
-
-            MeshRenderer water = CreateRenderer("Agua", mesh.ToMesh("Agua"), waterMaterial, ShadowCastingMode.Off);
-            water.gameObject.AddComponent<PoolWater>();
         }
 
         // ---------------------------------------------------------------- Buracos
@@ -633,19 +516,6 @@ namespace BackRooms.World
 
         void AddWall(MeshBuilder walls, MeshBuilder baseboards, GameObject colliders, Vector3 basePosition, Vector3 size)
         {
-            if (Data != null && Data.HasPools)
-            {
-                // Nas Piscinas o piso de cada célula tem outra altura: a parede desce até o fundo
-                // de tudo e não tem rodapé (é azulejo até embaixo).
-                float top = basePosition.y + size.y;
-                basePosition.y = PoolBase;
-                size.y = top - PoolBase;
-                Vector3 deep = basePosition + Vector3.up * (size.y * 0.5f);
-                walls.AddBox(deep, size);
-                AddCollider(colliders, deep, size);
-                return;
-            }
-
             Vector3 center = basePosition + Vector3.up * (size.y * 0.5f);
             walls.AddBox(center, size);
             AddCollider(colliders, center, size);
@@ -667,16 +537,6 @@ namespace BackRooms.World
             AlcoveBox(walls, baseboards, colliders, origin, along, depth, -halfLength, -DoorHalfWidth, -half, half, 0f, WallHeight);
             AlcoveBox(walls, baseboards, colliders, origin, along, depth, DoorHalfWidth, halfLength, -half, half, 0f, WallHeight);
             AlcoveBox(walls, baseboards, colliders, origin, along, depth, -DoorHalfWidth, DoorHalfWidth, -half, half, DoorHeight, WallHeight);
-
-            if (Data != null && Data.HasPools)
-            {
-                // Nas Piscinas o vão fica acima da água: embaixo dele, parede até o fundo, com a
-                // tampa em Y = 0, onde começa a escada do lado de fora.
-                Vector3 sill = Abs(along) * (DoorHalfWidth * 2f) + Abs(depth) * WallThickness + Vector3.up * -PoolBase;
-                Vector3 sillCenter = origin + Vector3.up * (PoolBase * 0.5f);
-                walls.AddBox(sillCenter, sill, caps: true);
-                AddCollider(colliders, sillCenter, sill);
-            }
 
             // Batente: reveste o vão por dentro e sobra 7 cm em volta dele. Nenhuma face pode
             // ficar exatamente no mesmo plano de uma face da parede ou do rodapé — duas
@@ -1304,7 +1164,7 @@ namespace BackRooms.World
             return materials[Mathf.Abs(variant) % materials.Length];
         }
 
-        static void AddDecal(Transform parent, Material material, Vector3 position, Quaternion rotation, Vector3 size, float drawDistance, bool flip = false, float strength = 0f)
+        static GameObject AddDecal(Transform parent, Material material, Vector3 position, Quaternion rotation, Vector3 size, float drawDistance, bool flip = false, float strength = 0f)
         {
             var go = new GameObject("Marca");
             go.transform.SetParent(parent, false);
@@ -1326,6 +1186,7 @@ namespace BackRooms.World
                 projector.uvScale = new Vector2(-1f, 1f);
                 projector.uvBias = new Vector2(1f, 0f);
             }
+            return go;
         }
 
         // Porta escura com placa EXIT vermelha, na parede da célula mais distante do spawn.
@@ -1335,6 +1196,8 @@ namespace BackRooms.World
 
             WallFace(Data.ExitX, Data.ExitZ, Data.ExitSide, out Vector3 center, out Vector3 normal);
             center.y = Data.FloorHeight(Data.ExitX, Data.ExitZ);
+            // Nas Piscinas a parede tem 0,4 m: a face fica 10 cm mais para dentro da célula.
+            if (Data.HasPools) center += normal * ((PoolWall - WallThickness) * 0.5f);
             Quaternion facing = Quaternion.LookRotation(-normal, Vector3.up);
             root.transform.localPosition = center;
             root.transform.localRotation = facing;

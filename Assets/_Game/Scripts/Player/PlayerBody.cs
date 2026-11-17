@@ -30,14 +30,29 @@ namespace BackRooms.Player
         /// <summary>Verdadeiro se, pelo que chegou, este jogador está com um item na mão.</summary>
         public bool Holding => _holding;
 
+        /// <summary>O corpo da caneta na mão direita, com a tinta escolhida pelo jogador.</summary>
+        public Renderer PenRenderer => _penBody;
+
         Transform _rig, _pelvis, _spine, _head;
         readonly Transform[] _thigh = new Transform[2];
         readonly Transform[] _shin = new Transform[2];
         readonly Transform[] _foot = new Transform[2];
         readonly Transform[] _upperArm = new Transform[2];
         readonly Transform[] _forearm = new Transform[2];
+        readonly Transform[] _hand = new Transform[2];
+        readonly Transform[] _grip = new Transform[2];
+        readonly float[] _tuck = new float[2];
+        readonly bool[] _itemShown = new bool[2];
         GameObject _pen;
+        Renderer _penBody;
         GameObject _torch;
+
+        const float WallReach = 1.2f;
+        const float WallGap = 0.02f;
+        static readonly RaycastHit[] WallHits = new RaycastHit[16];
+        bool _hasWall;
+        Vector3 _wallPoint;
+        Vector3 _wallNormal;
 
         Vector3 _lastPosition;
         float _speed;
@@ -65,6 +80,60 @@ namespace BackRooms.Player
             _lightOn = lightOn;
         }
 
+        /// <summary>
+        /// Procura a superfície na frente do corpo, na altura dos ombros e do peito: o braço com
+        /// a caneta ou a lanterna encolhe para não atravessá-la (ver <see cref="Pose"/>). O jogador
+        /// encosta na parede com o centro a 0,33 m dela, e o braço erguido chega a uns 0,6 m.
+        /// Chamado a cada quadro pelo Update; público para a ferramenta de prévia.
+        /// </summary>
+        public void ProbeWall()
+        {
+            if (!_built) Build();
+            _hasWall = false;
+
+            Vector3 forward = transform.forward;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 1e-6f) return;
+            forward.Normalize();
+
+            Transform self = transform.root;
+            float best = float.PositiveInfinity;
+
+            for (int ray = 0; ray < 2; ray++)
+            {
+                Vector3 origin = new Vector3(transform.position.x, _upperArm[0].position.y - ray * 0.3f, transform.position.z);
+                int count = Physics.RaycastNonAlloc(origin, forward, WallHits, WallReach, ~0, QueryTriggerInteraction.Ignore);
+
+                for (int i = 0; i < count; i++)
+                {
+                    // O próprio jogador não conta (como no raio da caneta).
+                    if (WallHits[i].collider.transform.root == self || WallHits[i].distance >= best) continue;
+
+                    best = WallHits[i].distance;
+                    _wallPoint = WallHits[i].point;
+                    _wallNormal = WallHits[i].normal;
+                    _hasWall = true;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Folga, em metros, entre a superfície achada por <see cref="ProbeWall"/> e a peça dos
+        /// braços que mais avança (negativo: atravessa). Infinito sem superfície. Para a prévia.
+        /// </summary>
+        public float ArmClearance()
+        {
+            if (!_hasWall) return float.PositiveInfinity;
+            return Mathf.Min(Clearance(0), Clearance(1));
+        }
+
+        /// <summary>Tinta da caneta que este jogador tem na mão (chega pela rede, como o resto).</summary>
+        public void SetPenInk(Material ink)
+        {
+            if (!_built) Build();
+            if (_penBody != null && ink != null && _penBody.sharedMaterial != ink) _penBody.sharedMaterial = ink;
+        }
+
         void Update()
         {
             float dt = Time.deltaTime;
@@ -84,6 +153,10 @@ namespace BackRooms.Player
 
             _hold = Mathf.MoveTowards(_hold, _holding ? 1f : 0f, dt * 5f);
             _aim = Mathf.MoveTowards(_aim, _lightOn ? 1f : 0f, dt * 5f);
+
+            // O braço encolhe na hora em que a parede chega e volta a esticar devagar.
+            ProbeWall();
+            for (int i = 0; i < 2; i++) _tuck[i] = Mathf.MoveTowards(_tuck[i], 0f, dt * 2.5f);
 
             Pose(_phase, _speed, _crouch, _pitch, _hold, _aim, Time.time);
         }
@@ -143,12 +216,59 @@ namespace BackRooms.Player
                 float shoulder = lean + forward * armSwing + busy * (i == 0 ? 52f : 60f) + crouch * 18f * (1f - busy);
                 float elbow = 12f + Mathf.Max(0f, forward) * 12f + busy * (i == 0 ? 58f : 28f) + crouch * 40f * (1f - busy);
 
-                _upperArm[i].localRotation = Quaternion.Euler(-shoulder, 0f, side * (6f - busy * 10f));
-                _forearm[i].localRotation = Quaternion.Euler(-elbow, 0f, -side * busy * 8f);
+                _itemShown[i] = busy > 0.2f;
+
+                // Parede na frente: o menor encolhimento que deixa o braço, a mão e o item
+                // antes dela (busca em 8 passos; cada um só gira duas juntas).
+                float need = 0f;
+                if (_hasWall)
+                {
+                    SetArm(i, shoulder, elbow, side, busy, lean, 0f);
+                    if (Clearance(i) < WallGap)
+                    {
+                        float low = 0f, high = 1f;
+                        for (int step = 0; step < 8; step++)
+                        {
+                            float mid = (low + high) * 0.5f;
+                            SetArm(i, shoulder, elbow, side, busy, lean, mid);
+                            if (Clearance(i) < WallGap) low = mid; else high = mid;
+                        }
+                        need = high;
+                    }
+                }
+
+                _tuck[i] = Mathf.Max(_tuck[i], need);
+                SetArm(i, shoulder, elbow, side, busy, lean, _tuck[i]);
             }
 
             if (_pen != null && _pen.activeSelf != hold > 0.2f) _pen.SetActive(hold > 0.2f);
             if (_torch != null && _torch.activeSelf != aim > 0.2f) _torch.SetActive(aim > 0.2f);
+        }
+
+        // Gira as juntas de um braço. Encolhido (tuck 1), o braço desce rente ao corpo, abre um
+        // pouco para o lado e dobra o cotovelo, trazendo a mão para perto do peito.
+        void SetArm(int i, float shoulder, float elbow, float side, float busy, float lean, float tuck)
+        {
+            float s = Mathf.Lerp(shoulder, lean + 6f, tuck);
+            float e = Mathf.Lerp(elbow, 145f, tuck);
+            _upperArm[i].localRotation = Quaternion.Euler(-s, 0f, side * (6f - busy * 10f + 28f * tuck));
+            _forearm[i].localRotation = Quaternion.Euler(-e, 0f, -side * busy * 8f);
+        }
+
+        // Folga entre a superfície da frente e as peças de um braço: cotovelo, punho, luva e a
+        // ponta do item (caneta ou lanterna), cada uma com o seu raio. As peças são cápsulas e
+        // esferas entre esses pontos, então nenhuma parte delas avança mais que eles.
+        float Clearance(int i)
+        {
+            float Gap(Vector3 point, float radius) => Vector3.Dot(point - _wallPoint, _wallNormal) - radius;
+
+            float gap = Mathf.Min(Gap(_forearm[i].position, 0.075f), Gap(_hand[i].position, 0.065f));
+            gap = Mathf.Min(gap, Gap(_hand[i].TransformPoint(0f, -0.055f, 0.01f), 0.075f));
+
+            if (_itemShown[i])
+                gap = Mathf.Min(gap, i == 0 ? Gap(_grip[i].TransformPoint(0f, -0.158f, 0f), 0.01f)
+                                            : Gap(_grip[i].TransformPoint(0f, -0.184f, 0f), 0.03f));
+            return gap;
         }
 
         /// <summary>Monta as peças. Pode ser chamado mais de uma vez; só a primeira constrói.</summary>
@@ -217,6 +337,7 @@ namespace BackRooms.Player
                 _upperArm[i] = FigureKit.Joint(shoulders, "Braco_" + tag, new Vector3(side * 0.225f, -0.04f, 0f));
                 _forearm[i] = FigureKit.Limb(_upperArm[i], "Antebraco_" + tag, 0.30f, 0.073f, true, suit);
                 Transform hand = FigureKit.Limb(_forearm[i], "Mao_" + tag, 0.27f, 0.062f, true, suit);
+                _hand[i] = hand;
 
                 FigureKit.Ball(hand, "Punho_" + tag, new Vector3(0f, 0.02f, 0f), new Vector3(0.14f, 0.07f, 0.14f), rubber);
                 FigureKit.Ball(hand, "Luva_" + tag, new Vector3(0f, -0.055f, 0.01f), new Vector3(0.10f, 0.14f, 0.11f), rubber);
@@ -226,6 +347,8 @@ namespace BackRooms.Player
                     // Caneta na mão direita, só enquanto o jogador a usa.
                     Transform grip = FigureKit.Joint(hand, "Caneta", new Vector3(0f, -0.08f, 0.03f), new Vector3(-70f, 0f, 0f));
                     FigureKit.Limb(grip, "Caneta_Ponta", 0.15f, 0.008f, true, rubber);
+                    _penBody = grip.Find("Caneta_Peca").GetComponent<Renderer>();
+                    _grip[i] = grip;
                     _pen = grip.gameObject;
                     _pen.SetActive(false);
                 }
@@ -234,6 +357,7 @@ namespace BackRooms.Player
                     // Lanterna na mão esquerda, só enquanto está acesa.
                     Transform grip = FigureKit.Joint(hand, "Lanterna", new Vector3(0f, -0.07f, 0.02f), new Vector3(-80f, 0f, 0f));
                     FigureKit.Limb(grip, "Lanterna_Ponta", 0.16f, 0.024f, true, gear);
+                    _grip[i] = grip;
                     _torch = grip.gameObject;
                     _torch.SetActive(false);
                 }

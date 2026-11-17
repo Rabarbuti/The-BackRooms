@@ -1,36 +1,59 @@
 # Level 2 — As Piscinas
 
-Projeto da terceira fase. Escrito em 11/11/2026.
+Projeto da terceira fase. Escrito em 11/11/2026; espaço, luz e água refeitos em 12/11/2026, depois
+que a primeira versão de teste (o labirinto do Level 0 com azulejo e água no chão) foi rejeitada.
 
 **Já existe:** uma versão de teste jogável (`Scenes/Level2_Test.unity`, menu BackRooms > Montar
-Level 2 (teste)) com as etapas 1 a 6 da seção 8.1:
-- **Planta:** a do Level 0 em 16 x 16 células, sem buracos, nichos nem entidade, com profundidade
-  por célula (`LevelData.Depth`: seco +0,2 m, raso −0,4, fundo −1,2, poço −6, água em 0, tudo na
-  grade do azulejo de 20 cm) e escadas de 3 ou 4 degraus de 20 cm em cada desnível
-  (`LevelData.Stairs`).
-- **Regras do gerador:** saída e sala inicial secas; seco nunca encosta em fundo; poço só encosta
-  em fundo; tudo que não é poço continua alcançável a pé (`LevelGenerator.AllReachableOnFoot`).
-- **Construção:** azulejo em tudo, pastilha no fundo, capa na borda das áreas fundas, paredes até
-  7 m abaixo da água.
-- **Luz:** claraboias grandes no lugar das luminárias, uma a mais a cada três células apagadas, e
-  luz rebatida mais forte.
-- **Água** (`PoolWater`): uma lâmina transparente ondulando e, com a cabeça debaixo d'água, névoa
-  verde-água.
-- **Jogador:** anda mais devagar na água (85% na canela, 55% no peito, sem correr), nada no poço
-  (Espaço sobe, Ctrl/C mergulha), tem 20 s de fôlego submerso e, quando o fôlego acaba, se afoga e
-  volta ao início, como na queda no buraco.
-- **Filmadora:** `WATER` e a barra `AIR` com a cabeça debaixo d'água.
+Level 2 (teste)) com as etapas 1 a 7 da seção 8.1:
+- **Planta por salas** (`PoolGenerator`, C# puro, só `System.Random(seed)`): 16 x 16 células de 4 m,
+  com patamar de chegada, salões de pilares, átrio da claraboia, piscina com deque, canal, raia longa,
+  galeria, corredor de janelas, túnel em abóbada, fenda, escadaria afogada, salas de poço, cisterna
+  e sala da saída (seção 3.2), maciços fechados entre elas (15 a 30% do mapa) e ligações com laços.
+  `PoolGenerator.Validate` confere todas as regras da seção 3 e, se reprovar, sorteia de novo.
+- **Profundidade por célula** (`LevelData.Depth`: seco +0,2 m, raso −0,4, fundo −2,0, poço −6, água em
+  +0,05, `LevelData.WaterLevel`) e **escadas explícitas** com largura (`LevelData.Stairs`); desnível sem escada é borda: andando,
+  desce-se e não se sobe (`LevelData.CanStep`). A água funda (piscinas, raias, canais) não dá pé: nada-se, e
+  dela se sai por escada ou **subindo na borda nadando à tona** (seção 4.2). Tudo que não é poço continua alcançável (a pé ou nadando na funda), de
+  todo poço se sai nadando para a funda, toda região de água funda tem escada ou borda própria
+  (`PoolGenerator.EveryDeepRegionHasExit`) e o caminho do início à saída nunca exige nadar.
+- **Construção** (`LevelBuilder.Pools.cs`): paredes de 0,4 m com arcos, vãos e vigias recortados sem
+  moldura, colunas-tambor, sanca, abóbada de berço, teto claro, escadas, bordas com capa, corrimãos,
+  poço redondo e água só nas células molhadas.
+- **Luz:** nenhuma luminária. Claraboias em padrões que seguem a sala (seção 3.4), com luz de caixa inclinada (o mesmo "sol" no mapa todo, sombra
+  de uma face em cache), janelões, frestas, vigias acesas e tijolo de vidro com spot, lâmpadas dentro
+  d'água sem sombra, salas escuras de propósito e o anoitecer no lugar do apagão: a luz esquenta, cai
+  devagar até a noite e volta devagar, sem pisca (seção 7).
+- **Visual:** perfil de Volume próprio (`Settings/Level2_Volume.asset`); água `HDRP/Lit` transparente
+  com refração e cáustica animada (`PoolWater`); texturas das folhas A, B, C e D (seção 10), com
+  poucas manchas e marcações pintadas postas pela seed como decalques.
+- **Jogador:** anda mais devagar na água rasa (85% na canela; nos degraus que entram na funda, até
+  55%, sem correr); em toda água funda (piscinas, raias, canais) e no poço, onde não dá pé,
+  **nada: afunda devagar sem tecla**, sobe e fica à tona segurando Espaço e mergulha com Ctrl/C; à
+  tona, empurrando contra uma borda baixa (deque seco ou piso raso), **sobe nela**; no
+  fundo da funda (2 m) fica de pé com a cabeça debaixo d'água e pode andar por ele até uma escada;
+  tem 20 s de fôlego submerso e, quando o fôlego acaba, se afoga e volta ao início, como na queda no
+  buraco. Debaixo d'água a imagem fica ciano.
+- **Filmadora:** `WATER` e a barra `AIR` com a cabeça debaixo d'água; onde não dá pé (água funda e
+  poço), `HOLD SPACE` piscando nos primeiros segundos de cada mergulho e com o fôlego no fim; à tona
+  de frente para uma borda em que dá para subir, `W - CLIMB` no meio da tela.
 - **Caneta:** não risca debaixo d'água.
+- **Desempenho** (seed 1998, 1920 x 1080, Quadro T2000): mediana de 37 ms por quadro sem lanterna e
+  40 ms com, contra ~106 ms da primeira versão; 45 luzes com sombra de uma face em cache.
 
-**Falta:** maré, ralo, casas de máquinas e drenagem, arcos, salões de 8 m, anomalias, manchas, som
-e as texturas das folhas B, C e D (por ora a água e as claraboias são pintadas em código).
+**Falta:** a maré, o ralo e os túneis submersos, as casas de máquinas e a drenagem (o objetivo), o
+som e as anomalias; do vocabulário de formas, corredor curvo em S, escada em caracol, mezanino, teto
+inclinado, tobogã e claraboia em sala de abóbada; os modelos do Blender (escadinha de metal, grade
+de ralo, válvula). No visual, a cáustica ilumina até o fundo do poço, que devia ser escuro (seções 4.1
+e 7), e a água funda de 2 m não parece mais funda que a de 1,2 m de antes: a cor vem da pastilha do
+fundo (medida na foto sem filmadora, #1A7B60 a #266E56, já mais escura que a referência #0A9872) e a
+cáustica não diminui com a profundidade; o que dá a fundura hoje é a escada longa e o corrimão. Não foi conferida a planta entre host e cliente (dois editores) nem jogada à mão.
 
 ---
 
 ## 1. A ideia em uma frase
 
-**Um complexo sem fim de salas de azulejo branco, cheias de água morna até a canela, ao peito ou
-sem fundo, iluminado por um sol que não se vê.** Calmo, bonito e limpo demais. Não há monstro
+**Um complexo sem fim de salas de azulejo branco, cheias de água morna até a canela, funda de
+nadar ou sem fundo, iluminado por um sol que não se vê.** Calmo, bonito e limpo demais. Não há monstro
 caçando ninguém: o perigo é a própria água, que sobe e desce sozinha, e o que mora no fundo dos
 poços escuros.
 
@@ -98,61 +121,176 @@ os corredores apertados alternando com salões enormes e um capítulo que inclin
 Fontes: [GameSpew](https://www.gamespew.com/2024/04/pools-review-a-liminal-hidden-gem/),
 [Finger Guns](https://fingerguns.net/games/2024/05/21/pools-review-pc-the-backroom-buoys/).
 
-### 2.4 O que tiramos de cada um
+### 2.4 A pesquisa de imagens de 12/11/2026
+
+A primeira versão de teste saiu como "o Level 0 com azulejo": o labirinto de corredores de 4 m, teto
+escuro, painéis de luz no forro e água verde-acinzentada opaca. Antes de refazer, três agentes olharam
+cerca de 130 imagens (as *Dream Pools* originais em jaredpike.art, as wikis, as capturas do POOLS, do
+*Escape the Backrooms*, do *Dreamcore* e do *Anemoiapolis*) e mediram formas e cores. O que mudou o
+projeto:
+
+- **O erro não era o teto baixo.** O salão típico tem 3,0 a 3,5 m de pé-direito e é LARGO (altura para
+  largura de 1:4 a 1:8). O erro era o teto **escuro**, a **grade uniforme de corredores** e a **falta
+  de salões**. Poucos espaços chegam a 8–12 m, e por isso viram marco.
+- **Não existe luminária aparente** em nenhuma das 27 imagens canônicas: a luz só entra por aberturas
+  (claraboia, janelão de vidro fosco, fresta, vigia) e pela água.
+- **Formas que se repetem:** coluna-tambor redonda e lisa (Ø 1,2 a 2,2 m, sem base nem capitel), arco
+  pleno recortado na parede sem moldura, vigia redonda, encontro de parede com teto arredondado,
+  parede grossa com vãos sem porta em série, túnel em abóbada, fenda alta e estreita com luz no topo,
+  escada reta que continua para dentro d'água com corrimão de inox, piscina afundada num deque seco e
+  poço redondo escuro.
+- **A água entra de três jeitos:** piso todo alagado e raso com a parede entrando direto nela (60% das
+  imagens), piscina afundada em deque (30%) e poço escuro (10%).
+- **Não aparece:** porta com folha, rodapé, moldura, sujeira, mobília, sinalização, cano, rampa.
+  Tobogã só existe em material de jogo e de fã.
+- **Cor (medida na tela):** azulejo ao sol `#F5F3DA`, meia-sombra esverdeada `#A8BE9B`, água rasa
+  `#60C0A4`, turquesa viva `#18BEA4`, funda `#0A9872`, janela estourada `#FEFDF5`, boca de túnel
+  `#0E110A`. A cor da água vem do piso branco visto através dela, não de uma película colorida. O medo
+  vem de poucos buracos escuros num quadro claro, não de escurecer a sala.
+- **Estrutura de fase (jogos):** aglomerados de salas-assinatura ligados com laços; corredor apertado
+  antes de salão; um "sol" só no mapa inteiro para orientar; nenhum trecho obrigatório nadando. O
+  gerador de Roblox que fazia árvore de salas pequenas sem laço foi achado chato.
+
+Fontes principais: [Dream Pools — Jared Pike](https://www.jaredpike.art/projects/dream-pools/),
+[designboom](https://www.designboom.com/art/diving-3d-artist-jared-pike-imaginary-liminal-interiors-pool-dreamscapes-02-18-2024/),
+[Level 37 — Backrooms Wiki](http://backrooms-wiki.wikidot.com/level-37),
+[POOLS na Steam](https://store.steampowered.com/app/2663530/POOLS/),
+[Level 37 — Escape the Backrooms](https://escapethebackrooms.fandom.com/wiki/Level_37),
+[UploadVR — POOLS](https://www.uploadvr.com/pools-vr-review/).
+
+### 2.5 O que tiramos de cada um
 
 - **Da wiki:** pilares demais, escadas que somem na água, cantos escuros, som abafado, área funda
   perigosa, saída pelo fundo.
-- **Do Pike:** sol quente por claraboias e janelas embaçadas, arcos e salões, beleza calma.
-- **Do POOLS:** água que desacelera, eco por sala, alternância corredor apertado / salão.
+- **Do Pike:** o vocabulário de formas e a luz — sol entrando por aberturas que não se veem, teto
+  claro, água turquesa transparente, poucos buracos pretos.
+- **Do POOLS:** água que desacelera, eco por sala, corredor apertado antes de salão, e a variante
+  escura (água negra espelhada) para a sala do poço e para o anoitecer.
 - **Nosso:** a maré sincronizada, o ralo, a filmadora sofrendo debaixo d'água e o objetivo de
   esvaziar a piscina.
+
+**Não copiamos nenhuma imagem** — usamos o vocabulário e montamos as nossas salas pela seed.
 
 ---
 
 ## 3. O espaço
 
-- **Grade de 4 m, como o Level 0**, mas com **altura de piso por célula** e um **nível de água por
-  região**. 16 x 16 células (64 x 64 m): menor que o Level 0, porque andar na água é lento.
-- **Pé-direito 4 m nos corredores e 8 m nos salões** (blocos de 2 x 2 ou 3 x 3 células sem paredes
-  internas, cheios de pilares).
-- **Tudo é azulejo branco de 20 x 20 cm** com rejunte cinza-claro: piso, parede e teto. 4 m são
-  exatamente 20 azulejos, então o rejunte fecha nas quinas das células. Fundo das piscinas em
-  **pastilha** pequena azul-clara; bordas com **capa arredondada** de pedra clara.
-- **Passagens em arco** em vez de vão reto. Pilares redondos ou quadrados de azulejo, muitos.
-- **Sala inicial = patamar seco** no alto de uma escada larga, limpa, com uma claraboia acesa.
-  Quem sai do patamar já desce para a água.
-- **Desgaste pela distância** (`LevelGenerator.WearAt`, como no Level 0): perto do início, branco
-  impecável; longe, rejunte amarelado, calcário, limo na linha d'água, azulejo faltando.
+**A planta é um conjunto de salas, não o labirinto do Level 0.** O `PoolGenerator` espalha salas
+retangulares na grade de 4 m (16 x 16 células, 64 x 64 m), deixa **maciços** fechados entre elas (15 a
+30% do mapa, o que dá contorno irregular) e liga tudo com laços. Dentro de uma sala não há parede:
+há colunas, desníveis e água.
+
+- **Tudo é azulejo branco pequeno** (uns 13 cm, como nas referências, que medem 11 a 17), piso,
+  parede e teto. O teto é claro. Fundo das áreas fundas em pastilha verde-água pálida. Alturas e
+  degraus andam de 20 em 20 cm.
+- **Pé-direito de 3,6 m na maioria das salas** e de 4,8 m nos salões maiores, no patamar e na piscina;
+  8 e 12 m só nos marcos (de três a quatro por mapa, em pelo menos três quadrantes). Túnel em abóbada
+  com arranque a 2,4 m. O teto é sempre um destes: 3,6, 4,8, 8 ou 12 m.
+- **Paredes de 0,4 m**, com a espessura aparecendo em todo vão. Passagens recortadas sem moldura:
+  arco pleno (vão de 2,4 m), arco abatido largo (3,4 m) e vão reto sem porta (1,4 x 2,4 m). Entre duas
+  salas há sempre parede; dentro de uma sala, nenhuma. Salões que se encostam ligam-se por pelo menos
+  dois vãos. Vigia redonda (Ø 2 m) deixa ver a sala ao lado sem deixar passar.
+- **Colunas-tambor** redondas e lisas nos vértices da grade (raio de 0,6 a 0,9 m), esbeltas (0,45 m)
+  ou pilares quadrados em galeria, raia e cisterna. Nunca fecham passagem: ficam a pelo menos
+  (raio + 0,6 m) das linhas de centro das células.
+- **Sanca:** o encontro de toda parede com o teto plano é um quarto de círculo de 0,4 m.
+- **Nenhuma luminária.** A luz vem de claraboias (quadrada, redonda, rasgo ou o teto inteiro da
+  célula), de janelões, frestas e vigias de vidro fosco aceso, de paredes de tijolo de vidro e de
+  lâmpadas dentro d'água. **O sol é um só:** a luz do dia viaja para +X e +Z no mapa inteiro, então as
+  janelas ficam sempre nas paredes sul e oeste e toda mancha de sol cai para o mesmo lado. Serve de
+  bússola.
+- **Claraboias seguem a estrutura da sala** (seção 3.4), nunca furos soltos no teto.
+- **Sala inicial = patamar de chegada:** seco, com escada de borda a borda descendo para a água.
 
 ### 3.1 Profundidades
 
-Cada célula tem um piso numa de quatro alturas em relação à superfície da água da região:
+Cada célula tem um piso numa de quatro alturas, na grade de 20 cm do azulejo. A água fica 5 cm acima
+do zero dessa grade (`LevelData.WaterLevel` = +0,05 m; tudo que depende dela lê `PoolWater.SurfaceY`):
+assim o primeiro degrau de toda escada que desce do seco (a 0) fica logo abaixo da lâmina, como numa
+piscina de verdade. Com a água em 0, o piso desse degrau e a lâmina ficavam no mesmo plano e a textura
+piscava.
 
-| Profundidade | Água | Andar | Barulho de passo | Outros |
-|---|---|---|---|---|
-| **Seco** | — | normal | baixo | patamares, bordas, escadas |
-| **Rasa** (canela, 0,3 m) | sim | 85% | alto (espirra) | a maior parte do mapa |
-| **Funda** (peito, 1,2 m) | sim | 55%, não corre | médio (empurra água) | lanterna e caneta ainda funcionam |
-| **Poço** (sem fundo visível, 6 m) | sim | **nada** (40%), cai devagar | baixo | fôlego (seção 4.2), escuro, o ralo |
-
-Escadas ligam alturas vizinhas. **Escada para dentro do poço** existe (wiki), sempre com um
-corrimão de metal para achar a saída no escuro.
-
-### 3.2 Zonas
-
-Sorteadas por bloco de células, como os temas do Level 1:
-
-| Zona | Peso | O que tem | Para que serve |
+| Profundidade | Piso | Andar | Outros |
 |---|---|---|---|
-| Corredor de azulejo | 4 | Corredor de 1 célula, água rasa, arcos repetidos até o ponto de fuga | Perspectiva infinita; barulho de passo |
-| Salão de pilares | 3 | Bloco de 3 x 3, pé-direito 8 m, pilares a cada 2 m, água funda | Perde-se a direção; a luz vem de um lado só |
-| Piscina | 2 | Raias pintadas no fundo, borda com capa, escadinha de metal, plaquinhas de profundidade | O lugar "normal" — e por isso estranho |
-| Escadaria | 2 | Escada larga descendo para dentro d'água até sumir | Liga alturas; leva aos poços |
-| Poço | 1 | Célula sem fundo visível, escura, ralo no fundo | Perigo e atalho (túnel submerso) |
-| Tobogã | 0,5 | Tobogã de azulejo saindo da parede e caindo na água | Atalho de mão única |
-| Claraboia | 1 | Sala com claraboia redonda ou janela embaçada estourando de luz | Marco de orientação |
-| Bloco de vidro | 0,7 | Parede de tijolo de vidro com luz verde-água atrás | Marco; não dá para ver através |
-| Casa de máquinas | — | Sempre 2 a 3 no mapa (seção 6): bombas, canos, válvula grande | Objetivo |
+| **Seco** | +0,2 m | normal | patamares, deques, ilhas |
+| **Rasa** (canela) | −0,4 m | 85% | a maior parte da área molhada |
+| **Funda** (2,05 m de água) | −2,0 m | **nada**, como no poço; no fundo, de pé com a cabeça debaixo d'água | raias, piscinas, canais; sai-se por escada ou subindo na borda à tona |
+| **Poço** | −6 m | **nada**; sem tecla afunda devagar (0,5 m/s), segurando Espaço fica à tona | fôlego (seção 4.2), escuro, o ralo |
+
+Até 15/11/2026 a funda tinha piso a −1,2 m (água no peito, andava-se a 55%) e só o poço era de nadar.
+Jogando, "o jogador passa por piscinas fundas, ele deveria estar constantemente nadando": a funda
+desceu para −2,0 m (dez azulejos), onde a água cobre o jogador (1,8 m) e a mesma regra de nado do poço
+vale sozinha (mais de 1,3 m de água acima dos pés). As escadas que entram nela ficaram mais longas:
+do raso, 8 degraus (2,4 m); do seco, 11 (3,3 m).
+
+**Escada ou borda.** Numa divisa aberta entre duas alturas, ou há escada (degraus de 20 x 30 cm, da
+largura do vão, e aí se anda nos dois sentidos) ou é uma **borda**: andando, desce-se (cai-se na
+água) e não se sobe; **nadando à tona, sobe-se** (seção 4.2), como em toda piscina de verdade. Quem
+anda no raso (sem pular) não sobe no seco pela borda: o desnível continua obstáculo. Quando o lado de cima é seco, a borda tem **capa**: uma faixa de pedra de 30 cm rente ao
+piso, com a aresta arredondada sempre do lado da água e a textura correndo ao longo da borda (UV por
+trecho, `LevelBuilder.AddCoping`); a escada interrompe a capa só na largura dela. Nos cantos as faixas
+se encontram em meia-esquadria: na ponta do seco (capa em dois lados da célula) e no canto da
+piscina (a água faz a ponta e o seco a contorna, com a peça de canto na célula da diagonal). Borda
+entre dois pisos molhados (raso e fundo) não tem capa: fica debaixo d'água. A piscina afundada tem
+borda em volta e escada só em um ou dois lugares, como uma piscina de verdade. Regra do gerador, no espírito de "buraco nunca isola": **toda célula com piso que
+não é poço continua alcançável** (mesma altura ou escada; entre fundas, nadando), então **de toda
+área funda se sai por uma escada** que sobe para o raso ou o seco (a pé, nos dois sentidos), e **de
+todo poço se sai nadando** para uma célula funda vizinha e dela para a escada ou a borda. Quem boia (pés a
+−1,35 m) pega o degrau de −1,2 m com o pé e sobe; quem afundou anda pelo fundo até a escada e sobe
+os degraus andando. E, de forma explícita, **toda região de água funda e poço** (células fundas e de
+poço ligadas por divisa que se passa) **tem, nela mesma, uma escada que sobe ou uma borda** para o
+seco ou o raso (`PoolGenerator.EveryDeepRegionHasExit`, no `Validate`). Até 16/11/2026 a borda não se
+subia nem nadando, e numa piscina de 9 a 16 células com uma escada só, a até 7 células de distância, o
+jogador que caía longe dela achava que tinha ficado preso. A escada própria do poço (descendo até 1,6 m abaixo da água) deixou de caber: a
+funda em volta já é mais funda que o pé dela. E **o caminho do início à saída nunca exige nadar**
+(`PoolGenerator.FootPath`, só seco e raso): a água funda é atalho ou desvio.
+
+O **poço redondo** é um furo de 3,2 m de diâmetro no fundo de uma área funda, com uma grade de ralo
+no fundo; o ralo (seção 5) mora ali. Só fica redondo o poço sem escada cujas vizinhas abertas são
+todas fundas; os outros ocupam a célula inteira.
+
+### 3.2 Salas
+
+Sorteadas pela seed, giradas e espelhadas; nenhum tipo aparece mais de duas vezes, fora túnel, fenda
+e galeria (fenda, na prática, uma por mapa). O tipo (`PoolRoomKind`) só informa: o construtor lê as
+células, não o tipo. Os tamanhos maiores só entram em mapas de 20 ou 22 células de lado. Átrio,
+escadaria e sala de poço de canto caem para 4,8 m quando o mapa já tem salas altas demais.
+
+| Sala (`PoolRoomKind`) | Células | Teto | Água | Para que serve |
+|---|---|---|---|---|
+| Patamar de chegada (`Start`) | 3 x 3 | 4,8 | duas fileiras secas, uma rasa, escada de borda a borda em cada célula dela | início e respiro; claraboia redonda no meio |
+| Salão de pilares (`Hall`) | 4 x 4 a 6 x 6 | 3,6 ou 4,8 | raso; às vezes uma raia funda cortando | o espaço dominante; perde-se a direção |
+| Átrio da claraboia (`Atrium`) | 3 x 3 | 12 | anel raso, ilha seca no meio, 2 a 4 escadas | marco e ponto de encontro |
+| Piscina com deque (`Basin`) | 5 x 5 ou 5 x 6 | 4,8 | deque seco, fundo dentro, 1 ou 2 escadas do mesmo lado; às vezes um poço | o lugar "normal", e por isso estranho |
+| Canal (`Canal`) | 3 x 4–6 | 3,6 ou 4,8 | passeio seco (ou raso), fundo no meio | gargalo; o meio é de nadar e, na maré alta, o passeio raso também |
+| Raia longa (`Lane`) | 3 x 8–10 | 3,6 ou 4,8 | raso, fundo, raso, claraboia contínua, colunas em fila | o eixo de vista de 30 a 40 m |
+| Galeria (`Gallery`) | 2 x 4–6 | 3,6 | raso ou seco, pilares quadrados na linha do meio | corredor largo de arcos |
+| Corredor de janelas (`WindowGallery`) | 1–2 x 4–8 | 3,6 | raso | frestas ou vigias acesas em série na parede de fora |
+| Túnel em abóbada (`Tunnel`) | 1 x 2–4 | abóbada | raso ou seco | compressão antes de um salão; escuro por dentro |
+| Fenda (`Slot`) | 1 x 3–5 | 8 ou 12 | raso ou seco | corredor estreito e altíssimo, rasgo de luz no topo |
+| Escadaria afogada (`Terrace`) | 2–4 x 3–4 | 8 ou 12 | seco, raso, fundo, às vezes poço | risco; os degraus somem na água |
+| Sala do grande poço (`WellRoom`) | 5 x 5 (6 x 6) | 12 | anel raso, anel fundo, poço no centro (1 ou 4 células) | o maior marco, longe do início; escura em metade das vezes |
+| Sala de poço de canto (`WellRoom`) | 3 x 3 | 8 ou 4,8 | fileira rasa, duas fundas, um poço | beco de risco; escura em metade das vezes |
+| Cisterna (`Cistern`) | 4 x 4 | 3,6 | funda com cantos rasos, pilares em todo vértice | sempre escura; a variante "água negra" |
+| Sala da saída (`Exit`) | 2 x 2 ou 2 x 3 | 3,6 | seca | a porta, numa parede contra maciço; provisória até existir a drenagem (seção 6) |
+
+Composição: patamar perto de um canto; grande poço e saída do lado oposto (a pelo menos 45% da
+diagonal do mapa); depois os salões; depois o resto; galerias até sobrar o vazio desejado. Salas
+ocupam pelo menos 55% das células, salões e salas de 3 ou mais células de largura pelo menos 60% do
+piso, salas estreitas no máximo 40% das salas e corredores de uma célula de largura no máximo 15%
+das células. Depois da árvore mínima de ligações entram mais 30% de ligações para formar laços;
+túnel e fenda ligam exatamente duas salas e nunca dois seguidos; beco só na saída, nas salas de poço
+e na cisterna. De 70 a 85% das divisas na borda das salas são parede cega. Orçamentos: 30 a 70
+células com claraboia (até 48 luzes de claraboia, seção 3.4), 3 a 8 células de poço, até 24 lâmpadas e
+até 48 janelas. O caminho do início à saída passa só por
+seco e raso (até 15/11/2026, quando a funda ainda dava pé, bastavam 60% de seco e raso e no máximo três
+células fundas seguidas). Exigir isso custa pouco: em 500 seeds de 16 x 16, sem a regra 96,8% já a
+cumpriam; com ela, 3,7 tentativas em média (3,4 antes da funda de nado), nenhuma na reserva. No salão
+com a raia funda de parede a parede, as duas escadas (uma para cada lado) ficam em células vizinhas:
+opostas na mesma célula, as de 8 degraus não cabem.
+
+Ainda sem lugar na grade (ficam para depois): corredor curvo em S, escada em caracol, mezanino, teto
+inclinado, sala octogonal, tobogã e as casas de máquinas do objetivo.
 
 ### 3.3 Anomalias (raras)
 
@@ -161,26 +299,100 @@ Sorteadas por bloco de células, como os temas do Level 1:
 - Plaquinhas de profundidade erradas: "-2 M", "∞", "1.2 M" num lugar seco.
 - Uma raia pintada no fundo que continua pelas paredes e pelo teto.
 
+### 3.4 Claraboias
+
+Jogando a primeira versão, o teto "tinha buracos aleatórios, que não seguem um padrão": as claraboias
+eram sorteadas célula a célula dentro de cada sala. Agora seguem a estrutura da sala, como num projeto
+de arquiteto (`PoolGenerator.ArrangeSkies`):
+
+- **Um formato por sala:** todas quadradas, todas redondas, rasgos todos no mesmo sentido ou um teto de
+  vidro (`Full`). Nunca misturado.
+- **Simétricas** em relação aos dois eixos do retângulo da sala (ou a um deles, quando a sala pede:
+  o óculo sobre o poço de canto, a faixa sobre uma raia fora do meio do salão).
+- **Em ritmo regular:** toda célula, uma sim uma não ou a cada 3, em fileira ou em grade, fechando
+  simétrico nas duas pontas; nada de claraboia solta fora do ritmo.
+- **No centro dos vãos:** as colunas ficam nos vértices da grade, então o vão entre colunas é a célula
+  e a claraboia fica no meio dela.
+- **Borda livre:** a fileira encostada na parede fica sem claraboia quando a sala tem 4 ou mais
+  células naquele sentido (a sanca e a parede leem melhor), salvo no anel de borda.
+
+A seed escolhe **qual padrão**, entre os que cabem na sala, nunca posições soltas:
+
+| Sala | Padrões |
+|---|---|
+| Patamar | uma no meio, redonda ou quadrada |
+| Átrio | óculo redondo no meio, sobre a ilha |
+| Saída | as do meio (o par em 2 x 3, as quatro em 2 x 2): quadradas, redondas ou teto de vidro |
+| Salão de pilares | todas as baias do miolo (e grades de passo maior); xadrez (só com o miolo ímpar nos dois sentidos); fileiras alternadas; só a nave central (fileira do meio, ou faixa de vidro); só o anel de borda (toda baia ou uma sim uma não); com raia funda cortando, rasgos em ritmo ou faixa de vidro exatamente sobre ela |
+| Piscina com deque | sobre a água: teto de vidro sobre a água inteira (ou só a faixa do meio), faixa de vidro atravessada no meio, ou grade de quadradas ou redondas (todas, xadrez, passos maiores, até uma no meio) |
+| Raia longa | faixa de vidro contínua sobre a raia funda, de ponta a ponta dela, ou rasgos em ritmo |
+| Canal | faixa de vidro ou fileira de rasgos em ritmo, no meio, sobre o canal |
+| Galeria | rasgos em par, um de cada lado da fila de pilares, no comprimento ou atravessados, em ritmo |
+| Corredor de janelas | fileira de rasgos em ritmo, ou nenhuma (a luz é das janelas) |
+| Escadaria afogada | faixa de vidro de parede a parede sobre o meio da escada, ou fileira de quadradas ou redondas ali |
+| Grande poço | escura, ou óculo sobre o poço (com o poço de 4 células: quatro óculos ou teto de vidro sobre ele) |
+| Poço de canto | escura, ou óculo sobre o poço |
+| Fenda | o rasgo em todas as células |
+| Cisterna, túnel | nenhuma |
+
+Cada sala tem **famílias** de padrões (a mesma ideia, do mais cheio ao mais ralo). O orçamento do mapa
+(30 a 70 células com claraboia e até 48 luzes de claraboia) se acerta andando **dentro da família**
+("todas as baias" vira "uma sim uma não"); só quando nenhuma sala pode mais, uma troca de família
+para o padrão mais próximo e, por último, uma sala que não é marco fica sem claraboia. Nunca se tira
+claraboia avulsa. O teto de vidro conta uma luz por faixa no sentido mais comprido dele (a faixa de uma
+raia inteira é uma luz só, corra ela em X ou em Z). `Validate` confere um formato por sala, a simetria e
+o ritmo (grade inteira, xadrez ou anel de colunas e fileiras igualmente espaçadas).
+
+As claraboias usam um `System.Random` só delas (da seed). O sorteio antigo continua sendo tirado do
+principal, sem uso, então salas, água, escadas, colunas e lâmpadas de cada seed ficaram as mesmas.
+
 ---
 
 ## 4. A água
 
 ### 4.1 Como se vê
 
-- **Primeira tentativa: o sistema de água do HDRP** (Water Surface do tipo *Pool*), que já faz
-  ondulação, reflexo, cáustica no fundo e visão subaquática. Precisa ser ligado no asset do HDRP e
-  medido: são muitas superfícies e 165 luzes com sombra.
-- **Reserva, se pesar demais:** um plano transparente por região com mapa de normais de ondulação
-  rolando e um decalque de **cáustica** animado projetado no fundo (texturas nas folhas da seção 10).
-- A água é azul-esverdeada e clara no raso; no poço o fundo some num azul-escuro quase preto.
-- Uma **ondulação constante** sem causa (wiki), mais forte perto dos ralos.
+- **Água própria, não o Water System do HDRP** (decisão 3, seção 9): uma lâmina `HDRP/Lit`
+  transparente com refração, só sobre as células molhadas. A cor vem do fundo visto através dela (o
+  alfa é baixo), não de uma película colorida.
+- **Duas ondulações** rolando para lados diferentes (mapa de normais de 1,25 m e detalhe de 0,5 m) e
+  uma malha de **cáustica** aditiva sobre pisos e paredes submersos, com duas redes de linhas;
+  animadas pelo `PoolWater`.
+- A água é azul-esverdeada e clara no raso; no poço o fundo deve sumir num azul-escuro quase preto
+  (hoje a cáustica ainda o clareia; seção 7).
+- Uma **ondulação constante** sem causa (wiki); mais forte perto dos ralos ainda falta.
 
 ### 4.2 Como se joga
 
-- **Lentidão e barulho** pela profundidade (seção 3.1).
-- **Fôlego:** com a cabeça debaixo d'água o jogador tem 20 s. O painel da filmadora mostra
-  `AIR` e uma barra; nos últimos 5 s a imagem escurece. Acabou o fôlego = **afogado**, a mesma
-  regra da queda no buraco e da captura: NO SIGNAL e volta ao patamar inicial. Não há morte.
+- **Lentidão e barulho** pela profundidade (seção 3.1). Nada quem tem mais de 1,3 m de água acima dos
+  pés (`swimDepth`): em toda a área funda (2,05 m) e no poço. No raso e nos degraus que entram na
+  funda anda-se mais devagar quanto mais funda a água.
+- **Nado** (na água funda e no poço): a água não segura ninguém. Sem tecla, o jogador **afunda
+  devagar** (`sinkSpeed`, 0,5 m/s) até o fundo; **segurando Espaço** sobe (`swimVerticalSpeed`, 1,6 m/s)
+  e fica à tona com os pés 1,4 m abaixo da superfície (`floatDepth`) e os olhos 25 cm acima dela;
+  Ctrl/C mergulha a 1,6 m/s. A velocidade vertical muda aos poucos (`swimAcceleration`, 3 m/s²; uma
+  queda rápida a água freia três vezes mais forte). WASD nada na horizontal a 45% da caminhada. No
+  fundo da área funda o jogador fica de pé com a cabeça debaixo d'água e anda (devagar, perdendo
+  fôlego) até uma escada. **Sai-se da água funda por escada ou pela borda:** à tona, o degrau de −1,2 m
+  fica 15 cm acima dos pés e a escada pega o pé de quem boia; do fundo, sobe-se os degraus andando.
+- **Subir na borda nadando** (`PlayerController.TryStartClimb`): à tona (cabeça fora d'água, pés a
+  menos de 25 cm de onde boia, sem Ctrl/C), empurrando com o direcional contra uma borda (ou só com
+  Espaço, encostado nela e de frente) cujo topo fica entre o alcance do degrau e 45 cm acima da água
+  (`climbMaxAboveSurface`; o deque seco, +0,2, e o piso raso, −0,4, servem; parede não), o jogador
+  sai da água rente à face e avança até ficar de pé no piso de cima em ~0,55 s (`climbSeconds`), pelo
+  `CharacterController` (se algo barrar a subida, desiste e volta a nadar). Antes confere com a
+  cápsula do jogador que há lugar no topo, acima de onde está e no meio do caminho, e que não há
+  parede logo acima da borda; os raios descartam o próprio jogador. Do fundo não vale (primeiro sobe
+  à tona); andando (fora d'água ou no raso) borda continua sem se subir. A face é procurada até 30 cm
+  além do corpo (`climbReach`); de frente para uma assim, o painel mostra `W - CLIMB`. Do poço
+  sai-se nadando para a funda vizinha e dela pela escada ou pela borda. Quem está se afogando só
+  afunda. Nada disso vai pela rede: o movimento é do dono (a subida é um movimento contínuo, que o
+  `NetworkTransform` interpola) e os outros veem o corpo subir e descer pela posição.
+- **Fôlego:** com a cabeça debaixo d'água o jogador tem 20 s; fora d'água volta inteiro em 3 s
+  (`airRefillSeconds`). O painel da filmadora mostra `AIR` e uma barra (vermelha piscando no último
+  quarto) e, onde não dá pé, `HOLD SPACE` piscando abaixo dela nos primeiros 4 s de cada mergulho e
+  de novo com o fôlego abaixo de 35%. Acabou o fôlego = **afogado**, a mesma regra da queda no buraco
+  e da captura: NO SIGNAL e volta ao patamar inicial. Não há morte.
 - **Filmadora molhada:** debaixo d'água a fita sofre — chuvisco forte, cor lavada, som abafado
   e o aviso `WATER`. Ao sair, a imagem demora uns segundos para limpar.
 - **A caneta não risca debaixo d'água.** Risca azulejo seco e molhado acima da linha d'água.
@@ -191,8 +403,9 @@ O nível da água de cada região **sobe e desce sozinho**, junto em todas as m�
 `GameSession.SessionSeconds` (a mesma regra do apagão). Ciclo de 90 s: 60 s parada, 15 s subindo
 até +0,9 m, 15 s descendo.
 
-- Na maré alta, o raso vira fundo e o fundo vira poço: corredores que eram passagem viram nado, e
-  quem estava num patamar baixo fica ilhado.
+- Na maré alta, o raso vira água de nadar (1,35 m acima dos pés) e a funda passa de 2,9 m: corredores rasos que eram passagem viram nado, e
+  quem estava num patamar baixo fica ilhado. O seco (+0,2 m) também fica com 0,75 m de água: se ele
+  continua sendo refúgio é a decisão 5 da seção 9.
 - **Aviso:** 10 s antes, os ralos borbulham e a água começa a puxar levemente para eles; o som
   da sala muda (um "glub" grave e longe).
 - Substitui o **apagão** do Level 0 como o evento global da fase. O apagão continua existindo,
@@ -206,7 +419,7 @@ Não há monstro andando atrás de ninguém — a wiki e o POOLS acertaram nisso
 fase das outras duas. Há **o ralo**: os poços têm, no fundo, uma grade grande e escura. Ninguém
 sabe o que tem atrás dela.
 
-- **Ouve espirro:** passos na água rasa e quem corre na funda fazem barulho (a mesma conta de
+- **Ouve espirro:** passos na água rasa e quem nada na funda fazem barulho (a mesma conta de
   ruído do `EntityBrain`). Barulho perto de um poço "acorda" o ralo daquele poço.
 - **Acordado, ele puxa:** por 8 s a água do poço e das células vizinhas gira e arrasta para a
   grade, mais forte quanto mais perto. Quem está nadando no poço é puxado para baixo; quem está na
@@ -232,58 +445,116 @@ Drenado, o nível da água de todo o mapa desce 2 m em 30 s: os poços viram bur
 escadas, as escadas que sumiam na água aparecem inteiras, e no fundo do poço grande a porta fica à
 vista. Com 1 jogador, a regra de simultaneidade é desligada (as válvulas ficam abertas).
 
-As casas de máquinas são sorteadas pela seed a pelo menos 8 células uma da outra e fora das áreas
-de poço; a porta de saída, no poço mais distante do início.
+As casas de máquinas entram como salas do `PoolGenerator`, a pelo menos 8 células uma da outra e
+fora das salas de poço; a porta de saída, no fundo da sala do grande poço (já a mais distante do
+início). Até lá, a saída é a sala seca da seção 3.2.
 
 ---
 
 ## 7. Luz
 
-- **Claraboias e janelas embaçadas** brancas, estourando de luz, nunca mostrando o que tem do
-  outro lado. Luz quente de "fim de tarde" entrando de lado, sombras longas e duras de pilar.
-- **Cantos totalmente escuros** de propósito: a luz não chega em todo lugar (wiki e Pike).
-- **Luzes dentro d'água** nas paredes das piscinas e dos poços, brancas-azuladas.
-- **Nada de lâmpada fluorescente.** É o que mais separa visualmente do Level 0 e do Level 1.
-- **Anoitecer** (o apagão desta fase): as claraboias escurecem para azul-marinho em 10 s e ficam
-  apagadas pelo mesmo tempo do apagão do Level 0; sobram as luzes de dentro d'água, que deixam as
-  piscinas brilhando no escuro, e as lanternas.
+- **Nenhuma luminária.** Claraboias e janelas de vidro fosco, brancas, estouradas, nunca mostrando o
+  que há do outro lado.
+- **Uma luz de caixa por claraboia** (raios paralelos, inclinados 35 graus, rumo 35 graus, sempre para
+  o mesmo lado; 700 lux, 4800 K, sol de fim de tarde): a mancha de sol cai deslocada no piso e sobe na
+  parede, e as colunas fazem sombra comprida. Nas faixas de teto de vidro, uma luz por faixa no
+  sentido mais comprido do teto de vidro (a de uma raia inteira é uma luz só). As claraboias seguem a
+  estrutura da sala (seção 3.4); até 48 luzes de claraboia por mapa. Sombra em cache, uma face por luz (o Level 0 gasta seis por luminária). Os fachos acendem
+  a névoa.
+- **Janelões, frestas, vigias acesas e tijolo de vidro** têm um spot com sombra entrando na sala, um
+  pouco para baixo; até três aberturas vizinhas da mesma parede dividem um.
+- **A luz ambiente dá a meia-sombra esverdeada**; o perfil de Volume é próprio da fase
+  (`Settings/Level2_Volume.asset`; o do Level 0 é amarelo): céu em degradê creme em cima e verde-água
+  embaixo, névoa clara e leve que quase só aparece nos fachos, exposição fixa (EV 5,5), sem o zumbido
+  de lâmpada.
+- **Poucos buracos escuros de propósito:** a cisterna (sempre) e as salas de poço (metade das vezes)
+  são salas escuras, sem claraboia nem janela, só com as lâmpadas de dentro d'água; dentro delas a luz
+  ambiente cai (Volume local do `PoolWater`) e uma névoa preta faz a porta parecer um buraco visto de
+  fora. Os túneis têm a mesma névoa, mais fraca. É a receita "água negra espelhada".
+- **Luzes dentro d'água** nas paredes das áreas fundas e dos poços, verde-azuladas, sem sombra.
+- **Cáustica** somada sobre pisos e paredes submersos; some no anoitecer e cresce para quem está
+  debaixo d'água. Hoje ela vai até o fundo do poço com a mesma força e o clareia; falta fazê-la
+  sumir com a profundidade, para o poço ficar escuro.
+- **Alcance:** as luzes das claraboias e das janelas deixam de iluminar a 45 m da câmera e a sombra
+  vai 20% além, até 54 m (`lightFadeDistance`, a regra do Level 0: luz sem sombra atravessaria as
+  paredes); as lâmpadas submersas, sem sombra, somem a 60 m.
+- **Anoitecer** (o apagão desta fase), sem pisca nenhum: a luz aqui é do dia, então nada liga e
+  desliga seco como lâmpada. Pelo mesmo relógio e pela mesma conta do apagão do Level 0
+  (`GameSession.SessionSeconds`, `LightsOut.PhaseAt`; ninguém manda evento pela rede e quem entra no
+  meio vê o mesmo), com a noite exatamente no escuro do `LightsOut` (o primeiro aos 60 s, 10 s de
+  noite):
+  - **aviso** (10 s antes de começar a escurecer): a luz das claraboias e janelas esquenta de 4800 K
+    para 2600 K e cai para 75%, fim de tarde alaranjado;
+  - **escurece** (10 s): a luz cai até zero e o vidro vai do branco estourado ao azul-noite (#223048
+    com emissão fraca; o brilho cai em proporção, não em linha reta); o céu azul-marinho e o sumiço da
+    cáustica vão na mesma rampa;
+  - **noite** (10 s): sobram as lâmpadas de dentro d'água (as piscinas brilhando no escuro) e as
+    lanternas;
+  - **amanhece** (10 s): o mesmo, ao contrário, de alaranjado a branco.
+  Para caber dia pleno entre as rampas, o apagão das Piscinas tem 50 s de luz em vez de 30 (ciclo de
+  60 s em vez de 40; 20 s de dia pleno, como o Level 0 antes de piscar). O vidro e as luzes são
+  `DaylightPanel` (fora do `CeilingLight`, então o `LightsOut` e o Level 0 não mudaram); quem os leva
+  é o `PoolWater` (`DaylightAt`), com um `MaterialPropertyBlock` no vidro (o material não troca).
+  Nenhuma claraboia nasce "quebrada": canto escuro é sala sem claraboia.
 
 ---
 
 ## 8. Como construir
 
-- **`LevelGenerator` com mais duas camadas:** altura de piso por célula (seco, raso, fundo, poço)
-  e regiões de água com nível próprio. Regra nova, no espírito de "buraco nunca isola": **toda
-  célula seca ou rasa continua alcançável sem nadar** na maré baixa — sempre há caminho a pé até
-  as duas casas de máquinas e até a borda do poço da saída.
-- **`LevelBuilder`:** parede com vão em **arco** (malha + colisor juntos), escadas por célula,
-  borda com capa arredondada, pilares, teto alto nos salões. Mesmo `MeshBuilder`, UV por metro
-  para o rejunte fechar.
-- **Água:** primeiro o HDRP Water; medir. Física: um volume de água por região (gatilho) que o
-  `PlayerController` consulta para lentidão, nado e fôlego.
-- **Modelos** (pelo caminho do Blender, `modelos-blender.md`): escadinha de metal de piscina,
-  corrimão, cadeira de salva-vidas, grade de ralo, válvula grande e bombas da casa de máquinas,
-  tobogã de azulejo, plaquinha de profundidade, boia esquecida.
-- **Montagem da cena** pelo `Level0Setup.SceneOptions`, como o Level 1, mais `LevelCatalog`
-  (índice 2) e lista de cenas da build.
+- **`PoolGenerator`** (C# puro, só `System.Random(seed)`): salas, maciços, divisas, profundidades,
+  escadas, colunas, claraboias e lâmpadas, com `Validate` conferindo todas as regras e sorteando de
+  novo até passar. Os dados ficam em `LevelData` (campos das Piscinas) e em `PoolData.cs`.
+- **`LevelBuilder.Pools.cs`** (parte do `LevelBuilder`): pisos e tetos por célula, paredes grossas com
+  arcos, vãos, vigias e janelas, abóbadas, colunas, sanca, escadas, bordas, poço redondo, claraboias
+  com a luz, lâmpadas, água e a malha da cáustica. O que é curvo usa `MeshCollider` da mesma malha.
+- **Água:** `HDRP/Lit` transparente com refração (a cor vem do fundo visto através dela), sem o Water
+  System do HDRP. Física no `PlayerController`, pela altura do jogador em relação à superfície.
+- **Montagem da cena** pelo `Level0Setup.SceneOptions`, com perfil de Volume próprio
+  (`Level2Setup`), mais `LevelCatalog` (índice 2) e a lista de cenas da build.
+- **Conferência e fotos:** `Level2Setup.BatchCheck` (5 seeds), `Level2PlayTest.BatchRun` (em Play,
+  com um teclado virtual: o caminho até a saída sem nadar; no poço, segurando Espaço fica à tona sem
+  perder fôlego, sem tecla afunda e se afoga sozinho, debaixo d'água sobe e sai nadando para a funda,
+  à tona; na água funda, desce uma escada segurando Espaço e passa a nadar, atravessa à tona, solta e
+  afunda até o fundo (2 m), sobe, volta e sai subindo a escada, e do outro jeito afunda, anda pelo
+  fundo e sobe os degraus andando; no fim, um anoitecer encurtado: a luz das claraboias e janelas desce sem voltar a subir até zero, as
+  lâmpadas submersas ficam acesas e a luz volta à do dia), `Level2Preview.BatchCapture` (planta, salas e
+  closes, `Logs/Previews/level2_*.png`) e `Level2Preview.BatchCloseups` (`-seed N`: só os closes do
+  acabamento, como tijolo de vidro, janelão, poço redondo, teto de vidro, degrau na linha d'água,
+  manchas e marcações, e a mesma vista de uma piscina em cinco momentos do anoitecer, em
+  `Logs/Previews/level2_s{seed}_*.png`, sem apagar as outras fotos; com `-so borda`, só o grupo da
+  capa: as quatro orientações de borda reta, a ponta do seco, o canto da piscina, o encontro com uma
+  escada, o fim contra uma parede, a borda sob arco (nenhuma das seeds de conferência tem) e a volta de
+  uma piscina e de um canal, `level2_s{seed}_borda_*.png`; com `-so fundo`, só a água funda: a piscina
+  do deque, boiando e debaixo d'água, a escada mais longa do seco e a do raso para a funda (de cima, de
+  quem boia e de lado debaixo d'água), a raia funda e o poço redondo, `level2_s{seed}_fundo_*.png`) e
+  `Level2Preview.BatchCeilings`
+  (sem `-seed`: 1998 e 7; o teto como o jogador o vê, olhando 30° para cima de uma ponta e de um canto
+  de cada salão, raia, piscina, galeria, canal, escadaria, patamar, saída e corredor de janelas, sem a
+  filmadora, em `Logs/Previews/level2_s{seed}_teto_*.png`).
+- **Modelos** (pelo caminho do Blender, `modelos-blender.md`), para depois: escadinha de metal,
+  cadeira de salva-vidas, grade de ralo, válvula e bombas, plaquinha de profundidade, boia esquecida.
 
 ### 8.1 Ordem
 
-| # | Etapa | Depende de |
-|---|---|---|
-| 1 | Texturas (seção 10) emendadas e integradas | — |
-| 2 | Gerador: alturas, regiões de água, caminho seco garantido; mapa 2D para conferir | — |
-| 3 | Construtor: azulejo, arcos, escadas, bordas, pilares, salões; prévia em imagem | 1, 2 |
-| 4 | Água visível (HDRP Water ou reserva) e medida de desempenho | 3 |
-| 5 | Física da água: lentidão, nado, fôlego, filmadora molhada | 4 |
-| 6 | Cena `Level2_Test`, `LevelCatalog`, testes (`Level2Setup.BatchCheck`, em Play) | 3 |
-| 7 | Maré sincronizada | 5 |
-| 8 | Ralo e túneis submersos | 5 |
-| 9 | Casas de máquinas, válvulas, drenagem e porta do fundo | 7 |
-| 10 | Luz (claraboias, cantos escuros, luz subaquática, anoitecer) | 3 |
-| 11 | Som | 5 |
+| # | Etapa | Estado | Depende de |
+|---|---|---|---|
+| 1 | Texturas (seção 10) recortadas e integradas | feito (folhas A a D) | — |
+| 2 | Gerador por salas (`PoolGenerator`, `Validate`, `Hash`, mapa em texto) | feito | — |
+| 3 | Construtor: paredes grossas, arcos, vigias, colunas, abóbadas, escadas, bordas, poço redondo; prévia em imagem | feito | 1, 2 |
+| 4 | Água própria (refração, ondulação, cáustica, debaixo d'água) e medida de desempenho | feito | 3 |
+| 5 | Física da água: lentidão, nado, fôlego, filmadora molhada | feito | 4 |
+| 6 | Cena `Level2_Test`, `LevelCatalog`, testes (`Level2Setup.BatchCheck`, em Play) | feito | 3 |
+| 7 | Luz: claraboias, janelas, salas escuras, lâmpadas, anoitecer, perfil de Volume | feito | 3 |
+| 8 | Planta igual em host e cliente (dois editores) | falta | 6 |
+| 9 | Decisão do refúgio na maré (seção 9, decisão 5) e maré sincronizada | falta | 5 |
+| 10 | Ralo e túneis submersos | falta | 5 |
+| 11 | Casas de máquinas, válvulas, drenagem e porta do fundo | falta | 9 |
+| 12 | Som (abafado, eco por sala) | falta | 5 |
+| 13 | Formas que faltam: corredor curvo em S, escada em caracol, mezanino, teto inclinado, tobogã, claraboia em abóbada | falta | 3 |
+| 14 | Modelos do Blender (escadinha de metal, grade de ralo, válvula) | falta | — |
+| 15 | Anomalias (seção 3.3) | falta | 3 |
 
-1 e 2 andam em paralelo.
+8, 13 e 14 andam em paralelo com o resto.
 
 ---
 
@@ -293,8 +564,17 @@ de poço; a porta de saída, no poço mais distante do início.
 2. **Inimigo de verdade?** A proposta é **nenhum** — o ralo e a maré bastam, e a calma é o que
    assusta depois de dois níveis de monstro. Alternativa: algo que só aparece como sombra embaixo
    d'água e segue quem espirra.
-3. **HDRP Water ou água própria?** Depende da medida da etapa 4.
+3. ~~HDRP Water ou água própria?~~ **Decidido em 12/11/2026: água própria** (`HDRP/Lit`
+   transparente com refração, cáustica numa malha à parte). Dá a cor certa pelo fundo visto através
+   dela e custa pouco: na seed 1998, tirar a refração poupa 3,3 ms por quadro e a cáustica, 2,4.
 4. **Voz abafada** só vale quando existir voz por proximidade (Vivox, etapa 5 do plano).
+5. **A maré deixa um refúgio seco?** O seco fica a +0,2 m e a maré sobe 0,9 m: na maré alta ele fica
+   com 0,7 m de água e deixa de ser refúgio. Saídas (da pesquisa de level design): (a) uma altura nova,
+   "alto" a +1,2 m, para patamares-refúgio, só encostando em seco e com escada (regras novas no
+   `Validate`); (b) maré por região, com fases defasadas, para sempre haver uma região vizinha baixa.
+   Nos dois casos, todo ponto do caminho a pé a no máximo três células de um refúgio; e o caminho a
+   pé, que hoje passa só por seco e raso, precisa continuar sem nado na maré alta (o raso vira nado):
+   um laço mais longo e mais seco onde ele corre pelo raso.
 
 ---
 
@@ -304,24 +584,59 @@ Todas em **folhas 2 x 2** (deu certo no Level 0): uma imagem 2K, um material por
 e emendado depois em Python, com a cor média conferida contra a cena. O azulejo e a pastilha têm o
 número exato de peças por quarto para o rejunte ser recortado no período certo.
 
-| Folha | Quarto | Vira | Onde |
-|---|---|---|---|
-| A — superfícies | sup. esq. | `Tile_White` (8 x 8 azulejos = 1,6 m) | piso, parede, teto |
-| | sup. dir. | `Mosaic_Pool` (32 x 32 pastilhas) | fundo de piscina e poço |
-| | inf. esq. | `Tile_White_Worn` | o mesmo azulejo longe do início |
-| | inf. dir. | `Coping` | capa arredondada da borda |
-| B — água e luz | sup. esq. | `Water_Height` (vira normais) | ondulação (reserva da água) |
-| | sup. dir. | `Caustics` | cáustica projetada no fundo |
-| | inf. esq. | `Window_Frosted` (emissiva) | janelas e claraboias |
-| | inf. dir. | `Glass_Block` (emissiva) | parede de tijolo de vidro |
-| C — manchas (fundo transparente) | sup. esq. | `Stain_Waterline` | limo na linha d'água |
-| | sup. dir. | `Stain_Limescale` | escorrido de calcário |
-| | inf. esq. | `Stain_GroutMold` | mofo no rejunte |
-| | inf. dir. | `Stain_Rust` | ferrugem embaixo de ralo e escada |
-| D — marcações (fundo transparente) | sup. esq. | `Mark_Depth` "1.2 M" | borda das piscinas |
-| | sup. dir. | `Mark_NoDiving` | borda |
-| | inf. esq. | `Mark_DeepEnd` | parede do poço |
-| | inf. dir. | `Mark_LaneEnd` | fundo das piscinas |
+As quatro folhas já foram geradas e recortadas. Cada quarto fica em `Art/Fontes/Level2/<nome>.png`;
+o `Level2Setup` lê dali e grava o que deriva (recolorido, máscaras, materiais) em `Art/Level2`.
 
-As folhas C e D precisam de **fundo transparente**, que só o GPT Image faz. Os prompts prontos
-estão na mensagem que acompanhou este projeto; ficam também em `Docs/level2-prompts.md`.
+| Folha | Quarto | Arquivo | O que virou |
+|---|---|---|---|
+| A — superfícies | sup. esq. | `Tile_White` (recortado em 6 x 6 azulejos) | piso, parede e teto; deriva `Tile_Albedo` (rejunte mais escuro), `Tile_Height`, `Tile_Mask` e `Tile_Accent` (faixa azul e parede do poço). Posto a 0,8 m por repetição: azulejo de uns 13 cm |
+| | sup. dir. | `Mosaic_Pool` (28 x 28 pastilhas) | fundo das áreas fundas e dos poços, como `Mosaic_Pale` (mais pálida e mais verde: quem tinge é a água), a 0,6 m |
+| | inf. esq. | `Tile_White_Worn` | **sem uso**: as referências não têm sujeira (`poolWornTileMaterial` vazio) |
+| | inf. dir. | `Coping` | capa arredondada da borda |
+| B — água e luz | sup. esq. | `Water_Height` | mapa de normais da ondulação grande (1,25 m) |
+| | sup. dir. | `Caustics` | a rede principal da cáustica (2 m) |
+| | inf. esq. | `Window_Frosted` | vidro aceso de janelões, frestas e vigias acesas |
+| | inf. dir. | `Glass_Block` | parede de tijolo de vidro; o brilho (`Glass_Block_Glow`) sai dela, só no vidro |
+| C — manchas (fundo transparente) | sup. esq. | `Stain_Waterline` | limo na linha d'água |
+| | sup. dir. | `Stain_Limescale` | escorrido de calcário do alto da parede |
+| | inf. esq. | `Stain_GroutMold` | mofo no rejunte e no teto das salas sem claraboia |
+| | inf. dir. | `Stain_Rust` | ferrugem embaixo das lâmpadas submersas |
+| D — marcações (fundo transparente) | sup. esq. | `Mark_Depth` "1.2 M" | **não vai à fase**: a água funda tem 2 m; o `Level2Setup` remonta dela o "2.0 M" (`Art/Level2/Mark_Depth_2m.png`: o 2, o ponto e o M recortados da fonte, o 0 pintado em código no mesmo traço), no deque junto à área funda ou na parede dela |
+| | sup. dir. | `Mark_NoDiving` | em parede de sala com água rasa |
+| | inf. esq. | `Mark_DeepEnd` | em parede de sala com poço |
+| | inf. dir. | `Mark_LaneEnd` | o T no fundo, nas pontas das raias |
+
+**Manchas** (folha C): decalques `HDRP/Decal` (`Art/Level2/Decal_Stain_*.mat`, campo
+`poolStainDecals`), postos por `LevelBuilder.BuildPoolStains`, chamado no fim de `BuildPools`, só com
+`System.Random` da seed. No máximo uma a cada 10 células com piso e 10 no mapa (`CellsPerStain`,
+`MaxStains`); só em célula com desgaste (`LevelGenerator.WearAt`) de 0,5 ou mais, nunca na sala
+inicial nem na da saída. Primeiro a ferrugem, até 3 (`MaxRust`), escorrendo de baixo de uma lâmpada
+submersa até no máximo o piso; depois, em rodízio, o limo na linha d'água (parede de célula molhada
+que não é poço), o calcário colado no começo da sanca (salas com claraboia, fora das abóbadas) e o
+mofo sobre o rejunte, na parede ou no teto, só onde não há sol (sala escura ou célula sem
+claraboia). Parede só cheia (nada sobre arco, vão, vigia, janela ou a porta de saída), uma por face,
+e nenhuma encosta em escada, coluna, lâmpada ou outro decalque.
+
+**Marcações** (folha D): decalques também (`Art/Level2/Decal_Mark_*.mat`, campo `poolMarkDecals`, na
+ordem 0 "2.0 M", 1 NO DIVING, 2 DEEP END, 3 T de fim de raia), postos por `BuildPoolMarks` depois das
+manchas e desviando delas e das escadas, colunas e lâmpadas:
+- **"2.0 M"**, 1 ou 2 por piscina, raia ou canal (no máximo 6 no mapa): no piso do deque seco, com o
+  pé do desenho a 0,35 m da borda de uma célula funda aberta para ele (nunca de poço redondo), ou na
+  parede cheia de uma célula funda, logo acima da água (e da faixa azul, se a sala tem).
+- **NO DIVING**, no máximo 4: em parede cheia de célula seca ou rasa, a 1,6 m, em patamar, escadaria,
+  salão ou piscina que tenha água rasa junto de deque ou escada (no patamar de chegada sempre que
+  couber; nos outros, 70% das vezes). É o único decalque que pode cair na sala inicial.
+- **DEEP END**: em toda sala que tem célula de poço, numa parede cheia a 1,5 m, sorteada entre as três
+  mais perto do poço.
+- **T de raia**, no fundo das áreas fundas: na fileira funda mais longa de cada piscina, raia ou canal,
+  um em cada ponta, a 0,6 m da borda (até 3,6 m, se a escada ocupa a ponta).
+
+Na seed 1998 são 10 manchas e 14 marcações; na seed 7, 10 e 15.
+
+**Ainda pintado em código** no `Level2Setup` (em `Art/Level2`): a segunda ondulação (`Water_Detail`,
+0,5 m), a segunda rede da cáustica (`Caustics_Detail`) e o vidro das claraboias (`Skylight_Glow`, aceso
+e azul-noite). Se `Water_Height`, `Caustics`, `Window_Frosted` ou `Glass_Block` sumirem da pasta de
+fontes, o gerador volta a pintá-los.
+
+As folhas C e D precisam de **fundo transparente**, que só o GPT Image faz. Os prompts ficam em
+`Docs/level2-prompts.md`, para gerar de novo.

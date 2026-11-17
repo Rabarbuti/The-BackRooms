@@ -7,6 +7,14 @@ namespace BackRooms.Audio
     /// É a soma dos harmônicos de 120 Hz (o dobro da rede elétrica de 60 Hz), o que dá o
     /// timbre áspero característico. O loop de 2 s fecha sem emenda porque todos os
     /// componentes completam um número inteiro de ciclos nesse intervalo.
+    ///
+    /// Só se ouve jogando: com o menu na tela fica calado (volume zero, a fonte segue tocando em
+    /// laço para não estalar), entra suave quando a partida começa, cruzando com a saída da
+    /// música do menu, e sai suave de volta ao menu. O critério é o da música
+    /// (<see cref="MenuMusic.MenuOnScreen"/>): conectando ou entre cenas, mantém o que fazia. Cada
+    /// cena tem o seu e ele nasce calado, então a fase que abre já conectando (porta de saída)
+    /// também começa em silêncio. Sem dispositivo de áudio (testes em lote) o estado continua
+    /// sendo calculado.
     /// </summary>
     [RequireComponent(typeof(AudioSource))]
     public sealed class FluorescentHum : MonoBehaviour
@@ -14,15 +22,44 @@ namespace BackRooms.Audio
         [Range(0f, 1f)] public float volume = 0.22f;
         [Tooltip("Quantidade de harmônicos. Mais harmônicos = zumbido mais áspero.")]
         [Range(4, 60)] public int harmonics = 36;
+        [Tooltip("Segundos para entrar ao começar a jogar (do silêncio ao volume de jogo).")]
+        public float fadeInSeconds = 1.5f;
+        [Tooltip("Segundos para sair ao voltar ao menu.")]
+        public float fadeOutSeconds = 1.5f;
+
+        /// <summary>Verdadeiro jogando, quando o zumbido deve soar; falso com o menu na tela.</summary>
+        public bool Wanted { get; private set; }
+
+        /// <summary>Nível do fade, de 0 (calado) a 1 (volume de jogo).</summary>
+        public float Level { get; private set; }
+
+        /// <summary>O volume que a conta pede agora (0 no menu, <see cref="volume"/> jogando).</summary>
+        public float CurrentVolume => volume * Level * Level;
+
+        AudioSource _source;
 
         void Start()
         {
-            var source = GetComponent<AudioSource>();
-            source.clip = CreateLoop(harmonics);
-            source.loop = true;
-            source.spatialBlend = 0f;
-            source.volume = volume;
-            source.Play();
+            _source = GetComponent<AudioSource>();
+            _source.clip = CreateLoop(harmonics);
+            _source.loop = true;
+            _source.spatialBlend = 0f;
+            _source.volume = 0f;
+            _source.Play();
+        }
+
+        void Update()
+        {
+            bool? menu = MenuMusic.MenuOnScreen();
+            if (menu.HasValue) Wanted = !menu.Value;
+
+            // Passo por quadro limitado, como na música: os quadros longos da montagem do mapa e
+            // do jogador caem bem no começo do fade e, sem o limite, a entrada viraria um corte.
+            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f);
+            float rate = Wanted ? dt / Mathf.Max(0.01f, fadeInSeconds) : -dt / Mathf.Max(0.01f, fadeOutSeconds);
+            Level = Mathf.Clamp01(Level + rate);
+
+            if (_source != null) _source.volume = CurrentVolume;
         }
 
         static AudioClip CreateLoop(int harmonicCount)
