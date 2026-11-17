@@ -3,7 +3,7 @@
 Projeto da segunda fase. Escrito em 11/11/2026.
 
 **Já existe:** uma versão de teste jogável (`Scenes/Level1_Test.unity`, menu BackRooms > Montar
-Level 1 (teste)): a planta do Level 0 em 10 x 10 células, sem buracos nem nichos,
+Level 1 (teste)): a planta do Level 0 em 20 x 20 células, com pé-direito de 3,4 m, sem buracos nem nichos,
 mobiliada pela `PropLayer` com os 43 modelos do Blender, incluindo a sala dos sofás e placas
 de trânsito (PARE e STOP). No lugar das setas pintadas do Level 0, placas amarelas de curva
 (losango com a seta dobrada) pregadas na parede apontam o caminho até a saída. A porta do Level 0

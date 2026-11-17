@@ -97,7 +97,7 @@ namespace BackRooms.EditorTools
             _pixels = new Color32[_width * _height];
             for (int i = 0; i < _pixels.Length; i++) _pixels[i] = Background;
 
-            string title = $"LEVEL 0   SEED {seed}   {data.Width * (int)LevelBuilder.Cell} X {data.Height * (int)LevelBuilder.Cell} M   PE-DIREITO {LevelBuilder.WallHeight:0.00} M";
+            string title = $"LEVEL 0   SEED {seed}   {data.Width * (int)LevelBuilder.Cell} X {data.Height * (int)LevelBuilder.Cell} M   PE-DIREITO {LevelBuilder.DefaultWallHeight:0.00} M";
             PixelFont.Draw(_pixels, _width, _height, Margin, 18, title.Replace(',', '.'), 2, Ink);
 
             DrawFloor(data);

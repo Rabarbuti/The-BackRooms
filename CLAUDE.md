@@ -252,7 +252,8 @@ O projeto completo está em `Docs/level1-mostruario.md` (espaço, zonas, catálo
 são postos, o Capitão e as regras dele, objetivo, som, ordem de construção e decisões em aberto).
 
 **Já existe:**
-- **Cena de teste** `Scenes/Level1_Test.unity`: a planta do Level 0 em 10 x 10 células, sem
+- **Cena de teste** `Scenes/Level1_Test.unity`: a planta do Level 0 em 20 x 20 células, pé-direito de
+  3,4 m (`LevelBuilder.ceilingHeight`; o padrão continua 4,05), sem
   buracos, nichos nem entidade (o apagão continua). Para jogar: menu BackRooms > Abrir Level 1
   (teste), Play, H.
 - **`PropLayer`:** mobília a planta pela seed. Cada bloco de 2 x 2 células tem um tema (jantar,

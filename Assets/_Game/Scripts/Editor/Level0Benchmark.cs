@@ -113,7 +113,7 @@ namespace BackRooms.EditorTools
             Start(DefaultFolder(), false, Level2Setup.ScenePath);
         }
 
-        /// <summary>Uso em linha de comando. Aceita -benchOut &lt;pasta&gt; e -benchScene &lt;cena&gt;.</summary>
+        /// <summary>Uso em linha de comando. Aceita -benchOut &lt;pasta&gt;, -benchScene &lt;cena&gt; e -benchQuick (só as medidas de base).</summary>
         public static void BatchRun()
         {
             string folder = DefaultFolder();
@@ -253,6 +253,11 @@ namespace BackRooms.EditorTools
             _decals = level.GetComponentsInChildren<DecalProjector>();
             _walk = Walk(level);
             _setups = level.Data.HasPools ? PoolSetups(level) : Setups();
+
+            // -benchQuick: só a primeira passada e as duas medidas de base (sem e com lanterna),
+            // para comparar uma fase antes e depois de uma mudança sem esperar as outras.
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-benchQuick") >= 0 && _setups.Count > 3)
+                _setups.RemoveRange(3, _setups.Count - 3);
         }
 
         // Um punhado de quadros por passada do editor, até acabar a configuração da vez.
