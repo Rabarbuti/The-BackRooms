@@ -10,8 +10,11 @@ de trânsito (PARE e STOP). No lugar das setas pintadas do Level 0, placas amare
 leva até aqui. **O Capitão está na fase** (desde 17/11/2026, `CaptainBrain`): aparece quando alguém
 chega a 5 células da sala inicial, ouve, congela quando é visto e está iluminado, cansa quem o
 encara, anda em arrancadas no apagão e pega como a entidade (seção 5.4, regras 1 a 4 e 6).
-**Falta:** totens, guarda-roupa como esconderijo, plástico-bolha, barricadas, objetivo e som (o
-jingle e a música da loja; a perna de pau já soa) (seção 8).
+Também já existem (17/11/2026): totens com troca no apagão, guarda-roupa e mesa de esconder,
+plástico-bolha, barricadas, o objetivo (teclado, etiquetas vermelhas e bilhete), a música da loja, o
+jingle do Capitão e o piso por zona (laminado e vinílico) com passos próprios.
+**Falta:** as zonas novas com os modelos dos lotes (quarto, escritório, cubículos, lavanderia, festa,
+verão, sorteio), as placas penduradas com texto e as anomalias (rodada 5, em andamento).
 
 ---
 
@@ -303,9 +306,10 @@ comprida no amarelo das salas; de perto, o que fica é o **branco dos olhos** e 
 
 ### 5.4 Regras
 
-As regras 1 a 4 e 6 estão feitas (`CaptainBrain`, que herda do `EntityBrain`; teste em
-`Level1CaptainTest`). As 5 e 7 dependem de totens, guarda-roupa e barricadas, que ainda não
-existem. Os números ficam no prefab (`CaptainPreview.CreatePrefab`) e no `CaptainBrain`.
+Todas as regras estão feitas (`CaptainBrain`, que herda do `EntityBrain`; testes em
+`Level1CaptainTest` e `Level1ShelterTest`). Da regra 5, as pistas "olhos seguem" e "perna de pau
+marca o carpete" ainda não existem: separam-se o totem e o Capitão pela base preta, pela placa de
+OFERTA e pelo brilho de fibra de vidro. Os números ficam no prefab (`CaptainPreview.CreatePrefab`) e no `CaptainBrain`.
 
 1. **Ouve como a entidade do Level 0** — mesmo cálculo de barulho do `EntityBrain`, com o
    plástico-bolha valendo como corrida (quando existir). Também vê como ela: 22 m à frente, olho a
@@ -375,11 +379,11 @@ o Capitão.
 | 3 | Zonas e conjuntos; hash de objetos no teste de fumaça | 2 (**feito em parte**: temas por bloco 2 x 2, sala dos sofás, hash conferido por `Level1Setup.BatchCheck`; falta conferir entre host e cliente) |
 | 4 | Troca de fase: a porta EXIT leva ao Level 1; o host envia índice da fase + seed | — (**feito**: `LevelExit`, `GameSession.OpenExit`) |
 | 5 | Cérebro do Capitão: herda o ouvido do `EntityBrain`, regra de "visto e iluminado" | 1, 4 (**feito** em 17/11/2026: `CaptainBrain`, `Level1CaptainTest`) |
-| 6 | Totens e troca no apagão | 3, 5 |
-| 7 | Guarda-roupa como `HidingSpot`, plástico-bolha | 3 |
-| 8 | Etiquetas de LIQUIDAÇÃO, teclado, porta da doca | 3 |
+| 6 | Totens e troca no apagão | 3, 5 (**feito**: `Totem`, `CaptainBrain.TrySwap`) |
+| 7 | Guarda-roupa como `HidingSpot`, plástico-bolha | 3 (**feito**: `HideSpot` com a tecla E, também a mesa; `BubbleWrap`) |
+| 8 | Etiquetas de LIQUIDAÇÃO, teclado, porta da doca | 3 (**feito**: `ExitLock`; a porta continua a corta-fogo com EXIT) |
 | 9 | Anomalias, barricadas, carro, vitrine de verão | 3 |
-| 10 | Som: jingle desafinado, perna de pau, música de loja | 5 (**feito em parte**: a perna de pau, "TOC… arrasta", em `CaptainAudio`) |
+| 10 | Som: jingle desafinado, perna de pau, música de loja | 5 (**feito**: `CaptainAudio`, `ShopMusic`; piso por zona com passos próprios) |
 
 Os passos 2 e 4 não dependem um do outro e podem andar em paralelo.
 

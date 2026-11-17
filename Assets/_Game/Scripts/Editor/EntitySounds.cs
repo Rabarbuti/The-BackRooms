@@ -58,6 +58,14 @@ namespace BackRooms.EditorTools
             Save(folder, "entidade_ronco", EntityAudio.CreateDrone());
             Save(folder, "capitao_toc", CaptainAudio.CreateKnock());
             Save(folder, "capitao_arrasta", CaptainAudio.CreateDrag());
+            Save(folder, "capitao_jingle", BackRooms.Audio.ShopMusic.CreateJingle());
+            Save(folder, "loja_musica", BackRooms.Audio.ShopMusic.CreateMuzak());
+            for (int i = 0; i < 3; i++)
+            {
+                Save(folder, "plastico_bolha_" + i, BackRooms.World.BubbleWrap.CreatePops(i));
+                Save(folder, "passo_laminado_" + i, Footsteps.CreateClip(StepSurface.Laminate, i));
+                Save(folder, "passo_vinilico_" + i, Footsteps.CreateClip(StepSurface.Vinyl, i));
+            }
 
             // Passos do jogador por superfície (Footsteps), três variações de cada, e o espirro
             // de entrar ou sair da água. O volume relativo já está no clipe (pico de cada um).

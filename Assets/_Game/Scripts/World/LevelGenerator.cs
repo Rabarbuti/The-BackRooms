@@ -223,6 +223,15 @@ namespace BackRooms.World
         public bool[,] Pit;
 
         /// <summary>
+        /// Célula entupida de móveis do chão ao teto (barricada do Level 1), posta pela
+        /// <see cref="PropLayer"/> depois da planta: ninguém passa, e o inimigo a evita como a um
+        /// buraco. Nulo nas fases sem barricada.
+        /// </summary>
+        public bool[,] Barricade;
+
+        public bool IsBarricade(int x, int z) => Barricade != null && Barricade[x, z];
+
+        /// <summary>
         /// Faixas estreitas de chão que sobraram dentro de um buraco. Em cada célula, um bit
         /// por lado (1 &lt;&lt; (int)WallSide): a faixa vai do centro da célula até o meio daquele
         /// lado. Faixas de células vizinhas se encontram na divisa.
