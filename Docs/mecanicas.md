@@ -267,7 +267,8 @@ onde é seguro. Com a maré (planejado), essas marcas ficam erradas quando a ág
 
 ## 5. Por onde começar
 
-Sugestão de ordem, do que mais muda o jogo pelo menor esforço:
+Sugestão de ordem, do que mais muda o jogo pelo menor esforço. O detalhe de cada etapa (passos,
+testes, decisões) está em `plano-de-acao.md`.
 
 1. **O cérebro do Capitão** (Level 1). O corpo está pronto e o ouvido vem do `EntityBrain`; falta a
    regra "visto e iluminado". É o que dá identidade à fase.
