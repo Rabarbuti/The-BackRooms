@@ -65,8 +65,9 @@ parado na frente dele no escuro.
 **Testes:** `Level1Setup.BatchCheck`, `Level1PlayTest`, `Level1CaptainTest`, fumaça do Level 0,
 `LevelSelectTest` e dois editores (o Capitão é objeto de rede).
 
-**Segunda rodada** (outra branch): totens e a troca de lugar no apagão, guarda-roupa como
-esconderijo (as portas já são objetos com a origem na dobradiça), plástico-bolha.
+**Segunda rodada** — **feita em 17/11/2026**, junto com o resto do Level 1 (barricadas, objetivo,
+som; ver `historico.md`): totens e a troca de lugar no apagão, guarda-roupa e mesa de esconder,
+plástico-bolha.
 
 ---
 

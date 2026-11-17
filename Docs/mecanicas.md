@@ -140,19 +140,25 @@ Projeto completo em `level1-mostruario.md`.
   - **Manca devagar** (mais devagar que quem anda); **no apagão anda livre**, em arrancadas.
   - Pega como a entidade (NO SIGNAL, volta à sala inicial).
   - Avisa com o som da perna de pau ("TOC… arrasta").
-- **Sem objetivo:** anda-se até a porta.
+
+### Também existe (desde 17/11/2026)
+
+- **Totens:** 6 a 10 estátuas iguais ao Capitão de longe, numa base preta com a placa de OFERTA e
+  com brilho de fibra de vidro. No apagão ele pode trocar de lugar com um totem que ninguém vê.
+- **Esconderijos:** guarda-roupa (E; esconde sempre; dentro só se vê pela fresta) e debaixo da mesa
+  de jantar (agachado + E; ele vê quem está no cone dele a até 6 m).
+- **Plástico-bolha:** estala alto e conta como corrida para o ouvido dele. **Barricadas** de móveis
+  do chão ao teto: ninguém passa, e nunca isolam nada.
+- **Objetivo:** a porta de saída tem um teclado (mira + E em cada tecla). O código está em **três
+  etiquetas vermelhas de LIQUIDAÇÃO**, longe umas das outras; o bilhete na sala inicial traz os
+  dígitos fora de ordem.
+- **Som:** jingle de caixinha perto do Capitão, música de loja que some antes do apagão e passos
+  diferentes no laminado e no vinílico.
 
 ### Planejado (`level1-mostruario.md`)
 
-- **O jingle de loja desafinado** perto do Capitão, e a música da loja (seção 7).
-- **Totens** (seção 5.4): 6 a 10 estátuas iguais a ele de longe. O totem tem base preta e placa de
-  OFERTA; o de verdade, sangue no casaco e olhos que seguem. No apagão ele pode trocar de lugar
-  com um totem.
-- **Esconderijos:** guarda-roupa, e debaixo da mesa agachado.
-- **Plástico-bolha:** estala alto e chama o Capitão. **Barricadas** de móveis: ele não passa.
-- **Objetivo** (seção 6): a porta da doca tem um teclado. O código está em **três etiquetas
-  vermelhas de LIQUIDAÇÃO**, longe uma da outra, cada uma com um dígito. Para achá-las o grupo se
-  separa, e quem se separa deixa de vigiar o Capitão.
+- As zonas novas com os modelos dos lotes (quarto, escritório, cubículos, lavanderia, festa, verão,
+  sorteio), as placas penduradas com o nome da zona e as anomalias (rodada 5, em andamento).
 
 ### Propostas
 

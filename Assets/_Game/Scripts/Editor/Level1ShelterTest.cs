@@ -164,8 +164,9 @@ namespace BackRooms.EditorTools
                     if (_wardrobe == null) { Finish(false, "nenhum guarda-roupa de esconder na seed 1998"); return; }
                     if (_table == null) { Finish(false, "nenhuma mesa de esconder na seed 1998"); return; }
 
-                    // De frente para o guarda-roupa, no ponto de saída dele.
-                    body.Teleport(_wardrobe.ExitWorld, YawTo(_wardrobe.ExitWorld, _wardrobe.InsideWorld));
+                    // De frente para o guarda-roupa, no ponto de saída dele. (_local acabou de ser lido
+                    // neste quadro: "body", do começo do Tick, ainda pode estar vazio.)
+                    _local.controller.Teleport(_wardrobe.ExitWorld, YawTo(_wardrobe.ExitWorld, _wardrobe.InsideWorld));
                     Next($"{_props.Totems} totens, {_props.Barricades} barricadas, {_props.BubbleSheets} plásticos-bolha, {_props.HideSpots} esconderijos");
                     break;
                 }
@@ -219,6 +220,8 @@ namespace BackRooms.EditorTools
                     // O Capitão some do caminho; o jogador vai para a mesa, em pé.
                     _director.SpawnAt(FarCell(_table.InsideWorld, 9), Vector3.forward);
                     body.Teleport(_table.ExitWorld, YawTo(_table.ExitWorld, _table.InsideWorld));
+                    // Olhando para o tampo (a 0,95 m da saída, abaixo do olho).
+                    body.SetPitch(Mathf.Atan2(1.65f - 0.5f, Flat(_table.InsideWorld - _table.ExitWorld).magnitude) * Mathf.Rad2Deg);
                     Next("E dentro do guarda-roupa: saiu pela frente");
                     break;
 
@@ -264,8 +267,9 @@ namespace BackRooms.EditorTools
 
                 case 9:
                 {
-                    // 3. Plástico-bolha. Espera voltar da captura e o Capitão sossegar.
-                    if (body.IsReturning || InStage < 2f) break;
+                    // 3. Plástico-bolha. Espera voltar da captura e acabar a trégua de quem acabou de
+                    // ser pego (feedSeconds + mercySeconds: ele ignora essa pessoa nesse tempo).
+                    if (body.IsReturning || InStage < _captain.feedSeconds + _captain.mercySeconds + 0.5f) break;
                     Transform wrap = _level.transform.Find("Moveis/PlasticoBolha");
                     if (wrap == null) { Finish(false, "sem plástico-bolha na fase"); return; }
                     _wrapCenter = wrap.position;

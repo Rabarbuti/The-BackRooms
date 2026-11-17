@@ -81,7 +81,7 @@ namespace BackRooms.EditorTools
                     props.models = models;
                     // Totens: a estátua é o próprio modelo do Capitão, assado na pose parada.
                     props.totemModel = CharacterModels.Model("Capitao");
-                    props.totemMaterials = CharacterModels.Materials("Capitao");
+                    props.totemMaterials = FiberMaterials(CharacterModels.Materials("Capitao"));
                     props.totemBaseMaterial = FaseMaterial("Totem_Base", new Color(0.035f, 0.035f, 0.04f), 0.7f, null);
                     props.bubbleWrapMaterial = FaseMaterial("PlasticoBolha", new Color(0.86f, 0.9f, 0.93f), 0.88f, BubbleTexture());
                     // Objetivo: porta trancada por teclado, código nas etiquetas vermelhas.
@@ -119,6 +119,33 @@ namespace BackRooms.EditorTools
             if (created) AssetDatabase.CreateAsset(material, path);
             else EditorUtility.SetDirty(material);
             return material;
+        }
+
+        // Totem: os materiais do Capitão em versão de fibra de vidro pintada (mais lisa e
+        // brilhante), um por parte do modelo. "Totem_Fibra_Pele" termina em "_Pele": o modelo acha
+        // a parte pelo fim do nome.
+        static Material[] FiberMaterials(Material[] source)
+        {
+            if (source == null) return null;
+            if (!AssetDatabase.IsValidFolder(FaseFolder)) AssetDatabase.CreateFolder("Assets/_Game/Art/Level1", "Fase");
+            var result = new Material[source.Length];
+            for (int i = 0; i < source.Length; i++)
+            {
+                if (source[i] == null) continue;
+                string slot = source[i].name.Substring(source[i].name.LastIndexOf('_') + 1);
+                string path = $"{FaseFolder}/Totem_Fibra_{slot}.mat";
+                var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                bool created = material == null;
+                if (created) material = new Material(source[i]) { name = "Totem_Fibra_" + slot };
+                else material.CopyPropertiesFromMaterial(source[i]);
+                material.SetFloat("_Smoothness", 0.72f);
+                material.SetFloat("_Metallic", 0f);
+                UnityEngine.Rendering.HighDefinition.HDMaterial.ValidateMaterial(material);
+                if (created) AssetDatabase.CreateAsset(material, path);
+                else EditorUtility.SetDirty(material);
+                result[i] = material;
+            }
+            return result;
         }
 
         // Plástico-bolha: bolhas redondas em fileiras desencontradas, com brilho no alto de cada
@@ -343,6 +370,8 @@ namespace BackRooms.EditorTools
             int count = 0;
             foreach (Transform item in root)
             {
+                // O bilhete do código fica na sala inicial de propósito (é um papel na parede).
+                if (item.name == "Bilhete") continue;
                 // Pela caixa do móvel (encolhida 10 cm), não pelo pé: tombado, o pé fica num canto.
                 var box = item.GetComponent<BoxCollider>();
                 Bounds b = box != null ? box.bounds : new Bounds(item.position, Vector3.zero);
@@ -364,6 +393,12 @@ namespace BackRooms.EditorTools
 
         // Para cada par de células vizinhas sem parede entre elas, uma cápsula do tamanho do
         // jogador (0,28 m de raio) vai de um centro ao outro; bater num móvel é passagem fechada.
+        static Vector3 Flat(Vector3 v)
+        {
+            v.y = 0f;
+            return v;
+        }
+
         static int HideCount(Transform root, BackRooms.Player.HideKind kind)
         {
             int count = 0;
@@ -533,6 +568,17 @@ namespace BackRooms.EditorTools
                     camera.transform.localRotation = Quaternion.Euler(-35f, 0f, 0f);
                     Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_totem_de_baixo.png"));
                     shots += 2;
+                }
+
+                // A primeira etiqueta vermelha, de frente, a 1,5 m.
+                Transform firstTag = root.Find("Etiqueta_1");
+                if (firstTag != null)
+                {
+                    Vector3 eye = firstTag.position - firstTag.forward * 1.5f;
+                    rig.transform.SetPositionAndRotation(new Vector3(eye.x, 0f, eye.z), Quaternion.LookRotation(Flat(firstTag.forward), Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(5f, 0f, 0f);
+                    Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_etiqueta.png"));
+                    shots++;
                 }
 
                 Transform barricade = root.Find("Barricada");
