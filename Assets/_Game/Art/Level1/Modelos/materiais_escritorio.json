@@ -1,0 +1,154 @@
+{
+  "materiais": [
+    {
+      "nome": "Escritorio_Aco_Bege",
+      "cor": [
+        196,
+        184,
+        152
+      ],
+      "rugosidade": 0.5,
+      "metal": 0.0
+    },
+    {
+      "nome": "Escritorio_Aluminio",
+      "cor": [
+        176,
+        180,
+        184
+      ],
+      "rugosidade": 0.4,
+      "metal": 0.5
+    },
+    {
+      "nome": "Escritorio_Borda_Escura",
+      "cor": [
+        50,
+        49,
+        48
+      ],
+      "rugosidade": 0.5,
+      "metal": 0.0
+    },
+    {
+      "nome": "Escritorio_Cromado",
+      "cor": [
+        198,
+        200,
+        204
+      ],
+      "rugosidade": 0.18,
+      "metal": 0.9
+    },
+    {
+      "nome": "Escritorio_Formica_Cinza",
+      "cor": [
+        192,
+        192,
+        186
+      ],
+      "rugosidade": 0.42,
+      "metal": 0.0
+    },
+    {
+      "nome": "Escritorio_Tecido_Divisoria",
+      "cor": [
+        98,
+        112,
+        130
+      ],
+      "rugosidade": 0.95,
+      "metal": 0.0
+    },
+    {
+      "nome": "Escritorio_Tecido_Grafite",
+      "cor": [
+        44,
+        46,
+        52
+      ],
+      "rugosidade": 0.95,
+      "metal": 0.0
+    },
+    {
+      "nome": "Escritorio_Tecla_Bege",
+      "cor": [
+        178,
+        170,
+        148
+      ],
+      "rugosidade": 0.6,
+      "metal": 0.0
+    },
+    {
+      "nome": "Metal_Escuro",
+      "cor": [
+        40,
+        42,
+        44
+      ],
+      "rugosidade": 0.45,
+      "metal": 0.6
+    },
+    {
+      "nome": "Metal_Pintado",
+      "cor": [
+        104,
+        114,
+        120
+      ],
+      "rugosidade": 0.48,
+      "metal": 0.25
+    },
+    {
+      "nome": "Papel_Branco",
+      "cor": [
+        236,
+        232,
+        218
+      ],
+      "rugosidade": 0.8,
+      "metal": 0.0
+    },
+    {
+      "nome": "Plastico_Bege",
+      "cor": [
+        206,
+        198,
+        176
+      ],
+      "rugosidade": 0.55,
+      "metal": 0.0
+    },
+    {
+      "nome": "Plastico_Preto",
+      "cor": [
+        22,
+        22,
+        24
+      ],
+      "rugosidade": 0.5,
+      "metal": 0.0
+    },
+    {
+      "nome": "Tinta_Laranja",
+      "cor": [
+        222,
+        112,
+        28
+      ],
+      "rugosidade": 0.6,
+      "metal": 0.0
+    },
+    {
+      "nome": "Tinta_Vermelha",
+      "cor": [
+        176,
+        26,
+        24
+      ],
+      "rugosidade": 0.6,
+      "metal": 0.0
+    }
+  ]
+}
