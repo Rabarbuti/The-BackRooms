@@ -13,8 +13,9 @@ namespace BackRooms.World
     public sealed partial class LevelBuilder : MonoBehaviour
     {
         public const float Cell = 4f;
-        // Pé-direito de 4,05 m: 1,5 vez o de um escritório comum (2,7 m).
-        public const float WallHeight = 4.05f;
+        // Pé-direito padrão de 4,05 m: 1,5 vez o de um escritório comum (2,7 m). O Level 1 usa
+        // 3,4 m (ceilingHeight), para os móveis oprimirem mais.
+        public const float DefaultWallHeight = 4.05f;
         public const float WallThickness = 0.2f;
 
         /// <summary>Lado do mapa em células. 20 x 20 = 80 x 80 m (era 16 x 16 até a versão 9).</summary>
@@ -63,6 +64,11 @@ namespace BackRooms.World
         public bool poolsEnabled;
         [Min(4)] public int width = DefaultSize;
         [Min(4)] public int height = DefaultSize;
+        [Tooltip("Pé-direito, em metros. Padrão 4,05 (Level 0 e Piscinas); o Level 1 usa 3,4.")]
+        [Min(2.6f)] public float ceilingHeight = DefaultWallHeight;
+
+        /// <summary>Pé-direito desta fase (o <see cref="ceilingHeight"/>).</summary>
+        public float WallHeight => ceilingHeight;
 
         [Header("Materiais")]
         public Material wallMaterial;
@@ -1030,7 +1036,8 @@ namespace BackRooms.World
 
             var vent = new GameObject("Grelha");
             vent.transform.SetParent(parent, false);
-            vent.transform.localPosition = center + tangent * mark.Along + Vector3.up * ventHeight;
+            // Num pé-direito baixo (Level 1, 3,4 m) a grelha desce para caber abaixo do teto.
+            vent.transform.localPosition = center + tangent * mark.Along + Vector3.up * Mathf.Min(ventHeight, WallHeight - 0.45f);
             vent.transform.localRotation = Quaternion.LookRotation(-normal, Vector3.up);
             vent.AddComponent<MeshCollider>().sharedMesh = _ventMesh;
 
@@ -1108,7 +1115,7 @@ namespace BackRooms.World
         }
 
         // Tamanho e altura de cada tipo de mancha de parede.
-        static void WallStainLayout(Decoration mark, out Vector2 size, out float centerHeight)
+        void WallStainLayout(Decoration mark, out Vector2 size, out float centerHeight)
         {
             switch (mark.Variant)
             {
