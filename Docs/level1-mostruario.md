@@ -4,7 +4,7 @@ Projeto da segunda fase. Escrito em 11/11/2026.
 
 **Já existe:** uma versão de teste jogável (`Scenes/Level1_Test.unity`, menu BackRooms > Montar
 Level 1 (teste)): a planta do Level 0 em 20 x 20 células, com pé-direito de 3,4 m, sem buracos nem nichos,
-mobiliada pela `PropLayer` com os 43 modelos do Blender, incluindo a sala dos sofás e placas
+mobiliada pela `PropLayer` com os 65 modelos do Blender, incluindo a sala dos sofás e placas
 de trânsito (PARE e STOP). No lugar das setas pintadas do Level 0, placas amarelas de curva
 (losango com a seta dobrada) pregadas na parede apontam o caminho até a saída. A porta do Level 0
 leva até aqui. **O Capitão está na fase** (desde 17/11/2026, `CaptainBrain`): aparece quando alguém
@@ -13,8 +13,14 @@ encara, anda em arrancadas no apagão e pega como a entidade (seção 5.4, regra
 Também já existem (17/11/2026): totens com troca no apagão, guarda-roupa e mesa de esconder,
 plástico-bolha, barricadas, o objetivo (teclado, etiquetas vermelhas e bilhete), a música da loja, o
 jingle do Capitão e o piso por zona (laminado e vinílico) com passos próprios.
-**Falta:** as zonas novas com os modelos dos lotes (quarto, escritório, cubículos, lavanderia, festa,
-verão, sorteio), as placas penduradas com texto e as anomalias (rodada 5, em andamento).
+As zonas da seção 3.1 existem todas (lavanderia, festa, verão, quarto, escritório e cubículos
+com os lotes de 17/11/2026; o sorteio é um carro num beco sem saída), com placas penduradas com o
+nome da zona e anomalias longe do início (mesa no teto, móvel atravessando a parede, guarda-roupa
+de frente para a parede, batente solto). A mobília sai igual no host e no cliente (conferido em dois
+editores).
+**Falta:** jogar à mão e ajustar; o conjunto repetido em três salas e a cama no corredor
+(anomalias); a porta da doca (a saída continua a corta-fogo com EXIT); o teto a 3,4 m não muda a
+iluminação das luminárias.
 
 ---
 
@@ -382,7 +388,7 @@ o Capitão.
 | 6 | Totens e troca no apagão | 3, 5 (**feito**: `Totem`, `CaptainBrain.TrySwap`) |
 | 7 | Guarda-roupa como `HidingSpot`, plástico-bolha | 3 (**feito**: `HideSpot` com a tecla E, também a mesa; `BubbleWrap`) |
 | 8 | Etiquetas de LIQUIDAÇÃO, teclado, porta da doca | 3 (**feito**: `ExitLock`; a porta continua a corta-fogo com EXIT) |
-| 9 | Anomalias, barricadas, carro, vitrine de verão | 3 |
+| 9 | Anomalias, barricadas, carro, vitrine de verão | 3 (**feito**: barricadas, sorteio com o carro, zona de verão, quatro das seis anomalias) |
 | 10 | Som: jingle desafinado, perna de pau, música de loja | 5 (**feito**: `CaptainAudio`, `ShopMusic`; piso por zona com passos próprios) |
 
 Os passos 2 e 4 não dependem um do outro e podem andar em paralelo.

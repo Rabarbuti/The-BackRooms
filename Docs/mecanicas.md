@@ -157,8 +157,9 @@ Projeto completo em `level1-mostruario.md`.
 
 ### Planejado (`level1-mostruario.md`)
 
-- As zonas novas com os modelos dos lotes (quarto, escritório, cubículos, lavanderia, festa, verão,
-  sorteio), as placas penduradas com o nome da zona e as anomalias (rodada 5, em andamento).
+- Nada do projeto além de pequenos acabamentos (ver `level1-mostruario.md`, "Falta"). Também já
+  existem as zonas quarto, escritório, cubículos, lavanderia, festa, verão e o sorteio (o carro), as
+  placas penduradas com o nome da zona e as anomalias longe do início.
 
 ### Propostas
 

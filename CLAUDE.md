@@ -228,6 +228,10 @@ velho. Mudança só de código não precisa. A cena do Level 1 não tem versão:
   cena da lista e a põe no fim, então montar o Level 1 depois do Level 2 (ou o contrário) troca os
   dois de lugar em `ProjectSettings/EditorBuildSettings.asset`. Não faz mal (as fases abrem pelo nome
   da cena no `LevelCatalog`, nunca pelo índice), mas não é mudança para commit.
+- **Objeto de rede posto por código usa o `NetworkManager` da sessão**, nunca o
+  `NetworkManager.Singleton` (`NetworkObject.InstantiateAndSpawn(prefab, manager, ...)`): na troca
+  de fase o da cena velha é destruído depois que o da nova ligou e deixa o `Singleton` vazio (o
+  Capitão nunca aparecia depois de passar pela porta do Level 0).
 - **Rede:** host autoritativo por IP direto (porta 7777), movimento com autoridade do dono.
   Estado que quem entra depois precisa ver (riscos, por exemplo) tem de ser reenviado na conexão,
   como faz `DrawingBoard.SendAll`.
@@ -271,7 +275,13 @@ são postos, o Capitão e as regras dele, objetivo, som, ordem de construção e
   desgaste (`LevelGenerator.WearAt`) tomba e empilha mais longe do início. As setas do caminho
   até a saída viram placas amarelas de curva pregadas na parede (`MountExitSigns`). Modelo novo
   só aparece na fase se entrar nas listas de algum tema (`WallItem`, `CornerItem`).
-- **43 modelos** feitos no Blender em 5 lotes (lista em `Docs/modelos-blender.md`, seção 7).
+- **65 modelos** feitos no Blender em 9 lotes (lista em `Docs/modelos-blender.md`, seção 7).
+- **Zonas** (um tema por bloco de 2 x 2, pela seed): jantar, sala de estar, loja, estoque, bagunça,
+  quarto, escritório, cubículos, lavanderia, festa, verão, vazio, a sala dos sofás e o sorteio (o
+  carro num beco sem saída fora do caminho, que vira obstáculo como uma barricada). Placas de
+  papelão penduradas com o nome da zona e PROIBIDO ENTRAR nas barricadas. Longe do início,
+  anomalias: mesa de cabeça para baixo no teto, móvel atravessando a parede pela metade,
+  guarda-roupa de frente para a parede, batente de porta solto.
 - **O Capitão na fase** (`CaptainBrain`, regras em `level1-mostruario.md`, seção 5.4): aparece pelo
   `EntityDirector` quando alguém chega a 8 células da sala inicial; ouve e vê como a entidade;
   congela quando algum jogador o tem na tela, sem parede no meio, **e** ele está iluminado
@@ -298,9 +308,11 @@ são postos, o Capitão e as regras dele, objetivo, som, ordem de construção e
   não abre mais com `mouth` (o modelo já tem a boca aberta). Desenho a partir de imagens do filme *Backrooms* (2026), a pedido; antes de
   publicar, ver a decisão em aberto 4 de `level1-mostruario.md` (direitos autorais).
 
-**Próximos passos:** as zonas novas com os modelos dos lotes `quarto`, `escritorio`,
-`festa_verao` e `sorteio_estoque`, as placas penduradas com texto e as anomalias (rodada 5, na
-branch `level1-anomalias`); depois, jogar à mão e ajustar os números.
+**Próximos passos:** jogar à mão (sozinho e em grupo) e ajustar os números (velocidades do
+Capitão, quantidade de barricadas, totens e plástico-bolha, distância das etiquetas). Do projeto
+ainda não existem: o conjunto repetido em três salas seguidas e a cama no corredor (anomalias), a
+porta da doca no lugar da porta corta-fogo e as pistas "olhos seguem" e "perna de pau marca o
+carpete" do Capitão.
 
 **Modelos novos:** escreva um lote em `Tools/Blender/lotes/` (ou peça a agentes, um por lote,
 com o modelo Sonnet; o roteiro do pedido está em `Docs/modelos-blender.md`, seção 6), rode-o

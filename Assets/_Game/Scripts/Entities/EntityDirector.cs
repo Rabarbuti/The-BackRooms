@@ -191,9 +191,12 @@ namespace BackRooms.Entities
                 return Entity;
             }
 
-            GameObject spawned = Instantiate(entityPrefab, position, rotation);
-            spawned.GetComponent<NetworkObject>().Spawn(true);
-            Entity = spawned.GetComponent<EntityBrain>();
+            // Pelo NetworkManager desta sessão, não pelo NetworkManager.Singleton: na troca de fase o
+            // da cena velha é destruído depois que o da nova já ligou e deixa o Singleton vazio
+            // (o Capitão nunca aparecia depois de passar pela porta do Level 0).
+            NetworkObject spawned = NetworkObject.InstantiateAndSpawn(entityPrefab, GetComponent<NetworkManager>(),
+                NetworkManager.ServerClientId, destroyWithScene: true, position: position, rotation: rotation);
+            Entity = spawned != null ? spawned.GetComponent<EntityBrain>() : null;
             return Entity;
         }
 
