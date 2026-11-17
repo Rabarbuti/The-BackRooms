@@ -92,6 +92,9 @@ namespace BackRooms.World
         /// <summary>Móveis em que dá para se esconder (guarda-roupas e mesas de jantar).</summary>
         public int HideSpots { get; private set; }
 
+        /// <summary>As três células do conjunto repetido (idênticas até a cadeira torta), ou vazio.</summary>
+        public readonly List<Vector2Int> RepeatCells = new List<Vector2Int>();
+
         /// <summary>Anomalias postas na última construção.</summary>
         public int Anomalies { get; private set; }
 
@@ -137,6 +140,9 @@ namespace BackRooms.World
         Transform _root;
         readonly HashSet<int> _totemCells = new HashSet<int>();
         int _sorteioCell = -1;
+        int _totemWant;
+        // Conjunto repetido: célula -> célula de onde ela copia a mobília (mesma sequência da seed).
+        readonly Dictionary<int, int> _repeatOf = new Dictionary<int, int>();
         bool _barricading;
         int _hideSpots, _sheets, _anomalies, _signs;
         bool _anomaly;
@@ -168,8 +174,14 @@ namespace BackRooms.World
 
             // Antes de qualquer móvel: as células entupidas (o LevelNav do inimigo já as evita) e
             // onde ficam os totens. Cada etapa tem a própria sequência da seed.
+            // As placas de saída já contam para o desenho das células (conjunto repetido).
+            _arrowFaces.Clear();
+            foreach (Decoration mark in _data.Decorations)
+                if (mark.Kind == DecorationKind.Arrow) _arrowFaces.Add((mark.X, mark.Z, mark.Side));
+
             ChooseBarricades();
             ChooseSorteio();
+            ChooseRepeat();
             ChooseTotemCells();
             Totem.Clear();
             BubbleWrap.Clear();
@@ -291,6 +303,68 @@ namespace BackRooms.World
                 if (AllReachable()) { _sorteioCell = pick; return; }
                 _data.Barricade[px, pz] = false;
             }
+        }
+
+        // O conjunto repetido (seção 4, regra 4): três células seguidas em linha, ligadas entre si,
+        // longe do início, com o mesmo desenho de paredes, pilares e placas. As três usam a
+        // mobília da primeira (o mesmo tema e a mesma sequência da seed): idênticas até a cadeira
+        // torta.
+        void ChooseRepeat()
+        {
+            _repeatOf.Clear();
+            RepeatCells.Clear();
+
+            var runs = new List<int[]>();
+            int w = _data.Width, h = _data.Height;
+            for (int z = 0; z < h; z++)
+                for (int x = 0; x < w; x++)
+                    for (int dir = 0; dir < 2; dir++)
+                    {
+                        int dx = dir == 0 ? 1 : 0, dz = dir == 0 ? 0 : 1;
+                        if (x + dx * 2 >= w || z + dz * 2 >= h) continue;
+                        WallSide step = dir == 0 ? WallSide.East : WallSide.North;
+                        bool ok = true;
+                        string shape = null;
+                        for (int k = 0; k < 3 && ok; k++)
+                        {
+                            int cx = x + dx * k, cz = z + dz * k;
+                            if (!Free(cx, cz) || _data.IsBarricade(cx, cz) || LevelGenerator.WearAt(_data, cx, cz) < 0.45f) ok = false;
+                            else if (SofaRoomBlock == new Vector2Int(cx / 2, cz / 2)) ok = false;
+                            else if (k < 2 && !_data.CanWalk(cx, cz, step, false)) ok = false;
+                            else
+                            {
+                                string here = CellShape(cx, cz);
+                                if (shape == null) shape = here;
+                                else if (shape != here) ok = false;
+                            }
+                        }
+                        if (!ok) continue;
+                        Theme theme = ThemeOf(x, z);
+                        if (theme == Theme.Vazio || theme == Theme.Sofas || theme == Theme.Bagunca) continue;
+                        runs.Add(new[] { x, z, dx, dz });
+                    }
+
+            if (runs.Count == 0) return;
+            int[] run = runs[Rng(287, 0, 0).Next(runs.Count)];
+            int source = run[0] + run[1] * w;
+            for (int k = 0; k < 3; k++)
+            {
+                int cx = run[0] + run[2] * k, cz = run[1] + run[3] * k;
+                _repeatOf[cx + cz * w] = source;
+                RepeatCells.Add(new Vector2Int(cx, cz));
+            }
+            unchecked { _hash = _hash * 31 + 1019 + source; }
+        }
+
+        // O desenho de uma célula: lados fechados, pilares dos cantos e placas de saída.
+        string CellShape(int x, int z)
+        {
+            var key = new System.Text.StringBuilder(12);
+            for (int s = 0; s < 4; s++) key.Append(Closed(x, z, s) ? 'F' : 'a');
+            key.Append(_data.Pillar[x, z] ? 'P' : '.').Append(_data.Pillar[x + 1, z] ? 'P' : '.');
+            key.Append(_data.Pillar[x, z + 1] ? 'P' : '.').Append(_data.Pillar[x + 1, z + 1] ? 'P' : '.');
+            for (int s = 0; s < 4; s++) key.Append(_arrowFaces.Contains((x, z, Sides[s])) ? 'S' : '-');
+            return key.ToString();
         }
 
         int OpenSides(int x, int z)
@@ -476,7 +550,7 @@ namespace BackRooms.World
             for (int z = 0; z < _data.Height; z++)
                 for (int x = 0; x < _data.Width; x++)
                 {
-                    if (!Free(x, z) || _data.IsBarricade(x, z)) continue;
+                    if (!Free(x, z) || _data.IsBarricade(x, z) || _repeatOf.ContainsKey(x + z * _data.Width)) continue;
                     if (SofaRoomBlock == new Vector2Int(x / 2, z / 2)) continue;
                     if (Mathf.Abs(x - _data.SpawnX) + Mathf.Abs(z - _data.SpawnZ) < 5) continue;
                     candidates.Add(x + z * _data.Width);
@@ -484,7 +558,10 @@ namespace BackRooms.World
 
             System.Random rng = Rng(233, 0, 0);
             int want = totemsMin + rng.Next(Mathf.Max(1, totemsMax - totemsMin + 1));
-            while (_totemCells.Count < want && candidates.Count > 0)
+            _totemWant = want;
+            // Algumas células de reserva: num canto apertado (pilar, móvel de parede) o totem não
+            // cabe, e a célula seguinte da lista o recebe. A conta para em "want".
+            while (_totemCells.Count < want + 4 && candidates.Count > 0)
             {
                 int pick = candidates[rng.Next(candidates.Count)];
                 candidates.Remove(pick);
@@ -587,7 +664,7 @@ namespace BackRooms.World
             for (int z = 0; z < _data.Height; z++)
                 for (int x = 0; x < _data.Width; x++)
                 {
-                    if (!Free(x, z) || _data.IsBarricade(x, z) || _totemCells.Contains(x + z * _data.Width)) continue;
+                    if (!Free(x, z) || _data.IsBarricade(x, z) || _totemCells.Contains(x + z * _data.Width) || _repeatOf.ContainsKey(x + z * _data.Width)) continue;
                     if (LevelGenerator.WearAt(_data, x, z) < 0.3f) continue;
                     candidates.Add(x + z * _data.Width);
                 }
@@ -740,7 +817,7 @@ namespace BackRooms.World
         void PlaceAnomaly(int x, int z, Vector3 origin, bool[] closed, bool[] signWall, bool[] used, int[][] cornersOfSide,
                           bool[] pillar, float gapW, float gapE, float gapS, float gapN, System.Random rng)
         {
-            int kind = rng.Next(4);
+            int kind = rng.Next(5);
             bool placed = false;
             _anomaly = true;
             try
@@ -778,6 +855,25 @@ namespace BackRooms.World
                             {
                                 placed = HalfThroughWall(x, z, side, origin, rng);
                             }
+                            if (placed) used[corners[0]] = used[corners[1]] = true;
+                        }
+                        break;
+                    }
+                    case 4:
+                    {
+                        // Cama no corredor: célula com só dois lados opostos abertos; a cama
+                        // encostada de lado numa das paredes, arrumada como se fosse um quarto.
+                        bool corridor = closed[0] == closed[1] && closed[2] == closed[3] && closed[0] != closed[2];
+                        if (!corridor) break;
+                        for (int side = 0; side < 4 && !placed; side++)
+                        {
+                            int[] corners = cornersOfSide[side];
+                            if (!closed[side] || signWall[side] || used[corners[0]] || used[corners[1]]) continue;
+                            Rect strip = WallStrip(side, pillar[corners[0]], pillar[corners[1]], gapW, gapE, gapS, gapN);
+                            float turn = rng.NextDouble() < 0.5 ? 90f : -90f;
+                            bool couple = rng.NextDouble() < 0.5;
+                            placed = PutScaled(couple ? "CamaDeCasal" : "CamaDeSolteiro", strip, WallAnchor(side, 0.5f), WallYaw(side) + turn,
+                                               origin, rng, couple ? 0.88f : 1f) != null;
                             if (placed) used[corners[0]] = used[corners[1]] = true;
                         }
                         break;
@@ -1049,7 +1145,18 @@ namespace BackRooms.World
                 return;
             }
 
-            Theme theme = ThemeOf(x, z);
+            // No conjunto repetido, a mobília é a da célula de origem: mesmo tema, mesma sequência
+            // da seed e mesmo desgaste (a cadeira tomba igual). Os enfeites sorteados à parte
+            // (plástico-bolha, anomalia, placa) ficam de fora, para não quebrar a cópia.
+            int sx = x, sz = z;
+            bool repeat = _repeatOf.TryGetValue(x + z * _data.Width, out int source);
+            if (repeat)
+            {
+                sx = source % _data.Width;
+                sz = source / _data.Width;
+            }
+
+            Theme theme = ThemeOf(sx, sz);
             bool totemHere = _totemCells.Contains(x + z * _data.Width);
 
             // Piso da zona: laminado nas vitrines de jantar e de estar, vinílico no estoque.
@@ -1057,8 +1164,8 @@ namespace BackRooms.World
             else if (theme == Theme.Estoque) LayFloor(x, z, vinylMaterial, FloorKind.Vinyl);
             if (theme == Theme.Vazio && !totemHere) return;
 
-            System.Random rng = Rng(53, x, z);
-            float wear = LevelGenerator.WearAt(_data, x, z);
+            System.Random rng = Rng(53, sx, sz);
+            float wear = LevelGenerator.WearAt(_data, sx, sz);
             var origin = new Vector3(x * Cell, 0f, z * Cell);
 
             bool[] closed = new bool[4];
@@ -1106,7 +1213,7 @@ namespace BackRooms.World
 
             // Totem: o primeiro canto livre em que ele couber. Sequência própria da seed, para
             // não mudar a mobília das outras células.
-            if (totemHere)
+            if (totemHere && Totem.All.Count < _totemWant)
             {
                 System.Random totemRng = Rng(239, x, z);
                 for (int c = 0; c < 4; c++)
@@ -1125,7 +1232,7 @@ namespace BackRooms.World
             }
 
             // Plástico-bolha: mais no estoque, às vezes perdido longe do início.
-            if (bubbleWrapMaterial != null)
+            if (bubbleWrapMaterial != null && !repeat)
             {
                 System.Random wrapRng = Rng(241, x, z);
                 double wrapChance = theme == Theme.Estoque ? 0.35 : theme == Theme.Vazio ? 0.0 : 0.06 * wear;
@@ -1133,7 +1240,7 @@ namespace BackRooms.World
             }
 
             // Anomalia: longe do início, de vez em quando, numa parede ou num canto que sobrou.
-            if (anomalyChance > 0f && wear >= 0.55f)
+            if (anomalyChance > 0f && wear >= 0.55f && !repeat)
             {
                 System.Random oddRng = Rng(263, x, z);
                 if (oddRng.NextDouble() < anomalyChance)
@@ -1141,7 +1248,7 @@ namespace BackRooms.World
             }
 
             // Placa da zona: uma por bloco de 2 x 2, pendurada no meio da primeira célula dele.
-            if (zoneSigns && labelMaterial != null && x % 2 == 0 && z % 2 == 0)
+            if (zoneSigns && labelMaterial != null && x % 2 == 0 && z % 2 == 0 && !repeat)
             {
                 string zone = theme == Theme.Jantar ? "SALA DE JANTAR" : theme == Theme.Estar ? "SALA DE ESTAR" : theme == Theme.Estoque ? "ESTOQUE" : null;
                 System.Random signRng = Rng(269, x, z);
@@ -1174,7 +1281,7 @@ namespace BackRooms.World
             // Festa: bandeirinhas atravessando os vãos abertos, rente ao teto.
             if (theme == Theme.Festa && Get("Bandeirinhas") != null)
             {
-                System.Random flagRng = Rng(281, x, z);
+                System.Random flagRng = Rng(281, sx, sz);
                 for (int s = 0; s < 4; s++)
                 {
                     if (Closed(x, z, s) || flagRng.NextDouble() > 0.6) continue;
@@ -1194,7 +1301,7 @@ namespace BackRooms.World
             // Quarto: tapete no meio da célula, rente ao chão, sem colisor.
             if (theme == Theme.Quarto && Get("Tapete") != null)
             {
-                System.Random rugRng = Rng(283, x, z);
+                System.Random rugRng = Rng(283, sx, sz);
                 if (rugRng.NextDouble() < 0.6)
                 {
                     var center = new Rect(Cell * 0.5f - 0.9f, Cell * 0.5f - 0.9f, 1.8f, 1.8f);

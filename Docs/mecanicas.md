@@ -145,6 +145,8 @@ Projeto completo em `level1-mostruario.md`.
 
 - **Totens:** 6 a 10 estátuas iguais ao Capitão de longe, numa base preta com a placa de OFERTA e
   com brilho de fibra de vidro. No apagão ele pode trocar de lugar com um totem que ninguém vê.
+  De perto, o Capitão de verdade vira a cabeça para quem está perto e a perna de pau dele deixa
+  marcas no chão.
 - **Esconderijos:** guarda-roupa (E; esconde sempre; dentro só se vê pela fresta) e debaixo da mesa
   de jantar (agachado + E; ele vê quem está no cone dele a até 6 m).
 - **Plástico-bolha:** estala alto e conta como corrida para o ouvido dele. **Barricadas** de móveis

@@ -53,6 +53,8 @@ namespace BackRooms.EditorTools
         static Vector3 _playerSpot, _captainSpot, _mark;
         static float _lookStart;
         static int _capturesBefore;
+        static bool _sideLook;
+        static float _sideStart, _angleBefore;
         static double _lastTry;
         static Vector3 _seenAt;
         static float _farthest;
@@ -202,18 +204,39 @@ namespace BackRooms.EditorTools
                     break;
 
                 case 4:
-                    if (!_captain.Frozen) { Finish(false, $"descongelou olhado com luz, depois de {InStage:F1} s"); return; }
-                    if (InStage < 2f) break;
+                {
                     var body = _captain.GetComponent<CaptainBody>();
-                    if (Moved() > 0.05f) { Finish(false, $"congelado, mas andou {Moved():F2} m"); return; }
-                    if (body == null || !body.Holding) { Finish(false, "congelado, mas o corpo não segurou a pose"); return; }
-                    Next($"olhado com luz congelou, ficou {InStage:F1} s parado com a pose segura");
+                    if (!_sideLook)
+                    {
+                        if (!_captain.Frozen) { Finish(false, $"descongelou olhado com luz, depois de {InStage:F1} s"); return; }
+                        if (InStage < 2f) break;
+                        if (Moved() > 0.05f) { Finish(false, $"congelado, mas andou {Moved():F2} m"); return; }
+                        if (body == null || !body.Holding) { Finish(false, "congelado, mas o corpo não segurou a pose"); return; }
+                        Notes.Add($"olhado com luz congelou, ficou {InStage:F1} s parado com a pose segura");
+
+                        // Os olhos seguem: o jogador vai para o lado dele (uns 70° da frente), olhando.
+                        if (!SideSpot(out Vector3 side)) { Finish(false, "não achei lugar ao lado do Capitão para conferir os olhos"); return; }
+                        _local.controller.Teleport(side, 0f);
+                        _sideLook = true;
+                        _sideStart = Now;
+                        _angleBefore = -1f;
+                        break;
+                    }
+
+                    Face(away: false);
+                    if (_angleBefore < 0f && Now - _sideStart > 0.15f) _angleBefore = body.HeadAngleTo(_local.playerCamera.transform.position);
+                    if (Now - _sideStart < 3f) break;
+                    if (!_captain.Frozen) { Finish(false, "olhado de lado com luz, descongelou"); return; }
+                    float angle = body.HeadAngleTo(_local.playerCamera.transform.position);
+                    if (angle > _angleBefore - 15f) { Finish(false, $"congelado, a cabeça não seguiu o jogador ao lado ({_angleBefore:F0}° -> {angle:F0}°)"); return; }
+                    Next($"congelado, a cabeça seguiu o jogador ao lado ({_angleBefore:F0}° -> {angle:F0}°)");
 
                     // 3. Apagão: escuro já, por bastante tempo.
                     LightsOut power = LightsOut.Instance;
                     power.darkSeconds = 600f;
                     power.firstDarkAt = (float)session.SessionSeconds - 0.05f;
                     break;
+                }
 
                 case 5:
                     if (LightsOut.Instance.Phase != PowerPhase.Dark)
@@ -273,7 +296,8 @@ namespace BackRooms.EditorTools
 
                 case 9:
                     // A luz volta; espera o jogador voltar da captura.
-                    if (LightsOut.Instance.Phase == PowerPhase.Dark || _local.controller.IsReturning || InStage < 3f) break;
+                    // E espera o cansaço de encarar das etapas anteriores passar de todo.
+                    if (LightsOut.Instance.Phase == PowerPhase.Dark || _local.controller.IsReturning || InStage < 3f || _captain.LocalStare > 0.01f) break;
                     PlaceBoth();
                     Face(away: false);
                     _lookStart = Now;
@@ -308,8 +332,13 @@ namespace BackRooms.EditorTools
                 }
 
                 case 11:
-                    Finish(true, string.Join("; ", Notes) + $"; congelou {_captain.Freezes} vez(es)");
+                {
+                    // A perna de pau marcou o chão pelo caminho todo.
+                    var marks = _captain.GetComponent<PegMarks>();
+                    if (marks == null || marks.Placed == 0) { Finish(false, "a perna de pau não deixou nenhuma marca no chão"); return; }
+                    Finish(true, string.Join("; ", Notes) + $"; congelou {_captain.Freezes} vez(es); a perna de pau deixou {marks.Placed} marca(s)");
                     break;
+                }
             }
         }
 
@@ -426,6 +455,28 @@ namespace BackRooms.EditorTools
                 if (Vector3.Distance(from, chest) > 5.5f) continue;
                 if (!Blocked(from, chest, root)) return true;
             }
+            return false;
+        }
+
+        // Um ponto a ~3,5 m do Capitão, de 60 a 85° da frente dele, com chão e visada livre até a
+        // cabeça dele (para conferir que a cabeça vira).
+        static bool SideSpot(out Vector3 spot)
+        {
+            spot = Vector3.zero;
+            var nav = new LevelNav(_level);
+            Transform root = _level.transform;
+            Vector3 at = _captain.transform.position;
+            Vector3 forward = Flat(_captain.transform.forward).normalized;
+            foreach (float angle in new[] { 70f, -70f, 60f, -60f, 80f, -80f, 85f, -85f })
+                foreach (float radius in new[] { 3.5f, 3f, 4f })
+                {
+                    Vector3 p = at + Quaternion.Euler(0f, angle, 0f) * forward * radius;
+                    if (!nav.WorldToCell(p, out int x, out int z) || _level.Data.InRoom(x, z) || _level.Data.IsBarricade(x, z)) continue;
+                    if (Blocked(p + Vector3.up * 1.65f, at + Vector3.up * 2.2f, root)) continue;
+                    if (Physics.CheckCapsule(p + Vector3.up * 0.35f, p + Vector3.up * 1.5f, 0.3f, ~0, QueryTriggerInteraction.Ignore)) continue;
+                    spot = new Vector3(p.x, _local.transform.position.y, p.z);
+                    return true;
+                }
             return false;
         }
 
