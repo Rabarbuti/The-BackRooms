@@ -31,6 +31,9 @@ namespace BackRooms.World
         /// <summary>Verdadeiro se ela acende quando há energia (não está queimada nem é só enfeite).</summary>
         public bool Works => _state == LightState.On || _state == LightState.Flicker;
 
+        /// <summary>De onde sai a luz (dentro da calha, rente ao forro). O Capitão confere se ela o alcança.</summary>
+        public Vector3 LightPosition => _lights != null && _lights.Length > 0 && _lights[0] != null ? _lights[0].transform.position : transform.position;
+
         void OnEnable()
         {
             if (!All.Contains(this)) All.Add(this);

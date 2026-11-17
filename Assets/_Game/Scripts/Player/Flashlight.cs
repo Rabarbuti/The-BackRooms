@@ -26,6 +26,9 @@ namespace BackRooms.Player
         public float Battery01 => batterySeconds <= 0f ? 0f : _battery / batterySeconds;
         public bool IsOn => _light != null && _light.enabled;
 
+        /// <summary>O facho (luz spot). O Capitão confere se está dentro dele.</summary>
+        public Light Beam => _light;
+
         Light _light;
         InputAction _toggle;
         float _battery;

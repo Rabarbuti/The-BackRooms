@@ -37,8 +37,13 @@ namespace BackRooms.Entities
     /// esconderijo (não é visto nem pego), atravessar um buraco pela faixa (ela não anda em
     /// faixa e tem de dar a volta) ou voltar para a sala inicial (ela não passa na porta).
     /// Quem é pego não morre: volta para a sala inicial, como quem cai num buraco.
+    ///
+    /// O Capitão do Level 1 (<see cref="CaptainBrain"/>) herda tudo isto e muda três coisas
+    /// pelos ganchos: fica parado quando é visto (<see cref="HoldStill"/>), anda no próprio
+    /// ritmo (<see cref="SpeedNow"/>) e não ocupa o <see cref="Instance"/> (que é a entidade
+    /// do Level 0, lida pela filmadora e pelos testes).
     /// </summary>
-    public sealed class EntityBrain : NetworkBehaviour
+    public class EntityBrain : NetworkBehaviour
     {
         /// <summary>A entidade da sessão, em qualquer máquina. Nula enquanto ela não apareceu.</summary>
         public static EntityBrain Instance { get; private set; }
@@ -129,9 +134,12 @@ namespace BackRooms.Entities
         PlayerNetwork _target;
         float _lastSeen;
 
+        /// <summary>Falso no Capitão: ele não é "a entidade" que a filmadora e os testes procuram.</summary>
+        protected virtual bool IsLevel0Entity => true;
+
         public override void OnNetworkSpawn()
         {
-            Instance = this;
+            if (IsLevel0Entity) Instance = this;
             _state.OnValueChanged += OnStateChanged;
         }
 
@@ -140,6 +148,12 @@ namespace BackRooms.Entities
             _state.OnValueChanged -= OnStateChanged;
             if (Instance == this) Instance = null;
         }
+
+        /// <summary>
+        /// Host, a cada quadro, depois de ouvir e decidir: verdadeiro faz o corpo ficar onde está
+        /// neste quadro, sem andar, sem virar e sem pegar ninguém. A entidade nunca para.
+        /// </summary>
+        protected virtual bool HoldStill(float now) => false;
 
         void OnStateChanged(byte before, byte after)
         {
@@ -169,6 +183,13 @@ namespace BackRooms.Entities
             }
 
             Think(now);
+
+            if (HoldStill(now))
+            {
+                _velocity = Vector3.zero;
+                return;
+            }
+
             Move(Time.deltaTime, now);
             TryCatch(now);
         }
@@ -181,11 +202,13 @@ namespace BackRooms.Entities
 
             if (_nav == null || _nav.Data != level.Data)
             {
+                // Fase nova: o destino era da fase velha. Na primeira vez não: quem a pôs no
+                // mapa já mandou ir a algum lugar (Alert), e esquecer isso a deixava parada.
+                if (_nav != null) _hasGoal = false;
                 _nav = new LevelNav(level);
                 _reach = _nav.NewMap();
                 _sound = _nav.NewMap();
                 _levelRoot = level.transform;
-                _hasGoal = false;
             }
 
             return true;
@@ -456,7 +479,8 @@ namespace BackRooms.Entities
 
         // ---------------------------------------------------------------- Movimento
 
-        float SpeedNow()
+        /// <summary>Velocidade desejada agora, pelo estado. O Capitão muda no apagão.</summary>
+        protected virtual float SpeedNow()
         {
             switch (State)
             {

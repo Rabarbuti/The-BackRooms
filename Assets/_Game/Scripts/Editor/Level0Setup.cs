@@ -77,7 +77,7 @@ namespace BackRooms.EditorTools
         /// <summary>
         /// O que muda de uma fase para outra ao montar a cena. O padrão é o Level 0; o Level 1
         /// de teste (Level1Setup) usa o mesmo montador com outra cena, mapa menor, sem buracos,
-        /// sem nichos, sem a entidade e com os móveis.
+        /// sem nichos, com o Capitão no lugar da entidade e com os móveis.
         /// </summary>
         public sealed class SceneOptions
         {
@@ -87,6 +87,10 @@ namespace BackRooms.EditorTools
             public bool pits = true;
             public bool alcoves = true;
             public bool entity = true;
+            /// <summary>Inimigo da fase no lugar da entidade (o Level 1 põe o Capitão). Nulo: a entidade.</summary>
+            public GameObject enemyPrefab;
+            /// <summary>A quantas células de caminhada da sala inicial alguém precisa chegar para o inimigo aparecer.</summary>
+            public int enemyWakeCells = 8;
             public bool paintedArrows = true;
             /// <summary>Piscinas (Level 2): profundidades, escadas e água.</summary>
             public bool pools;
@@ -341,7 +345,8 @@ namespace BackRooms.EditorTools
             {
                 var director = sessionObject.AddComponent<EntityDirector>();
                 director.session = session;
-                director.entityPrefab = entityPrefab;
+                director.entityPrefab = options.enemyPrefab != null ? options.enemyPrefab : entityPrefab;
+                director.wakeCells = options.enemyWakeCells;
             }
 
             // Apagão das luzes: a conta do tempo é igual em todas as máquinas.
@@ -640,7 +645,7 @@ namespace BackRooms.EditorTools
         // é calculado quando o editor valida o componente; num prefab criado por código isso
         // ainda não aconteceu, então o número ficaria 0 no arquivo. Aqui a validação é
         // forçada e o resultado é gravado.
-        static void StampNetworkId(GameObject prefab)
+        public static void StampNetworkId(GameObject prefab)
         {
             const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
 

@@ -12,7 +12,7 @@ nos projetos das fases (`level1-mostruario.md`, `level2-piscinas.md`, `plano-coo
 | Fase | Dá para jogar | Ameaça | Objetivo |
 |---|---|---|---|
 | Level 0 — o labirinto | Sim | A entidade (caça pelo barulho), buracos, apagão | Não: chegar à porta basta |
-| Level 1 — o Mostruário | Sim, versão de teste mobiliada | **Nenhuma** (o Capitão só tem corpo) | Não |
+| Level 1 — o Mostruário | Sim, versão de teste mobiliada | O Capitão (anda só quando não é visto iluminado) | Não |
 | Level 2 — As Piscinas | Sim, versão de teste com nado | **Nenhuma** (sem maré, sem ralo) | Não |
 
 O que mais falta é **algo a fazer** em cada fase (objetivo) e **algo a temer** nas duas últimas.
@@ -39,7 +39,8 @@ O plano ataca isso primeiro, na ordem do que mais muda o jogo pelo menor esforç
 corpo, a animação e o modelo já existem (`CaptainBody`), e o ouvido pode vir do `EntityBrain`.
 Projeto: `level1-mostruario.md`, seção 5.
 
-**Primeira rodada** (branch `capitao-cerebro`):
+**Primeira rodada** (branch `capitao-cerebro`) — **feita em 17/11/2026** (`CaptainBrain`,
+`CaptainAudio`, `Level1CaptainTest`; detalhes em `historico.md`):
 
 1. **Pôr o Capitão na fase.** Um prefab de rede como o `Entity` (registrado pelo Netcode em
    `DefaultNetworkPrefabs.asset`, nunca por código) e um diretor que decide onde e quando ele
@@ -151,8 +152,8 @@ Cada uma traz uma recomendação. Quem decidir anota a resposta aqui e no docume
 
 | # | Decisão | Recomendação |
 |---|---|---|
-| D1 | Começar pela Etapa 1 (Capitão) ou pela Etapa 2 (objetivo)? | **Etapa 1:** o Level 1 não tem ameaça nenhuma, e o Capitão está mais pronto. |
-| D2 | Encarar o Capitão por 6 s derruba a sanidade, que ainda não existe. O que acontece até lá? | **Só o chuvisco**, crescendo até tapar a imagem (decisão 2 de `level1-mostruario.md`). |
+| D1 | Começar pela Etapa 1 (Capitão) ou pela Etapa 2 (objetivo)? | **Decidido (17/11/2026): Etapa 1.** |
+| D2 | Encarar o Capitão por 6 s derruba a sanidade, que ainda não existe. O que acontece até lá? | **Decidido (17/11/2026): só o chuvisco**, crescendo dos 6 s aos 9 s até tapar a imagem; a partir daí quem encara deixa de segurá-lo. |
 | D3 | Na maré alta até o seco fica com água. Como sobra um refúgio? | **(a) Patamares altos** (+1,2 m) com escada: a maré continua uma só para o mapa todo e `PoolWater.SurfaceY` segue servindo. A (b), maré por região, exige várias superfícies de água. |
 | D4 | Quais propostas de `mecanicas.md` entram no plano? | Já: `P0.3` e `P2.5` (baratas). Depois da Etapa 1: `P1.3` (alto-falante). As outras esperam a fase ter ameaça e objetivo. |
 | D5 | A entidade do Level 0 aparece também no Level 1, rara? | **Não por enquanto:** ensinar uma regra por fase (decisão 3 de `level1-mostruario.md`). |

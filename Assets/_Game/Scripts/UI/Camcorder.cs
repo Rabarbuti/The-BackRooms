@@ -159,6 +159,15 @@ namespace BackRooms.UI
                 if (near > 0f) Glitch(near * near * entityNoiseMax, 0.5f);
             }
 
+            // Encarar o Capitão por muito tempo: o chuvisco cresce até tapar a imagem. É o que
+            // obriga alguém do grupo a desviar o olhar (CaptainBrain).
+            CaptainBrain captain = CaptainBrain.Captain;
+            if (captain != null && body != null)
+            {
+                float stare = Mathf.InverseLerp(captain.stareNoiseAfter, captain.stareBlindAfter, captain.LocalStare);
+                if (stare > 0f) Glitch(Mathf.Lerp(0.2f, 1f, stare), 0.6f);
+            }
+
             // Debaixo d'água a fita sofre: chuvisco forte enquanto a cabeça estiver submersa.
             if (body != null && body.IsUnderwater) Glitch(underwaterNoise, 0.4f);
 

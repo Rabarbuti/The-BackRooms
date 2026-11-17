@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -17,9 +18,10 @@ namespace BackRooms.Entities
     /// preto largo de fivela de latão; calça escura, bota marrom na direita e perna de pau na
     /// esquerda.
     ///
-    /// Por enquanto só aparência e pose: o cérebro dele ainda não existe. A pose sai de
-    /// <see cref="Pose"/>, como a da entidade do Level 0, para a ferramenta de prévia poder
-    /// fotografar fora do Play.
+    /// A pose sai de <see cref="Pose"/>, como a da entidade do Level 0, para a ferramenta de
+    /// prévia poder fotografar fora do Play. Em jogo, o cérebro (<see cref="CaptainBrain"/>)
+    /// diz quando ele está congelado: aí o corpo segura a pose do instante, mesmo no meio de um
+    /// passo, até ele voltar a andar.
     /// </summary>
     public sealed class CaptainBody : MonoBehaviour
     {
@@ -76,6 +78,15 @@ namespace BackRooms.Entities
         /// </summary>
         public static bool KeepAllJoints;
 
+        /// <summary>
+        /// Disparado a cada pé que bate no chão, com a velocidade do momento e se foi a perna de
+        /// pau (o "TOC") ou a bota (o pé que arrasta).
+        /// </summary>
+        public event Action<float, bool> Stepped;
+
+        /// <summary>Verdadeiro enquanto o corpo segura a pose porque o Capitão está congelado.</summary>
+        public bool Holding { get; private set; }
+
         // A perna de pau é a esquerda (índice 1; 0 é a direita, em +X).
         const int PegLeg = 1;
 
@@ -105,11 +116,13 @@ namespace BackRooms.Entities
         float _speed;
         float _phase;
         bool _built;
+        CaptainBrain _brain;
 
         void Awake()
         {
             Build();
             _lastPosition = transform.position;
+            _brain = GetComponent<CaptainBrain>();
         }
 
         void Update()
@@ -121,10 +134,21 @@ namespace BackRooms.Entities
             _lastPosition = transform.position;
             moved.y = 0f;
 
+            // Congelado: nada se mexe, nem a respiração. A velocidade guardada fica para a
+            // retomada sair do mesmo passo.
+            Holding = _brain != null && _brain.IsSpawned && _brain.Frozen;
+            if (Holding) return;
+
             float speed = moved.magnitude / dt;
             if (speed > 14f) speed = 0f;
             _speed = Mathf.Lerp(_speed, speed, 1f - Mathf.Exp(-8f * dt));
+
+            // Meio ciclo = um passo. Na primeira metade do ciclo o pé que bate é o da perna de pau
+            // (a de índice PegLeg vai para a frente com o seno positivo, ver Pose).
+            float before = _phase;
             _phase += _speed / Mathf.Max(0.5f, strideLength) * dt;
+            if (_speed > 0.3f && Mathf.FloorToInt(_phase * 2f) != Mathf.FloorToInt(before * 2f))
+                Stepped?.Invoke(_speed, Mathf.FloorToInt(_phase * 2f) % 2 == 0);
             if (_phase > 1000f) _phase -= 1000f;
 
             float still = Mathf.Clamp01(1f - _speed / 0.3f);

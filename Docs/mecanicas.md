@@ -130,18 +130,21 @@ Projeto completo em `level1-mostruario.md`.
   nunca fecham uma passagem.
 - **Placas amarelas** de curva na parede apontam o caminho até a saída.
 - **Apagão**, como no Level 0.
-- **Sem inimigo e sem objetivo:** anda-se até a porta.
+- **O Capitão** (desde 17/11/2026; `level1-mostruario.md`, seção 5): homem de 2,6 m vestido de
+  pirata, a mascote de uma loja de móveis. Aparece quando alguém se afasta da sala inicial.
+  - **Ouve** e vê como a entidade do Level 0.
+  - **Só se mexe quando ninguém olha.** Visto e iluminado (luminária acesa perto ou lanterna),
+    congela no meio do passo e não pega ninguém.
+  - **Não dá para vigiar para sempre:** encarado mais de 6 s, o chuvisco cresce; aos 9 s a imagem
+    some e quem encarava deixa de segurá-lo. Alguém precisa desviar, e o grupo combina quem olha.
+  - **Manca devagar** (mais devagar que quem anda); **no apagão anda livre**, em arrancadas.
+  - Pega como a entidade (NO SIGNAL, volta à sala inicial).
+  - Avisa com o som da perna de pau ("TOC… arrasta").
+- **Sem objetivo:** anda-se até a porta.
 
 ### Planejado (`level1-mostruario.md`)
 
-- **O Capitão** (seção 5): homem de 2,6 m vestido de pirata, a mascote de uma loja de móveis. O
-  corpo já existe; falta o comportamento.
-  - **Ouve** como a entidade do Level 0.
-  - **Só se mexe quando ninguém olha.** Visto e iluminado, congela no meio do passo.
-  - **Não dá para vigiar para sempre:** encará-lo mais de 6 s enche a tela de chuvisco. Alguém
-    precisa desviar, e o grupo combina quem olha.
-  - **No apagão anda livre**, em arrancadas rápidas.
-  - Avisa com o som da perna de pau ("TOC… arrasta") e um jingle de loja desafinado.
+- **O jingle de loja desafinado** perto do Capitão, e a música da loja (seção 7).
 - **Totens** (seção 5.4): 6 a 10 estátuas iguais a ele de longe. O totem tem base preta e placa de
   OFERTA; o de verdade, sangue no casaco e olhos que seguem. No apagão ele pode trocar de lugar
   com um totem.

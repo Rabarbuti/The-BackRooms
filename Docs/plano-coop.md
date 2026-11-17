@@ -157,8 +157,8 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
 - **Buracos:** som de queda, faixa que quebra ou balança.
 - **Opções:** gráficos, resolução e pasta da gravação.
 - **Mais níveis.** O segundo está projetado em `level1-mostruario.md`. Existe uma versão de
-  teste jogável (`Scenes/Level1_Test.unity`: mapa pequeno mobiliado, sem entidade) e o corpo do
-  inimigo (`CaptainBody`); já dá para escolher a fase no menu e a porta de saída leva à fase
+  teste jogável (`Scenes/Level1_Test.unity`: mapa pequeno mobiliado) com o inimigo dela, o
+  Capitão (`CaptainBrain`: só anda quando ninguém o vê iluminado); já dá para escolher a fase no menu e a porta de saída leva à fase
   seguinte, mas o objetivo de cada fase (seção 2.3) ainda não existe: hoje abrir a porta basta
   para zerar. A porta não tem som nem animação de abrir, e ainda não existe jogador morto (todos
   os que estão no mapa precisam chegar à porta).
