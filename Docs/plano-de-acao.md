@@ -1,149 +1,224 @@
-# Plano de ação
+# Plano de ação: até a entrega
 
-O que fazer a seguir, em que ordem, e o que precisa ser decidido antes. Escrito em 17/11/2026.
+O que falta para o jogo fechar como produto, em que ordem, com o que muda no código, os testes e o
+critério de pronta de cada etapa. Reescrito em 19/11/2026 (o plano de 17/11/2026, que levou o
+Capitão ao Level 1, está cumprido; o resumo dele ficou no `historico.md`).
 
-As mecânicas citadas aqui estão explicadas em `mecanicas.md` (com os códigos `PC.1`, `P0.1`...) e
-nos projetos das fases (`level1-mostruario.md`, `level2-piscinas.md`, `plano-coop.md`).
+As mecânicas citadas estão explicadas em `mecanicas.md` (códigos `PC.1`, `P0.3`...) e nos projetos
+das fases (`level1-mostruario.md`, `level2-piscinas.md`, `level3-escritorio.md`, `plano-coop.md`).
+
+**A meta da entrega:** toda fase tem **algo a fazer** (um objetivo que destranca a saída) e **algo a
+temer** (uma ameaça própria), e o jogo abre, ensina, termina e se configura como um produto.
 
 ---
 
-## Onde estamos
+## Onde estamos (19/11/2026)
 
-| Fase | Dá para jogar | Ameaça | Objetivo |
+Antes deste plano (manhã de 19/11/2026):
+
+| Fase | Ameaça | Objetivo |
+|---|---|---|
+| Level 0 — o labirinto | A entidade, buracos, apagão | **Não**: chegar à porta bastava |
+| Level 1 — o Mostruário | O Capitão, totens, plástico-bolha, barricadas | Teclado na porta, código em três etiquetas |
+| Level 2 — As Piscinas | **Nenhuma** | **Não** |
+| Level 3 — O Escritório | Só clima (onda de luzes, elevador) | **Não** |
+
+**Depois das etapas 0 a 5 (fim de 19/11/2026)**, todas testadas por máquina, nenhuma jogada à mão:
+
+| Fase | Ameaça | Objetivo | Falta para a entrega |
 |---|---|---|---|
-| Level 0 — o labirinto | Sim | A entidade (caça pelo barulho), buracos, apagão | Não: chegar à porta basta |
-| Level 1 — o Mostruário | Sim, completo (17/11/2026) | O Capitão, totens, plástico-bolha, barricadas | Sim: teclado na porta, código em três etiquetas |
-| Level 2 — As Piscinas | Sim, versão de teste com nado | **Nenhuma** (sem maré, sem ralo) | Não |
+| Level 0 | A entidade, buracos, apagão | **Disjuntores** (Etapa 1) | Jogar à mão |
+| Level 1 | O Capitão e o resto | Teclado e etiquetas | Jogar à mão e ajustar números |
+| Level 2 | **A maré e o ralo na vazante** (Etapa 2) | **Válvulas e drenagem** (Etapa 3) | Jogar à mão; maré e drenagem em dois editores |
+| Level 3 | **A entidade do Level 0** (Etapa 4) | **Alarme de incêndio** (Etapa 4) | Jogar à mão; som ambiente |
 
-O que mais falta é **algo a fazer** em cada fase (objetivo) e **algo a temer** nas duas últimas.
-O plano ataca isso primeiro, na ordem do que mais muda o jogo pelo menor esforço.
+Em todas: bateria da lanterna e pilhas, sons da porta e tela de opções (Etapa 5). Falta a Etapa 6
+inteira e, da Etapa 5, o som ambiente do Escritório e a conferência de planta do Level 2 e do Level 3
+em dois editores.
 
 ---
 
 ## Como trabalhar
 
-- **Uma branch curta por etapa** (ou por parte de etapa), saindo da `main` atualizada e voltando
-  por PR assim que os testes passam. Depois do merge, apaga-se a branch.
-- **Cada etapa termina com os testes que o `CLAUDE.md` pede** para o que ela mexe, e o PR diz o
-  que passou por máquina e o que não foi testado à mão.
-- **Etapa pronta = jogada à mão pelo menos uma vez**, de preferência em dois jogadores. Os testes
-  por máquina conferem regras; se a mecânica dá medo ou graça, só jogando.
-- Quando uma etapa termina, o documento da fase passa a marcá-la como feita, e a proposta usada sai
-  de `mecanicas.md`.
+- **Uma branch curta por etapa**, saindo da ponta da `level3-escritorio` enquanto o PR 10 (o Level 3)
+  não entra na `main`; depois, da `main`. Volta por PR assim que os testes passam.
+- **Cada etapa termina com os testes que o `CLAUDE.md` pede** para o que ela mexe, mais um teste novo
+  por máquina para cada mecânica nova. O PR diz o que passou por máquina e o que não foi testado à
+  mão.
+- **A geração continua determinística.** O que a etapa põe no mapa sai de um `System.Random` próprio
+  (seed misturada a uma constante), depois de tudo: nenhuma etapa muda o hash da planta das seeds que
+  já existem (`LevelGenerator`, `PoolGenerator.Hash`, `OfficeGenerator.Hash`, `PropLayer.Hash`).
+- **O que acontece junto** (maré, ralo acordando na vazante, onda de luzes) é conta sobre
+  `GameSession.SessionSeconds`; **o que um jogador causa** (armar um ponto do objetivo) vai ao host por
+  mensagem nomeada e o host avisa todos, inclusive quem entra depois (o molde do `ExitLock`).
+- Quando uma etapa entra: doc da fase, `mecanicas.md`, `historico.md` e `CLAUDE.md` atualizados.
 
 ---
 
-## Etapa 1 — O Capitão no Level 1
+## Etapa 0 — Fechar a junção da `main` no Level 3 (feita em 19/11/2026)
 
-**Por que primeiro:** o Level 1 não tem ameaça nenhuma, e o Capitão é o que mais está pronto: o
-corpo, a animação e o modelo já existem (`CaptainBody`), e o ouvido pode vir do `EntityBrain`.
-Projeto: `level1-mostruario.md`, seção 5.
+A `level3-escritorio` recebeu a `main` (Level 1 completo e lanterna; commit `879a2e9`). Antes de mexer
+em qualquer coisa, a bateria inteira roda de novo, um editor de cada vez: os geradores das três fases
+(`Level3Setup`, `Level1Setup`, `Level2Setup` `.BatchCheck`), os testes em Play de cada fase, o seletor
+de fase e a fumaça do Level 0. Conteúdo regravado pelos geradores vai num commit próprio.
 
-**Primeira rodada** (branch `capitao-cerebro`) — **feita em 17/11/2026** (`CaptainBrain`,
-`CaptainAudio`, `Level1CaptainTest`; detalhes em `historico.md`):
-
-1. **Pôr o Capitão na fase.** Um prefab de rede como o `Entity` (registrado pelo Netcode em
-   `DefaultNetworkPrefabs.asset`, nunca por código) e um diretor que decide onde e quando ele
-   aparece, no molde do `EntityDirector`. A cena do Level 1 é montada pelo `Level1Setup`.
-2. **Ouvido:** a mesma conta de barulho do `EntityBrain` (parado, agachado, andando, correndo).
-3. **Congela quando visto e iluminado.** O host confere, a cada quadro, se algum jogador o tem na
-   tela com linha de visada **e** se ele está sob uma luminária acesa ou no facho de uma lanterna.
-   Se sim, ele para onde está, mesmo no meio do passo. Os raios descartam o próprio jogador (o
-   padrão de `PenTool.TryAim`).
-4. **Apagão é a hora dele:** no escuro, sem lanterna nele, anda livre e em arrancadas (5,2 m/s por
-   1,5 s); fora disso manca a 1,7 m/s.
-5. **Encarar por mais de 6 s:** o chuvisco da filmadora cresce até tapar a imagem (decisão D2).
-6. **Captura:** igual à da entidade (NO SIGNAL e volta para a sala inicial).
-7. **Som:** "TOC… arrasta" da perna de pau, sintetizado em código como os sons da entidade, e
-   exportável em WAV pelo menu para ouvir sem jogar.
-8. **Só pisa onde o `LevelNav` deixa:** fora da sala inicial.
-
-**Teste novo** (`Level1CaptainTest`): ele anda quando ninguém olha; congela quando é olhado com
-luz; anda quando é olhado no escuro; congela no facho da lanterna durante o apagão; pega quem fica
-parado na frente dele no escuro.
-
-**Testes:** `Level1Setup.BatchCheck`, `Level1PlayTest`, `Level1CaptainTest`, fumaça do Level 0,
-`LevelSelectTest` e dois editores (o Capitão é objeto de rede).
-
-**Segunda rodada** — **feita em 17/11/2026**, junto com o resto do Level 1 (barricadas, objetivo,
-som; ver `historico.md`): totens e a troca de lugar no apagão, guarda-roupa e mesa de esconder,
-plástico-bolha.
+**Pronta quando:** a bateria passa (ou cada falha está explicada e separada do merge) e o texto do
+PR 10 diz o resultado.
 
 ---
 
-## Etapa 2 — Objetivo comum, começando pelos disjuntores do Level 0
+## Etapa 1 — Objetivo comum (`PC.1`) e os disjuntores do Level 0 (feita em 19/11/2026, menos jogar à mão)
 
-**Por que agora:** nenhuma fase tem objetivo, e os três objetivos planejados têm a mesma forma
-(proposta `PC.1` de `mecanicas.md`): *N pontos distantes ativados dentro de uma janela de tempo*.
-Um componente só serve às três fases.
+Branch `objetivo-disjuntores`.
 
-**Primeira rodada** (branch `objetivo-disjuntores`):
+**O componente** (`SwitchObjective`, em `Scripts/World`): *N pontos distantes ativados dentro de uma
+janela de tempo* (`mecanicas.md`, `PC.1`). Serve ao Level 0 (disjuntores), ao Level 2 (válvulas) e ao
+Level 3 (acionadores do alarme de incêndio); muda só o tipo do ponto (aparência, som e textos).
 
-1. **O ponto de objetivo:** um componente posto pela seed, ativado segurando E por alguns
-   segundos, que faz barulho enquanto é ativado (o inimigo ouve).
-2. **A regra da janela:** os pontos precisam estar ativos ao mesmo tempo, dentro de N segundos. O
-   host confere. **Sozinho**, cada ponto fica ativo depois de ativado.
-3. **Estado pela rede**, reenviado a quem entra depois (como `DrawingBoard.SendAll`).
-4. **A porta de saída fica trancada** até o objetivo ser cumprido; o painel da filmadora diz o
-   que falta.
-5. **Level 0:** disjuntores na parede que zumbem de longe (a pista é o som). Quantidade =
-   jogadores + 1, no mínimo 2 (`plano-coop.md`, seção 2.3).
-6. **A seed não pode mudar o mapa que já existe.** Os pontos são sorteados por um
-   `System.Random` próprio, depois de tudo, e o teste de fumaça confere que o hash do mapa da
-   seed 1998 continua o mesmo.
+1. **Pontos postos pela seed, sem mudar o mapa:** um `System.Random(seed ^ constante)` próprio escolhe,
+   depois de tudo, paredes fechadas longe do início e longe umas das outras (distância andando pela
+   grade, para uma pessoa só não conseguir armar dois dentro da janela correndo).
+2. **Armar:** mirar o ponto (o padrão de mira de `PenTool.TryAim`) e segurar E por alguns segundos.
+   Enquanto segura, o jogador faz barulho de corrida (`PlayerNetwork.Working` → o `EntityBrain` ouve).
+3. **A janela:** o host guarda a hora em que cada ponto foi armado (`SessionSeconds`); o objetivo se
+   cumpre quando há ao mesmo tempo tantos pontos armados quanto pede (2 com até dois jogadores, 3 com
+   três ou quatro), cada um valendo pela janela. **Sozinho, a janela some**: ponto armado fica armado.
+4. **Rede:** o cliente avisa o host ao terminar de armar; o host confere a distância, arma e manda o
+   estado a todos (e a quem entra depois, junto com a seed, como os riscos e o `ExitLock`).
+5. **A porta de saída fica trancada** até o objetivo se cumprir (`LevelExit.Locked`); a filmadora diz o
+   que falta (`NO POWER`, `1/2`) e, mirando um ponto, o que a tecla faz e quanto falta da janela.
+6. **Level 0:** quatro caixas de disjuntor cinza na parede, cada uma zumbindo de longe (a pista é o
+   som), com uma lâmpada vermelha que fica verde enquanto o disjuntor vale. Cumprido o objetivo, as
+   luminárias piscam e a porta destrava com um estalo.
 
-**Teste:** o teste de fumaça ganha "a porta não abre antes; arma os disjuntores; a porta abre", e
-o `LevelSelectTest` passa a armar os disjuntores antes de abrir a porta. Dois editores: cada um
-arma um disjuntor dentro da janela; fora da janela, não vale.
+**Testes:** novo `Level0ObjectiveTest` (porta trancada; mira mostra o aviso; segurar E arma; um ponto
+só não destranca com dois jogadores contados; sozinho, dois destrancam; a porta abre; o mapa da seed
+1998 tem o mesmo hash de antes); `Level0SmokeTest`; `LevelSelectTest` (cumpre o objetivo antes de abrir
+a porta do Level 0); `Level0ColliderCheck`; dois editores (`Level0ObjectiveTest.BatchHost` +
+`BatchJoin`: cada um arma um disjuntor dentro da janela e a porta destrava nos dois; quem entra depois
+acha o estado).
 
-**Depois, com o mesmo componente:**
+**Depois, se sobrar tempo antes da entrega:** o painel de código do Level 0 (um lê o código num ponto
+do mapa, outro digita), reaproveitando o `ExitLock`.
 
-- **Painel de código do Level 0:** um jogador lê o código num ponto do mapa, outro digita no
-  painel (`plano-coop.md`, seção 2.3).
-- **Level 1:** o teclado da porta da doca e as três etiquetas vermelhas de LIQUIDAÇÃO
-  (`level1-mostruario.md`, seção 6).
-- **Level 2:** as válvulas das casas de máquinas (`level2-piscinas.md`, seção 6). Depende da
-  Etapa 3 para a drenagem.
-
----
-
-## Etapa 3 — A maré nas Piscinas
-
-**Por que depois:** é o evento global da fase (no lugar do apagão), mas depende de uma decisão de
-desenho (D3) e mexe no que mais quebrou até hoje: sair da água funda.
-Projeto: `level2-piscinas.md`, seção 4.3.
-
-**Antes de começar:** decidir D3 (o refúgio seco).
-
-**O que muda no código:**
-
-1. **O nível da água varia com o relógio da sessão** (`GameSession.SessionSeconds`), igual em
-   todas as máquinas: 60 s parada, 15 s subindo até +0,9 m, 15 s descendo. Hoje o jogador, os
-   passos e a filmadora já leem a altura de `PoolWater.SurfaceY`; o que é fixo é a superfície
-   (`LevelData.WaterLevel`), a malha da água (só nas células molhadas) e as regras do gerador.
-2. **Água onde hoje é seco:** na maré alta o seco e o raso ficam cobertos, então a malha da água
-   tem de existir também sobre eles.
-3. **O caminho a pé continua sem nado na maré alta** (regra nova no `PoolGenerator.Validate`).
-4. **Aviso:** 10 s antes, ralos borbulhando e um "glub" grave.
-
-**Testes:** todos os das Piscinas (`Level2Setup.BatchCheck`, `Level2PlayTest`, `Level2EscapeTest`
-nas seeds de conferência, `Level0ColliderCheck.BatchRunLevel2`, `Level2SoundTest`,
-`LevelSelectTest`). O `Level2EscapeTest` precisa passar também na maré alta e com a água subindo.
-
-**Depois:** o ralo e os túneis submersos (seção 5), e a drenagem com as válvulas da Etapa 2.
+**Pronta quando:** os testes passam e alguém jogou o Level 0 sozinho até a porta.
 
 ---
 
-## Pequenas, para encaixar entre as etapas
+## Etapa 2 — A maré e o ralo: a ameaça das Piscinas (feita em 19/11/2026, menos o ralo que acorda com barulho e jogar à mão)
 
-Baratas, independentes, boas para quem tiver um dia livre:
+Branch `piscinas-mare`. Projeto: `level2-piscinas.md`, seções 4.3 e 5.
 
-- **`P0.3` — Lanterna com bateria e pilhas no chão.** Deixa o apagão tenso de verdade.
-- **`P2.5` — Marcar onde dá pé.** Já funciona (a caneta não risca debaixo d'água); falta ensinar:
-  um bilhete na sala inicial e marcas de exploradores anteriores.
-- **Conferir a mobília do Level 1 entre host e cliente** (dois editores), pendente desde que a
-  `PropLayer` existe.
-- **Som da porta de saída** (abrir, trancada).
+1. **A água se move.** A altura vem de uma conta só (`PoolWater.LevelAt(segundos)`), igual em todas as
+   máquinas pelo `SessionSeconds`: ciclo de 90 s, 60 s parada, 15 s subindo até +0,9 m e 15 s descendo.
+   O jogador, os passos, a filmadora e a caneta já leem `PoolWater.SurfaceY`, que é a altura do objeto
+   da água: basta movê-lo. A lâmina passa a cobrir também o seco (escondida sob o piso enquanto a
+   água está baixa), para a maré alta aparecer onde inunda.
+2. **Aviso:** 10 s antes de subir, um "glub" grave e longe e a água borbulhando nos poços.
+3. **O ralo** (seção 5): na **vazante** (os 15 s em que a maré desce) a água sai pelos ralos dos poços,
+   e quem nada num poço ou numa funda vizinha é puxado para a grade, mais forte quanto mais perto;
+   chegar à grade é afogar. Antes, as lâmpadas do poço piscam e a superfície gira. Além da vazante,
+   **barulho perto de um poço acorda o ralo dele** por 8 s: o host ouve (a conta do `EntityBrain`) e
+   avisa todos com a hora do despertar; cada máquina puxa o próprio jogador.
+4. **A planta não muda** (nenhuma regra nova no `PoolGenerator`; decisão D3 abaixo).
+
+*Feito:* tudo menos o despertar por barulho (o ralo puxa só na vazante; o despertar pelo host fica para
+depois da entrega). O puxão é de 1,5 m/s para baixo, que quem segura Espaço (1,6 m/s) vence devagar.
+
+**Testes:** novo `Level2TideTest` (a altura segue o relógio; o seco inunda na maré alta; no raso, de
+pé, a cabeça fica fora d'água; na vazante, nadando sobre um poço, é puxado e se afoga; longe, não;
+barulho perto do poço acorda o ralo); `Level2Setup.BatchCheck`, `Level2PlayTest`, `Level2EscapeTest`
+(seeds de conferência; com a maré parada, como hoje), `Level0ColliderCheck.BatchRunLevel2`,
+`Level2SoundTest`, `LevelSelectTest`.
+
+**Pronta quando:** os testes passam e alguém atravessou uma maré inteira jogando.
+
+---
+
+## Etapa 3 — Válvulas e drenagem: o objetivo das Piscinas (feita em 19/11/2026, menos dois editores e jogar à mão)
+
+Branch `piscinas-drenagem`. Projeto: `level2-piscinas.md`, seção 6.
+
+1. **Duas válvulas** (o `SwitchObjective` da Etapa 1, tipo válvula): rodas vermelhas na parede de
+   células secas, a pelo menos 8 células uma da outra e fora das salas de poço, postas pela seed sem
+   mudar a planta (as casas de máquinas como salas próprias do gerador ficam para depois: mudariam o
+   hash de todas as seeds). Girar leva 6 s e faz barulho (acorda os ralos por perto). Janela de 5 s.
+2. **Drenagem:** cumprido o objetivo, a água do mapa todo desce 2 m em 30 s (a mesma altura da
+   maré, somada) e a maré para; a saída destranca. A porta continua na sala seca da saída (a porta no
+   fundo do grande poço fica para quando o gerador puder mudar).
+3. Quem entra depois de drenado acha a água baixa (o estado vai com a seed).
+
+**Testes:** o `ObjectiveTest.BatchRunLevel2` faz o papel do `Level2DrainTest` planejado (porta
+trancada; as duas válvulas drenam; a água desce; a porta abre), mais os da Etapa 2. Falta o de dois
+editores (o cliente vendo a água descer).
+
+**Pronta quando:** os testes passam e alguém drenou jogando.
+
+---
+
+## Etapa 4 — Alarme de incêndio e a entidade: o Level 3 (feita em 19/11/2026, menos os armários que batem e jogar à mão)
+
+Branch `escritorio-alarme`. Projeto: `level3-escritorio.md`, seções 3 e 6.
+
+1. **Objetivo:** a porta corta-fogo da escada só destrava com o **alarme de incêndio** disparado.
+   Acionadores manuais vermelhos nos corredores (o `SwitchObjective`, tipo alarme), longe uns dos
+   outros; armar os que a regra pede dentro da janela dispara a sirene e as luzes de emergência, e a
+   porta da escada destrava.
+2. **Ameaça:** a entidade do Level 0 passa a morar no Escritório (decisão 4 de `level3-escritorio.md`:
+   a opção "usa a entidade do Level 0"; o `LevelNav` já anda pela grade do Escritório). Ela ouve o
+   piso duro e, quando o alarme dispara, corre para o acionador que o disparou: a fuga até a escada é o
+   clímax da fase.
+3. **Armários batem** (ideia 5 da seção 6): uma sequência de portas batendo num corredor longe, pelo
+   relógio da sessão; a entidade ouve o mesmo barulho e vai até lá. *Não feito.*
+
+**Testes:** novo `Level3ObjectiveTest` (porta trancada; armar dispara o alarme; a porta abre; a
+entidade aparece e caça), `Level3Setup.BatchCheck`, `Level3PlayTest` (cumpre o objetivo antes de abrir),
+`LevelSelectTest`, fumaça do Level 0 (o `EntityBrain` é o mesmo).
+
+**Pronta quando:** os testes passam e alguém zerou o Level 3 jogando.
+
+---
+
+## Etapa 5 — As pequenas, para todas as fases (pilhas, sons da porta e opções feitos em 19/11/2026)
+
+Cada uma é uma branch curta própria, em qualquer ordem:
+
+- **`P0.3` — Lanterna com bateria e pilhas no chão.** `Flashlight.infiniteBattery` desligado nas
+  fases; pilhas postas pela seed (`System.Random` próprio), pegas com E por quem chega primeiro (o
+  host decide e avisa todos; quem entra depois recebe as que já sumiram). A filmadora já desenha a
+  bateria. Teste: a bateria cai acesa; pegar uma pilha recarrega; a pilha some nas duas máquinas.
+- **Som e animação da porta de saída:** trancada (chacoalha), destravando (estalo), abrindo (a folha
+  gira ao passar de fase).
+- **Som ambiente do Escritório:** ar-condicionado e reatores, sintetizados como o `FluorescentHum`.
+- **Tela de opções** no menu: volume geral e da música, sensibilidade do mouse, qualidade (os três
+  perfis do HDRP), pasta da gravação. Guardadas em `PlayerPrefs`.
+- **Conferência de planta entre host e cliente** no Level 2 e no Level 3 (dois editores, como o
+  `Level1Setup` já faz para a mobília).
+
+---
+
+## Etapa 6 — Fechar como produto
+
+- **Fim do jogo:** passar a porta do Level 3 mostra um encerramento ("fim da fita") com o tempo de
+  cada fase, e volta ao menu (hoje já volta ao menu).
+- **Bilhete de ensino** em cada sala inicial (o que fazer nesta fase, sem texto em excesso), no molde
+  do bilhete do Level 1: disjuntores, válvulas, alarme, e `P2.5` (marcar onde dá pé com a caneta).
+- **Build para Windows** e uma partida inteira jogada nela, sozinho e em dois.
+- **Desempenho** medido nas quatro fases (`Level0Benchmark` e o equivalente das outras).
+- **Decisão 4 de `level1-mostruario.md`** (o desenho do Capitão a partir do filme) resolvida antes
+  de publicar fora do grupo.
+
+---
+
+## Fora da entrega
+
+| O quê | Por quê fica de fora |
+|---|---|
+| Voz por proximidade e walkie-talkie (Vivox) | Depende de conta e serviço da Unity, custo por uso e credenciais no projeto; o grupo joga com voz de fora (Discord). As mecânicas não dependem dela. |
+| Entrar por código de sala (Relay) | Precisa ativar o projeto no painel da Unity Cloud (ação de quem tem a conta). O IP direto basta para jogar entre amigos; volta ao plano se o jogo for publicado. |
+| Sanidade e alucinações | Sistema grande, que mexe em todas as fases e ainda não tem desenho fechado (D2 já trocou o efeito por chuvisco). As ameaças de cada fase já cumprem o papel. |
+| Sala de contenção e resgate | Muda a regra de captura de todas as fases e pede uma sala nova em cada gerador. Hoje quem é pego volta ao início, o que funciona sozinho e em grupo. Primeira candidata depois da entrega. |
+| Painel de código do Level 0, casas de máquinas e porta no fundo do poço (Level 2), túneis submersos, modelos do Blender do Escritório e das Piscinas | Mudam a planta (hash) ou são acabamento visual: o jogo fecha sem eles. |
 
 ---
 
@@ -151,22 +226,13 @@ Baratas, independentes, boas para quem tiver um dia livre:
 
 Cada uma traz uma recomendação. Quem decidir anota a resposta aqui e no documento da fase.
 
-| # | Decisão | Recomendação |
+| # | Decisão | Situação |
 |---|---|---|
-| D1 | Começar pela Etapa 1 (Capitão) ou pela Etapa 2 (objetivo)? | **Decidido (17/11/2026): Etapa 1.** |
-| D2 | Encarar o Capitão por 6 s derruba a sanidade, que ainda não existe. O que acontece até lá? | **Decidido (17/11/2026): só o chuvisco**, crescendo dos 6 s aos 9 s até tapar a imagem; a partir daí quem encara deixa de segurá-lo. |
-| D3 | Na maré alta até o seco fica com água. Como sobra um refúgio? | **(a) Patamares altos** (+1,2 m) com escada: a maré continua uma só para o mapa todo e `PoolWater.SurfaceY` segue servindo. A (b), maré por região, exige várias superfícies de água. |
-| D4 | Quais propostas de `mecanicas.md` entram no plano? | Já: `P0.3` e `P2.5` (baratas). Depois da Etapa 1: `P1.3` (alto-falante). As outras esperam a fase ter ameaça e objetivo. |
-| D5 | A entidade do Level 0 aparece também no Level 1, rara? | **Não por enquanto:** ensinar uma regra por fase (decisão 3 de `level1-mostruario.md`). |
-
----
-
-## Fora deste plano, por enquanto
-
-Ficam para quando as três fases tiverem ameaça e objetivo:
-
-- Sala de contenção e resgate (`plano-coop.md`, seção 2.2).
-- Voz por proximidade e walkie-talkie (seção 2.1; depende do Vivox).
-- Sanidade e alucinações (seção 2.5).
-- Entrar por código de sala (Relay).
-- Mudar o desenho do Capitão antes de publicar (decisão 4 de `level1-mostruario.md`).
+| D1 | Começar pelo Capitão ou pelo objetivo? | **Decidido (17/11/2026): Capitão.** Feito. |
+| D2 | O que acontece ao encarar o Capitão por 6 s, sem sanidade? | **Decidido (17/11/2026): só o chuvisco.** Feito. |
+| D3 | Na maré alta até o seco fica com água. Como sobra um refúgio? | **Decidido (19/11/2026), para revisão: sem refúgio novo por ora.** A recomendação era (a), patamares altos de +1,2 m com escada, mas ela muda o `PoolGenerator` e a planta de todas as seeds. Medido no código: na maré alta, de pé no raso, a água fica a 1,35 m dos pés e os olhos a 1,65 m, então ninguém se afoga em pé; o seco fica com 0,75 m (vadeia-se). O perigo da maré é ficar lento (o raso vira nado, a 45%) e o ralo na vazante; o refúgio é o seco e as escadas. Se jogando faltar abrigo, (a) volta. |
+| D4 | Quais propostas de `mecanicas.md` entram? | `P0.3` (pilhas) na Etapa 5; `P2.5` como bilhete de ensino na Etapa 6. As outras ficam para depois da entrega. |
+| D5 | A entidade do Level 0 aparece também no Level 1? | **Não** (uma regra por fase). |
+| D6 | Inimigo do Level 3 (decisão 4 de `level3-escritorio.md`)? | **Decidido (19/11/2026), para revisão: a entidade do Level 0**, a opção que o doc lista e a mais barata; um inimigo próprio fica para depois da entrega. |
+| D7 | Objetivo do Level 3? | **Decidido (19/11/2026), para revisão: alarme de incêndio** destrava a porta corta-fogo (combina com a saída já decidida, a porta corta-fogo no patamar). |
+| D8 | Válvulas do Level 2 sem casas de máquinas? | **Decidido (19/11/2026), para revisão:** válvulas na parede de células secas, sem sala própria, e a saída continua a sala seca: as casas de máquinas e a porta no fundo do poço mudariam o hash de todas as seeds. |

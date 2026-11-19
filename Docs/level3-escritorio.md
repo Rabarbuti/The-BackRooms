@@ -34,10 +34,15 @@ Level 3 (teste)), na lista de fases depois das Piscinas (a porta do Level 2 leva
   sozinho** (`OfficeElevators`) a cada 85 s, a partir dos 75 s: luz da cabine vazia, plim, porta abre
   e fecha. Sons sintetizados (`OfficeSounds`). Tudo pelo relógio da sessão e pela seed.
 - **Passos de piso duro** (`LevelBuilder.HardFloorActive` → `Footsteps` usa os do azulejo seco).
+- **Ameaça e objetivo** (19/11/2026): a **entidade do Level 0** caça aqui também (decisão 4: a opção
+  "usa a entidade do Level 0"); a porta corta-fogo fica trancada até o **alarme de incêndio** disparar
+  (`SwitchObjective`, três acionadores vermelhos em paredes de corredor, longe uns dos outros: puxar
+  leva 2 s, dois dentro de 8 s disparam; sozinho, dois sem janela). Disparado, a sirene toca nos
+  acionadores, a porta destrava e a entidade corre para o último acionador.
 
 **Falta:** os modelos do Blender (as peças da seção 4 hoje são caixas e tubos em código); as ideias
-3, 4 e 5 da seção 6 (cadeiras viradas, telas que ligam, armários batendo); um inimigo; som ambiente
-próprio (ar-condicionado); conferir a planta entre host e cliente (dois editores).
+3, 4 e 5 da seção 6 (cadeiras viradas, telas que ligam, armários batendo); um inimigo próprio; som
+ambiente próprio (ar-condicionado); conferir a planta entre host e cliente (dois editores).
 
 **Decisões tomadas em 17/11/2026** (seção 9): viga da escada grafite; OSB mantido, mas dessaturado;
 saída pela porta corta-fogo no patamar da escada; por enquanto sem inimigo, como as Piscinas.
@@ -265,7 +270,8 @@ Intensidade relativa: 1,0 = corredor.
 3. **Saída:** porta corta-fogo no patamar da escada (recomendado, seção 3) ou um elevador "de saída"
    que só chega num momento certo?
 4. **Inimigo:** a fase tem um próprio, usa a entidade do Level 0 ou começa sem nenhum (como as
-   Piscinas)?
+   Piscinas)? **Decidido em 19/11/2026 (para revisão): a entidade do Level 0** (D6 de
+   `plano-de-acao.md`), com o alarme de incêndio como objetivo (D7).
 5. **Referências:** chegaram 13 fotos, não 14, e a ordem de envio não bate com a tabela do prompt
    (lá, 1, 2 e 5 são escadas; aqui a 1 é a área de estar). Este projeto cita as fotos pelo que
    mostram, não pelo número.

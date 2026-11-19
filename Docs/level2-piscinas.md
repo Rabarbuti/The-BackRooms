@@ -39,9 +39,16 @@ Level 2 (teste)) com as etapas 1 a 7 da seção 8.1:
 - **Caneta:** não risca debaixo d'água.
 - **Desempenho** (seed 1998, 1920 x 1080, Quadro T2000): mediana de 37 ms por quadro sem lanterna e
   40 ms com, contra ~106 ms da primeira versão; 45 luzes com sombra de uma face em cache.
+- **Maré, ralo e drenagem** (19/11/2026, `PoolTide`; seções 4.3, 5 e 6): a água sobe 0,9 m e desce a
+  cada 90 s pelo relógio da sessão (a primeira subida aos 90 s; "glub" 10 s antes); a lâmina cobre também
+  o seco, escondida sob o piso com a água baixa. Na **vazante** os ralos puxam quem nada no poço ou na
+  funda perto dele até a grade (afoga), com as lâmpadas de perto piscando. **Duas válvulas**
+  (`SwitchObjective`, rodas vermelhas na parede de células secas, a 8 células ou mais uma da outra):
+  abertas dentro de 5 s (sozinho, as duas, sem janela) drenam 2 m em 30 s, param a maré e destrancam a
+  saída. A planta não mudou (nenhuma regra nova no `PoolGenerator`).
 
-**Falta:** a maré, o ralo e os túneis submersos, as casas de máquinas e a drenagem (o objetivo), o
-som e as anomalias; do vocabulário de formas, corredor curvo em S, escada em caracol, mezanino, teto
+**Falta:** o ralo que acorda com barulho e os túneis submersos, as casas de máquinas como salas e a
+porta no fundo do grande poço, o som ambiente e as anomalias; do vocabulário de formas, corredor curvo em S, escada em caracol, mezanino, teto
 inclinado, tobogã e claraboia em sala de abóbada; os modelos do Blender (escadinha de metal, grade
 de ralo, válvula). No visual, a cáustica ilumina até o fundo do poço, que devia ser escuro (seções 4.1
 e 7), e a água funda de 2 m não parece mais funda que a de 1,2 m de antes: a cor vem da pastilha do
@@ -568,7 +575,10 @@ início). Até lá, a saída é a sala seca da seção 3.2.
    transparente com refração, cáustica numa malha à parte). Dá a cor certa pelo fundo visto através
    dela e custa pouco: na seed 1998, tirar a refração poupa 3,3 ms por quadro e a cáustica, 2,4.
 4. **Voz abafada** só vale quando existir voz por proximidade (Vivox, etapa 5 do plano).
-5. **A maré deixa um refúgio seco?** O seco fica a +0,2 m e a maré sobe 0,9 m: na maré alta ele fica
+5. **Decidido em 19/11/2026 (para revisão), ver D3 de `plano-de-acao.md`: sem refúgio novo por ora.**
+   Na maré alta, de pé no raso, a água fica a 1,35 m dos pés e os olhos a 1,65 m: ninguém se afoga em
+   pé, e o seco fica com 0,75 m (vadeia-se). A recomendação (a) mudaria a planta de todas as seeds.
+   O texto original da decisão: **A maré deixa um refúgio seco?** O seco fica a +0,2 m e a maré sobe 0,9 m: na maré alta ele fica
    com 0,7 m de água e deixa de ser refúgio. Saídas (da pesquisa de level design): (a) uma altura nova,
    "alto" a +1,2 m, para patamares-refúgio, só encostando em seco e com escada (regras novas no
    `Validate`); (b) maré por região, com fases defasadas, para sempre haver uma região vizinha baixa.

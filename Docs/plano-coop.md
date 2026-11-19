@@ -144,18 +144,20 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
 
 ## O que ainda não existe
 
-- **Objetivo da fase:** disjuntores, código, elevador, vitória e derrota (seção 2.3).
+- **Objetivo da fase:** existe desde 19/11/2026 em todas (disjuntores no Level 0, teclado no Level 1,
+  válvulas no Level 2, alarme no Level 3; `SwitchObjective`, ver `mecanicas.md`). Faltam o painel de
+  código do Level 0 e a derrota (todos capturados).
 - **Sala de contenção e resgate** de quem é capturado (seção 2.2).
 - **Entrar por código de sala** (Relay da Unity; falta ativar no painel da Unity Cloud).
 - **Voz por proximidade** e a entidade reagindo à voz (seção 2.1).
 - **Sanidade** e alucinações (seção 2.5).
-- **Itens:** pegar a caneta no cenário, tinta que acaba, borracha, pilhas, walkie-talkie, Almond
+- **Itens:** pegar a caneta no cenário, tinta que acaba, borracha, walkie-talkie, Almond
   Water. Mão em primeira pessoa só existe para a caneta.
 - **Entidade:** aproveitar o apagão, reagir à lanterna, mais de uma, vigiar esconderijos.
 - **Ideias ainda não decididas** para as três fases (um componente de objetivo comum, a entidade
   que imita passos, o labirinto que muda no apagão, entre outras): `mecanicas.md`.
 - **Buracos:** som de queda, faixa que quebra ou balança.
-- **Opções:** gráficos, resolução e pasta da gravação.
+- **Opções:** existem volume, mouse e qualidade (19/11/2026); faltam resolução e pasta da gravação.
 - **Mais níveis.** O segundo está projetado em `level1-mostruario.md`. Existe uma versão de
   teste jogável (`Scenes/Level1_Test.unity`: mapa pequeno mobiliado) com o inimigo dela, o
   Capitão (`CaptainBrain`: só anda quando ninguém o vê iluminado); já dá para escolher a fase no menu e a porta de saída leva à fase
