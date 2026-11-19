@@ -550,7 +550,7 @@ MonoBehaviour:
   offset: {x: 0.18, y: -0.15, z: 0.1}
   followSharpness: 14
   inputEnabled: 0
-  infiniteBattery: 1
+  infiniteBattery: 0
   batterySeconds: 600
 --- !u!1 &5776794574773400324
 GameObject:

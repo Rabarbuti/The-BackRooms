@@ -33,6 +33,15 @@ namespace BackRooms.World
         public bool LocalWaiting { get; private set; }
 
         InputAction _interact;
+        AudioSource _audio;
+        AudioClip _rattle, _open;
+        bool _wasPassing;
+
+        /// <summary>Quantas vezes a porta chacoalhou trancada (testes).</summary>
+        public int Rattles { get; private set; }
+
+        /// <summary>A porta tocou o som de abrir ao passar de fase (testes).</summary>
+        public bool OpenedSound { get; private set; }
 
         void OnEnable()
         {
@@ -41,6 +50,17 @@ namespace BackRooms.World
             _interact = new InputAction("Interagir", InputActionType.Button, "<Keyboard>/e");
             _interact.AddBinding("<Gamepad>/buttonWest");
             _interact.Enable();
+
+            if (_audio == null)
+            {
+                _audio = gameObject.AddComponent<AudioSource>();
+                _audio.spatialBlend = 1f;
+                _audio.minDistance = 1.5f;
+                _audio.maxDistance = 22f;
+                _audio.rolloffMode = AudioRolloffMode.Linear;
+                _audio.playOnAwake = false;
+                BuildClips();
+            }
         }
 
         void OnDisable()
@@ -67,6 +87,15 @@ namespace BackRooms.World
             PlayerNetwork local = PlayerNetwork.Local;
             GameSession session = GameSession.Instance;
 
+            // A fase acabou: a porta abre (barra antipânico, rangido e a batida atrás do grupo).
+            bool passing = session != null && session.Passing;
+            if (passing && !_wasPassing && _audio != null && _open != null)
+            {
+                _audio.PlayOneShot(_open, 1f);
+                OpenedSound = true;
+            }
+            _wasPassing = passing;
+
             if (local == null || !local.InGame || (session != null && session.Passing))
             {
                 LocalInReach = false;
@@ -89,8 +118,14 @@ namespace BackRooms.World
         /// </summary>
         public bool Interact()
         {
+            // Trancada: a maçaneta chacoalha (o painel diz o que falta).
+            if (!LocalWaiting && LocalInReach && Locked && ExitLock.Prompt == null && SwitchObjective.Prompt == null && BatteryPickups.Prompt == null)
+            {
+                Rattles++;
+                if (_audio != null && _rattle != null) _audio.PlayOneShot(_rattle, 0.9f);
+            }
             if (LocalWaiting) LocalWaiting = false;
-            else if (LocalInReach && !Locked && ExitLock.Prompt == null && SwitchObjective.Prompt == null) LocalWaiting = true;
+            else if (LocalInReach && !Locked && ExitLock.Prompt == null && SwitchObjective.Prompt == null && BatteryPickups.Prompt == null) LocalWaiting = true;
             return LocalWaiting;
         }
 
@@ -107,5 +142,44 @@ namespace BackRooms.World
         }
 
         static Vector3 Flat(Vector3 v) => new Vector3(v.x, 0f, v.z);
+
+        // Sons sintetizados: a maçaneta chacoalhando e a porta abrindo e batendo.
+        void BuildClips()
+        {
+            int rate = AudioSettings.outputSampleRate > 0 ? AudioSettings.outputSampleRate : 44100;
+            var rng = new System.Random(5150);
+
+            int n = (int)(rate * 0.55f);
+            var rattle = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)rate;
+                float v = 0f;
+                for (int k = 0; k < 4; k++)
+                {
+                    float start = k * 0.12f;
+                    if (t < start) continue;
+                    float u = t - start;
+                    v += (Mathf.Sin(2f * Mathf.PI * 1650f * u) * 0.4f + (float)(rng.NextDouble() * 2.0 - 1.0) * 0.6f) * Mathf.Exp(-u * 60f);
+                    v += Mathf.Sin(2f * Mathf.PI * 140f * u) * Mathf.Exp(-u * 25f) * 0.5f;
+                }
+                rattle[i] = v * 0.6f;
+            }
+            _rattle = AudioClip.Create("Porta_Trancada", n, 1, rate, false);
+            _rattle.SetData(rattle, 0);
+
+            int m = (int)(rate * 1.5f);
+            var open = new float[m];
+            for (int i = 0; i < m; i++)
+            {
+                float t = i / (float)rate;
+                float bar = ((float)(rng.NextDouble() * 2.0 - 1.0) * 0.7f + Mathf.Sin(2f * Mathf.PI * 900f * t) * 0.3f) * Mathf.Exp(-t * 40f);
+                float creak = t > 0.1f && t < 1.0f ? Mathf.Sin(2f * Mathf.PI * (210f + 120f * t + 25f * Mathf.Sin(t * 60f)) * t) * 0.25f * Mathf.Sin(Mathf.PI * (t - 0.1f) / 0.9f) : 0f;
+                float slam = t > 1.15f ? (Mathf.Sin(2f * Mathf.PI * 70f * (t - 1.15f)) + (float)(rng.NextDouble() * 2.0 - 1.0) * 0.5f) * Mathf.Exp(-(t - 1.15f) * 14f) : 0f;
+                open[i] = (bar + creak + slam * 0.8f) * 0.7f;
+            }
+            _open = AudioClip.Create("Porta_Abrindo", m, 1, rate, false);
+            _open.SetData(open, 0);
+        }
     }
 }

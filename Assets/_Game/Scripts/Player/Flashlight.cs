@@ -19,7 +19,8 @@ namespace BackRooms.Player
         public bool inputEnabled = true;
 
         [Header("Bateria")]
-        public bool infiniteBattery = true;
+        [Tooltip("Desligado nas fases: as pilhas do chão recarregam (BatteryPickups).")]
+        public bool infiniteBattery;
         public float batterySeconds = 600f;
 
         /// <summary>Bateria restante, de 0 a 1.</summary>

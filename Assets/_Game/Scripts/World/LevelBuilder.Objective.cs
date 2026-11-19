@@ -15,13 +15,21 @@ namespace BackRooms.World
         public Material switchBodyMaterial;
         [Tooltip("Lâmpada das peças do objetivo (sem luz; a cor vem de um MaterialPropertyBlock).")]
         public Material switchLampMaterial;
+        [Tooltip("Pilhas da lanterna espalhadas pelo chão (P0.3), com sorteio próprio.")]
+        public bool batteriesEnabled;
 
         void BuildObjective()
         {
-            if (objective == SwitchKind.None || Data == null) return;
-            GameObject root = CreateChild("Objetivo");
-            var switches = root.AddComponent<SwitchObjective>();
-            switches.Place(this, objective, switchBodyMaterial, switchLampMaterial);
+            if (Data == null) return;
+            if (objective != SwitchKind.None)
+            {
+                GameObject root = CreateChild("Objetivo");
+                var switches = root.AddComponent<SwitchObjective>();
+                switches.Place(this, objective, switchBodyMaterial, switchLampMaterial);
+            }
+
+            // Pilhas da lanterna: depois do objetivo (desviam das peças dele), com outro sorteio.
+            if (batteriesEnabled) CreateChild("Pilhas").AddComponent<BatteryPickups>().Place(this, switchBodyMaterial);
         }
     }
 }
