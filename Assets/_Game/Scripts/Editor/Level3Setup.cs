@@ -67,8 +67,11 @@ namespace BackRooms.EditorTools
                 size = Width,
                 pits = false,
                 alcoves = false,
-                entity = false,
+                // A entidade do Level 0 caça também aqui (decisão D6 de plano-de-acao.md, 19/11/2026).
+                entity = true,
                 paintedArrows = false,
+                // O alarme de incêndio destrava a porta corta-fogo (decisão D7).
+                objective = SwitchKind.FireAlarm,
                 decorate = level =>
                 {
                     var builder = level.GetComponent<LevelBuilder>();

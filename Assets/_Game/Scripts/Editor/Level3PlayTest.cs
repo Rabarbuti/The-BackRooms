@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BackRooms.Entities;
 using BackRooms.Net;
 using BackRooms.Player;
 using BackRooms.World;
@@ -112,6 +113,8 @@ namespace BackRooms.EditorTools
             {
                 case 0:
                     LevelProgress.DevModeOverride = true;
+                    // A entidade e o alarme têm testes próprios (fumaça e ObjectiveTest.BatchRunLevel3).
+                    EntityDirector.Paused = true;
                     session.fixedSeed = 1998;
                     session.Host(localOnly: true);
                     Next();
@@ -177,6 +180,9 @@ namespace BackRooms.EditorTools
                         return;
                     }
                     Notes.Add($"a onda de luzes apagou {wave.DarkCount} luminária(s) aos {session.SessionSeconds:F0} s");
+                    // Trancada pelo alarme até ele disparar.
+                    if (SwitchObjective.Instance == null || !LevelExit.Locked) { Finish(false, "a porta corta-fogo não começou trancada pelo alarme"); return; }
+                    SwitchObjective.Instance.CompleteForTest();
                     FaceDoor();
                     Next();
                     break;
@@ -265,6 +271,7 @@ namespace BackRooms.EditorTools
 
         static void Finish(bool ok, string report)
         {
+            EntityDirector.Paused = false;
             EditorApplication.update -= Tick;
             Application.logMessageReceived -= OnLog;
             SessionState.SetBool(ActiveKey, false);
