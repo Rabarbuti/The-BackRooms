@@ -46,7 +46,7 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 20;
+        public const int ContentVersion = 21;
 
         /// <summary>Música da tela inicial (cópia do arquivo mandado pelo usuário; não é gerada).</summary>
         public const string MenuMusicPath = "Assets/_Game/Audio/Musica/Menu_Tema.mp3";
@@ -96,6 +96,8 @@ namespace BackRooms.EditorTools
             public bool paintedArrows = true;
             /// <summary>Piscinas (Level 2): profundidades, escadas e água.</summary>
             public bool pools;
+            /// <summary>Objetivo comum fora do Level 0 (que sempre tem os disjuntores): válvulas, alarmes. None = sem.</summary>
+            public SwitchKind objective = SwitchKind.None;
             /// <summary>Chamado com o objeto do nível antes de salvar (o Level 1 põe a camada de móveis).</summary>
             public Action<GameObject> decorate;
         }
@@ -304,6 +306,10 @@ namespace BackRooms.EditorTools
             builder.floorWetDecals = floorWet;
             builder.floorWearDecal = floorWear;
             builder.exitSignMaterial = exitSign;
+            // Objetivo comum: disjuntores no Level 0; nas outras, o que a fase pedir.
+            builder.objective = level0 ? SwitchKind.Breaker : options.objective;
+            builder.switchBodyMaterial = EnsureMaterial("Objetivo_Peca", new Color(0.45f, 0.46f, 0.47f), null, null, 0.5f, Color.black);
+            builder.switchLampMaterial = EnsureUnlit("Objetivo_Lampada", Color.white, null, false);
             builder.exitDoorMaterial = exitDoor;
             builder.exitDoorModel = exitDoorModel;
             builder.exitDoorModelMaterial = exitDoorModelMaterial;

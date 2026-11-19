@@ -215,9 +215,14 @@ namespace BackRooms.UI
 
                 if (exit.LocalWaiting) prompt = total > 1 ? $"WAITING {waiting}/{total}\nE - LET GO" : "OPENING";
                 else if (ExitLock.Prompt != null) prompt = ExitLock.Prompt;
+                else if (SwitchObjective.Prompt != null) prompt = SwitchObjective.Prompt;
+                else if (exit.LocalInReach && SwitchObjective.Locked) prompt = SwitchObjective.Instance.LockedText;
                 else if (exit.LocalInReach && LevelExit.Locked) prompt = "LOCKED\nCODE ON KEYPAD";
                 else if (exit.LocalInReach) prompt = waiting > 0 ? $"E - OPEN DOOR\n{waiting}/{total} WAITING" : "E - OPEN DOOR";
                 else if (waiting > 0) footer = $"EXIT {waiting}/{total}";
+
+                // Objetivo comum com pontos valendo: quantos e quanto falta da janela.
+                if (footer == null && SwitchObjective.Instance != null) footer = SwitchObjective.Instance.Footer;
             }
 
             // Água (Piscinas): aviso e barra do fôlego.
