@@ -88,6 +88,30 @@ namespace BackRooms.World
         public float SurfaceY => transform.position.y;
 
         /// <summary>
+        /// Quanto a água está acima da altura em que foi montada, em metros (a maré sobe, a drenagem
+        /// desce; <see cref="PoolTide"/>). Move a lâmina; as sombras das salas escuras, filhas dela,
+        /// ficam onde estavam.
+        /// </summary>
+        public float Offset
+        {
+            get => _offset;
+            set
+            {
+                if (float.IsNaN(_baseY)) _baseY = transform.localPosition.y;
+                if (Mathf.Approximately(value, _offset)) return;
+                _offset = value;
+                Vector3 p = transform.localPosition;
+                p.y = _baseY + value;
+                transform.localPosition = p;
+                for (int i = 0; i < _shades.Count; i++)
+                    if (_shades[i] != null) _shades[i].localPosition = _shadeBase[i] - Vector3.up * value;
+            }
+        }
+
+        /// <summary>Quanto o mapa já drenou, de 0 a 1: a cáustica some junto com a água.</summary>
+        public float Drained01 { get; set; }
+
+        /// <summary>
         /// Ligado pelo jogador local enquanto a câmera dele está debaixo d'água. Acende a névoa
         /// e o filtro de cor só nesta máquina.
         /// </summary>
@@ -107,6 +131,10 @@ namespace BackRooms.World
         static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
         bool _prepared;
+        float _offset;
+        float _baseY = float.NaN;
+        readonly List<Transform> _shades = new List<Transform>();
+        readonly List<Vector3> _shadeBase = new List<Vector3>();
         MeshRenderer _surface;
         Vector4 _surfaceSt, _surfaceDetailSt;
         readonly List<MeshRenderer> _caustics = new List<MeshRenderer>();
@@ -337,7 +365,7 @@ namespace BackRooms.World
 
             if (_caustics.Count == 0) return;
             // A cáustica é luz do dia que passou pela água: cai junto com ela no anoitecer.
-            float strength = CurrentDaylight.Sun * (LocalUnderwater ? causticUnderwaterBoost : 1f);
+            float strength = CurrentDaylight.Sun * (LocalUnderwater ? causticUnderwaterBoost : 1f) * (1f - Drained01);
             Color color = _causticColor * strength;
             color.a = _causticColor.a;
             _block.Clear();
@@ -369,6 +397,8 @@ namespace BackRooms.World
             var go = new GameObject("Sombra") { hideFlags = HideFlags.DontSave };
             go.transform.SetParent(transform, false);
             go.transform.position = new Vector3(rect.center.x, (bottom + top) * 0.5f, rect.center.y);
+            _shades.Add(go.transform);
+            _shadeBase.Add(go.transform.localPosition + Vector3.up * _offset);
 
             var fog = go.AddComponent<LocalVolumetricFog>();
             var parameters = new LocalVolumetricFogArtistParameters(Color.black, meanFreePath, 0f)

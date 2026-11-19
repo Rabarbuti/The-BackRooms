@@ -176,6 +176,8 @@ namespace BackRooms.EditorTools
                 case 0:
                     Time.captureDeltaTime = Step;
                     session.fixedSeed = CurrentSeed;
+                    // A maré tem teste próprio (Level2TideTest): aqui a água fica parada.
+                    PoolTide.Paused = true;
                     session.Host(localOnly: true);
                     _stageStart = Now;
                     _stage = 1;
@@ -665,6 +667,7 @@ namespace BackRooms.EditorTools
 
         static void Finish()
         {
+            PoolTide.Paused = false;
             EditorApplication.update -= Tick;
             Application.logMessageReceived -= OnLog;
             EditorApplication.playModeStateChanged -= OnPlayMode;

@@ -78,6 +78,8 @@ namespace BackRooms.EditorTools
                 entity = false,
                 paintedArrows = false,
                 pools = true,
+                // As válvulas: abertas juntas, drenam as Piscinas e destrancam a saída.
+                objective = SwitchKind.Valve,
                 decorate = level =>
                 {
                     Apply(level.GetComponent<LevelBuilder>(), materials);
