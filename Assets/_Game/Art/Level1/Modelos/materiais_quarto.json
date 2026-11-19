@@ -1,0 +1,124 @@
+{
+  "materiais": [
+    {
+      "nome": "Latao",
+      "cor": [
+        196,
+        156,
+        64
+      ],
+      "rugosidade": 0.35,
+      "metal": 0.85
+    },
+    {
+      "nome": "Madeira_Clara",
+      "cor": [
+        170,
+        128,
+        82
+      ],
+      "rugosidade": 0.55,
+      "metal": 0.0
+    },
+    {
+      "nome": "Madeira_Escura",
+      "cor": [
+        88,
+        56,
+        34
+      ],
+      "rugosidade": 0.62,
+      "metal": 0.0
+    },
+    {
+      "nome": "Quarto_Ceramica_Verde",
+      "cor": [
+        106,
+        134,
+        112
+      ],
+      "rugosidade": 0.3,
+      "metal": 0.0
+    },
+    {
+      "nome": "Quarto_Colcha_Azul",
+      "cor": [
+        98,
+        124,
+        148
+      ],
+      "rugosidade": 0.95,
+      "metal": 0.0
+    },
+    {
+      "nome": "Quarto_Colcha_Bege",
+      "cor": [
+        190,
+        170,
+        136
+      ],
+      "rugosidade": 0.95,
+      "metal": 0.0
+    },
+    {
+      "nome": "Quarto_Colchao",
+      "cor": [
+        212,
+        206,
+        188
+      ],
+      "rugosidade": 0.9,
+      "metal": 0.0
+    },
+    {
+      "nome": "Quarto_Cupula_Creme",
+      "cor": [
+        226,
+        212,
+        172
+      ],
+      "rugosidade": 0.92,
+      "metal": 0.0
+    },
+    {
+      "nome": "Quarto_Franja",
+      "cor": [
+        214,
+        202,
+        170
+      ],
+      "rugosidade": 0.95,
+      "metal": 0.0
+    },
+    {
+      "nome": "Quarto_Lencol",
+      "cor": [
+        232,
+        228,
+        214
+      ],
+      "rugosidade": 0.9,
+      "metal": 0.0
+    },
+    {
+      "nome": "Quarto_Tapete_Bege",
+      "cor": [
+        196,
+        176,
+        136
+      ],
+      "rugosidade": 0.96,
+      "metal": 0.0
+    },
+    {
+      "nome": "Quarto_Tapete_Tijolo",
+      "cor": [
+        146,
+        72,
+        54
+      ],
+      "rugosidade": 0.96,
+      "metal": 0.0
+    }
+  ]
+}

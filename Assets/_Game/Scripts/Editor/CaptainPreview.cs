@@ -82,6 +82,8 @@ namespace BackRooms.EditorTools
             body.model = CharacterModels.Model("Capitao");
             body.modelMaterials = CharacterModels.Materials("Capitao");
             captain.AddComponent<CaptainAudio>();
+            // A perna de pau marca o carpete (pista para separar do totem).
+            captain.AddComponent<PegMarks>().markMaterial = PegMarkMaterial();
 
             // Rede: quem manda na posição é o host.
             captain.AddComponent<NetworkObject>();
@@ -110,6 +112,52 @@ namespace BackRooms.EditorTools
             UnityEngine.Object.DestroyImmediate(captain);
             Level0Setup.StampNetworkId(prefab);
             return prefab;
+        }
+
+        // Decalque da marca da perna de pau: um círculo escuro de carpete amassado, mais fundo no
+        // meio, com a borda sumindo (alfa). Textura e material em Art/Level1/Capitao.
+        static Material PegMarkMaterial()
+        {
+            EnsureFolder(ArtFolder);
+            string texturePath = ArtFolder + "/MarcaPernaDePau.png";
+            const int size = 64;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(size * 0.5f, size * 0.5f)) / (size * 0.5f);
+                    float alpha = Mathf.Clamp01((1f - d) * 2.2f);
+                    float ring = Mathf.Clamp01(1f - Mathf.Abs(d - 0.62f) * 6f);
+                    float shade = Mathf.Lerp(0.16f, 0.08f, ring);
+                    texture.SetPixel(x, y, new Color(shade, shade * 0.85f, shade * 0.6f, alpha * 0.85f));
+                }
+            File.WriteAllBytes(texturePath, texture.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(texture);
+            AssetDatabase.ImportAsset(texturePath);
+            var importer = (TextureImporter)AssetImporter.GetAtPath(texturePath);
+            if (importer != null && !importer.alphaIsTransparency)
+            {
+                importer.alphaIsTransparency = true;
+                importer.SaveAndReimport();
+            }
+
+            string path = ArtFolder + "/Decal_MarcaPernaDePau.mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            bool created = material == null;
+            if (created) material = new Material(Shader.Find("HDRP/Decal")) { name = "Decal_MarcaPernaDePau" };
+            material.SetColor("_BaseColor", Color.white);
+            material.SetTexture("_BaseColorMap", AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath));
+            material.SetFloat("_DecalBlend", 1f);
+            material.SetFloat("_AffectAlbedo", 1f);
+            material.SetFloat("_AffectNormal", 0f);
+            material.SetFloat("_AffectMetal", 0f);
+            material.SetFloat("_AffectAO", 0f);
+            material.SetFloat("_AffectSmoothness", 0f);
+            material.SetFloat("_MaskBlendSrc", 0f);
+            HDMaterial.ValidateMaterial(material);
+            if (created) AssetDatabase.CreateAsset(material, path);
+            else EditorUtility.SetDirty(material);
+            return material;
         }
 
         /// <summary>Monta o Capitão com os materiais dele (criados ou atualizados aqui).</summary>

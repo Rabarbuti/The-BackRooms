@@ -193,6 +193,13 @@ namespace BackRooms.EditorTools
                     }
                     if (LevelProgress.IsCleared(1)) { Finish(false, "o Level 1 foi zerado só de chegar perto da porta"); return; }
                     _previous = session;
+                    // A porta do Level 1 é trancada por teclado (o objetivo tem teste próprio,
+                    // Level1ObjectiveTest): trancada, não abre; destrancada, abre.
+                    if (ExitLock.Instance != null)
+                    {
+                        if (door.Interact()) { Finish(false, "a porta do Level 1 abriu trancada"); return; }
+                        ExitLock.Instance.UnlockForTest();
+                    }
                     if (!door.Interact()) { Finish(false, "a porta do Level 1 não aceitou a interação"); return; }
                     Next();
                     break;

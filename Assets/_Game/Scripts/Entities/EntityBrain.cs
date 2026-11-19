@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BackRooms.Net;
+using BackRooms.Player;
 using BackRooms.World;
 using Unity.Netcode;
 using UnityEngine;
@@ -66,6 +67,8 @@ namespace BackRooms.Entities
         public float closeSense = 3.5f;
         [Tooltip("Alcance do ouvido para um jogador correndo, em células de 4 m de caminho. Andando: 55% disso. Agachado: 25%.")]
         public float hearCells = 8f;
+        [Tooltip("Quem está debaixo de uma mesa só some fora do cone de visão ou além desta distância, em metros.")]
+        public float tableSightRange = 6f;
 
         [Header("Captura")]
         public float catchRadius = 1.25f;
@@ -251,9 +254,21 @@ namespace BackRooms.Entities
 
                 if (!Reachable(player, track, now, at, out int px, out int pz)) continue;
 
-                bool hidden = player.Hidden;
+                HideKind hiding = player.Hiding;
+                bool hidden = HiddenFrom(hiding, position, at);
 
-                if (!hidden && CanSee(position, at, player.Crouching))
+                // Debaixo da mesa e no cone dele: viu o jogador se enfiar ali (a mesa tapa a
+                // visada, então não se confere a linha de visão).
+                if (hiding == HideKind.Table && !hidden)
+                {
+                    float distance = Flat(at - position).magnitude;
+                    if (distance < seenDistance)
+                    {
+                        seenDistance = distance;
+                        seen = player;
+                    }
+                }
+                else if (!hidden && CanSee(position, at, player.Crouching))
                 {
                     float distance = Flat(at - position).magnitude;
                     if (distance < seenDistance)
@@ -264,6 +279,8 @@ namespace BackRooms.Entities
                 }
 
                 float loudness = Loudness(track.Speed, player.Crouching);
+                // Plástico-bolha estala como corrida, mesmo agachado.
+                if (track.Speed >= 0.4f && BubbleWrap.Under(at)) loudness = 1f;
                 if (loudness <= 0f || _sound[px, pz] < 0) continue;
 
                 float margin = loudness * hearCells - _sound[px, pz];
@@ -306,6 +323,20 @@ namespace BackRooms.Entities
                 SetState(EntityState.Investigate);
                 _stateUntil = now + 14f;
             }
+        }
+
+        /// <summary>
+        /// O jogador está escondido dele? Nicho e guarda-roupa escondem sempre. Debaixo da mesa,
+        /// só fora do cone de visão (ou além de <see cref="tableSightRange"/>): quem se enfia na
+        /// frente dele é visto.
+        /// </summary>
+        protected bool HiddenFrom(HideKind hiding, Vector3 position, Vector3 playerAt)
+        {
+            if (hiding == HideKind.None) return false;
+            if (hiding != HideKind.Table) return true;
+
+            Vector3 to = Flat(playerAt - position);
+            return to.magnitude > tableSightRange || Vector3.Angle(transform.forward, to) > sightHalfAngle;
         }
 
         /// <summary>Barulho de um jogador, de 0 a 1, pelo jeito de andar.</summary>
@@ -403,6 +434,18 @@ namespace BackRooms.Entities
             _goal = goal;
             _hasGoal = true;
             _arrived = false;
+        }
+
+        /// <summary>
+        /// Host: esquece o caminho e para (depois de ser posto noutro lugar de uma vez, como na
+        /// troca do Capitão com um totem). Volta a vagar a partir de onde está.
+        /// </summary>
+        protected void ForgetPath()
+        {
+            _velocity = Vector3.zero;
+            _path.Clear();
+            _repathAt = 0f;
+            BeginRoam();
         }
 
         void BeginRoam()
@@ -641,14 +684,18 @@ namespace BackRooms.Entities
 
             foreach (PlayerNetwork player in PlayerNetwork.All)
             {
-                if (player == null || !player.IsSpawned || !player.InGame || player.Hidden) continue;
+                if (player == null || !player.IsSpawned || !player.InGame) continue;
 
                 Track track = TrackOf(player, now);
                 Vector3 at = player.transform.position;
+                HideKind hiding = player.Hiding;
+                if (HiddenFrom(hiding, position, at)) continue;
 
                 if (!Reachable(player, track, now, at, out _, out _)) continue;
                 if (Flat(at - position).magnitude > catchRadius) continue;
-                if (SightBlocked(position + Vector3.up * 1.4f, at + Vector3.up * (player.Crouching ? 0.7f : 1.2f))) continue;
+                // Debaixo da mesa, o tampo tapa a visada: quem foi visto se enfiando ali é pego assim mesmo.
+                if (hiding != HideKind.Table &&
+                    SightBlocked(position + Vector3.up * 1.4f, at + Vector3.up * (player.Crouching ? 0.7f : 1.2f))) continue;
 
                 Catches++;
                 track.IgnoreUntil = now + feedSeconds + mercySeconds;

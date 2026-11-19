@@ -16,7 +16,11 @@ namespace BackRooms.Player
         /// <summary>Nadando à tona, sem pé, com a cabeça fora d'água.</summary>
         Swim,
         /// <summary>Com a cabeça debaixo d'água.</summary>
-        Underwater
+        Underwater,
+        /// <summary>Laminado de madeira das vitrines do Level 1: oco, um toc de tábua.</summary>
+        Laminate,
+        /// <summary>Piso vinílico do estoque do Level 1: estalo seco e um rangido de borracha.</summary>
+        Vinyl
     }
 
     /// <summary>
@@ -99,11 +103,12 @@ namespace BackRooms.Player
         AudioSource _source;
         AudioClip[] _clips;
         int _last = -1;
-        readonly int[] _played = new int[5];
-        readonly int[] _lastBySurface = { -1, -1, -1, -1, -1, -1 };
+        readonly int[] _played = new int[7];
+        readonly int[] _lastBySurface = { -1, -1, -1, -1, -1, -1, -1 };
 
-        // Clipes das Piscinas, um conjunto para todos os jogadores.
+        // Clipes das Piscinas e dos pisos do Level 1, um conjunto para todos os jogadores.
         static AudioClip[][] _water;
+        static AudioClip[][] _floor;
         static AudioClip[] _splash;
 
         void Awake()
@@ -201,8 +206,9 @@ namespace BackRooms.Player
             PoolWater water = PoolWater.Current;
             if (water == null)
             {
-                // Fase sem água: carpete, como sempre foi; no Escritório o piso é duro (placas de
-                // porcelanato e madeira), então os passos são os do azulejo seco.
+                // Fase sem água. No Escritório o piso é duro (placas de porcelanato e madeira), então
+                // os passos são os do azulejo seco. Nas outras, carpete, como sempre foi, a não ser
+                // onde o Level 1 pôs laminado ou vinílico (FloorZones).
                 if (LevelBuilder.HardFloorActive)
                 {
                     EnsureWaterClips();
@@ -210,7 +216,9 @@ namespace BackRooms.Player
                 }
                 else
                 {
-                    Surface = StepSurface.Carpet;
+                    FloorKind floor = FloorZones.Count > 0 ? FloorZones.At(position) : FloorKind.Carpet;
+                    Surface = floor == FloorKind.Laminate ? StepSurface.Laminate : floor == FloorKind.Vinyl ? StepSurface.Vinyl : StepSurface.Carpet;
+                    if (Surface != StepSurface.Carpet) EnsureFloorClips();
                 }
                 _waterKnown = false;
                 if (_remote) RemoteGroundSteps(dt);
@@ -359,7 +367,7 @@ namespace BackRooms.Player
                 return;
             }
 
-            AudioClip[] set = _water[(int)surface];
+            AudioClip[] set = surface == StepSurface.Laminate || surface == StepSurface.Vinyl ? _floor[(int)surface] : _water[(int)surface];
             int last = _lastBySurface[(int)surface];
             int pick = UnityEngine.Random.Range(0, set.Length - 1);
             if (pick >= last && last >= 0) pick++;
@@ -377,6 +385,19 @@ namespace BackRooms.Player
         {
             _water = null;
             _splash = null;
+            _floor = null;
+        }
+
+        static void EnsureFloorClips()
+        {
+            if (_floor != null && _floor[(int)StepSurface.Vinyl] != null && _floor[(int)StepSurface.Vinyl][0] != null) return;
+
+            _floor = new AudioClip[7][];
+            foreach (StepSurface surface in new[] { StepSurface.Laminate, StepSurface.Vinyl })
+            {
+                _floor[(int)surface] = new AudioClip[Variations];
+                for (int i = 0; i < Variations; i++) _floor[(int)surface][i] = CreateClip(surface, i);
+            }
         }
 
         static void EnsureWaterClips()
@@ -420,6 +441,8 @@ namespace BackRooms.Player
                 case StepSurface.Tile: return CreateTile(rng, variation);
                 case StepSurface.Wade: return CreateWade(rng, variation);
                 case StepSurface.Swim: return CreateSwim(rng, variation);
+                case StepSurface.Laminate: return CreateLaminate(rng, variation);
+                case StepSurface.Vinyl: return CreateVinyl(rng, variation);
                 default: return CreateUnderwater(rng, variation);
             }
         }
@@ -440,6 +463,65 @@ namespace BackRooms.Player
         static float Cut(float frequency, int rate) => 1f - Mathf.Exp(-2f * Mathf.PI * frequency / rate);
 
         static float Attack(float t, float seconds) => Mathf.Clamp01(t / seconds);
+
+        // Laminado: o salto bate na tábua e ela soa oca (dois modos graves de madeira que somem
+        // depressa), com o estalo do contato por cima.
+        static AudioClip CreateLaminate(System.Random rng, int variation)
+        {
+            int rate = Rate;
+            int length = (int)(rate * 0.22f);
+            var samples = new float[length];
+            float f1 = Range(rng, 170f, 210f), f2 = f1 * Range(rng, 2.6f, 2.9f);
+            float toeDelay = Range(rng, 0.055f, 0.07f);
+            float high = 0f, prev = 0f;
+            for (int i = 0; i < length; i++)
+            {
+                float t = i / (float)rate;
+                float n = Noise(rng);
+                high = 0.7f * (high + n - prev);
+                prev = n;
+                float click = high * Mathf.Exp(-t * 300f) * 0.9f;
+                float wood = Mathf.Sin(2f * Mathf.PI * f1 * t) * Mathf.Exp(-t * 28f) + 0.5f * Mathf.Sin(2f * Mathf.PI * f2 * t) * Mathf.Exp(-t * 55f);
+                // O calcanhar e a ponta do pé: um segundo toque mais fraco, uns 60 ms depois.
+                float t2 = t - toeDelay;
+                float toe = t2 > 0f ? Mathf.Sin(2f * Mathf.PI * f1 * 1.1f * t2) * Mathf.Exp(-t2 * 40f) * 0.4f : 0f;
+                samples[i] = (click + wood * 0.7f + toe) * Attack(t, 0.002f);
+            }
+            return Clip("Passo_Laminado_" + variation, samples, rate, 0.85f);
+        }
+
+        // Vinílico: estalo seco e curto, com um rangido agudo de borracha no fim do passo.
+        static AudioClip CreateVinyl(System.Random rng, int variation)
+        {
+            int rate = Rate;
+            int length = (int)(rate * 0.2f);
+            var samples = new float[length];
+            float squeak = Range(rng, 1400f, 1900f);
+            bool squeaks = rng.NextDouble() < 0.7;
+            float low = 0f;
+            float cut = Cut(2400f, rate);
+            for (int i = 0; i < length; i++)
+            {
+                float t = i / (float)rate;
+                low += (Noise(rng) - low) * cut;
+                float tap = low * Mathf.Exp(-t * 90f) * 1.4f + Mathf.Sin(2f * Mathf.PI * 120f * t) * Mathf.Exp(-t * 45f) * 0.5f;
+                float st = t - 0.07f;
+                float rub = st > 0f && squeaks ? Mathf.Sin(2f * Mathf.PI * squeak * (1f + 0.2f * st) * st) * Mathf.Exp(-st * 35f) * 0.18f : 0f;
+                samples[i] = (tap + rub) * Attack(t, 0.0015f);
+            }
+            return Clip("Passo_Vinilico_" + variation, samples, rate, 0.7f);
+        }
+
+        static AudioClip Clip(string name, float[] samples, int rate, float peakLevel)
+        {
+            float peak = 0f;
+            foreach (float v in samples) peak = Mathf.Max(peak, Mathf.Abs(v));
+            if (peak > 0f)
+                for (int i = 0; i < samples.Length; i++) samples[i] *= peakLevel / peak;
+            var clip = AudioClip.Create(name, samples.Length, 1, rate, false);
+            clip.SetData(samples, 0);
+            return clip;
+        }
 
         static AudioClip CreateStep(System.Random rng, int index)
         {

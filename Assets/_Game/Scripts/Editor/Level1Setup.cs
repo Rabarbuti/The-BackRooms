@@ -10,8 +10,8 @@ using UnityEngine;
 namespace BackRooms.EditorTools
 {
     /// <summary>
-    /// O Level 1 de teste (Docs/level1-mostruario.md): uma versão pequena do Level 0 — 10 x 10
-    /// células, sem buracos e sem nichos — mobiliada pela <see cref="PropLayer"/> com todos os
+    /// O Level 1 (Docs/level1-mostruario.md): a planta do Level 0 — 20 x 20 células, pé-direito
+    /// de 3,4 m, sem buracos e sem nichos — mobiliada pela <see cref="PropLayer"/> com todos os
     /// modelos do Blender de Art/Level1/Modelos, e com o Capitão no lugar da entidade (o prefab
     /// Prefabs/Captain.prefab é gravado aqui, por <see cref="CaptainPreview.CreatePrefab"/>).
     ///
@@ -28,7 +28,10 @@ namespace BackRooms.EditorTools
     {
         public const string ScenePath = "Assets/_Game/Scenes/Level1_Test.unity";
         const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
-        const int Size = 10;
+        // O tamanho do Level 0 (20 x 20 células, 80 x 80 m) e o pé-direito baixo do projeto
+        // (level1-mostruario.md, seção 3): 3,4 m deixam os móveis mais opressivos.
+        const int Size = 20;
+        const float Ceiling = 3.4f;
         static readonly int[] CheckSeeds = { 1998, 7, 4242, 31337, 90210 };
 
         [MenuItem("BackRooms/Abrir Level 1 (teste)", priority = 0)]
@@ -63,17 +66,186 @@ namespace BackRooms.EditorTools
                 scenePath = ScenePath,
                 levelName = "Level1",
                 size = Size,
+                ceilingHeight = Ceiling,
                 pits = false,
                 alcoves = false,
-                // O inimigo daqui é o Capitão, com o mesmo diretor da entidade. O mapa é menor
-                // (10 x 10): ele acorda quando alguém chega a 5 células da sala inicial.
+                // O inimigo daqui é o Capitão, com o mesmo diretor da entidade.
+                // Ele acorda quando alguém chega a 8 células da sala inicial, como a entidade.
                 entity = true,
                 enemyPrefab = captain,
-                enemyWakeCells = 5,
+                enemyWakeCells = 8,
                 paintedArrows = false,
-                decorate = level => level.AddComponent<PropLayer>().models = models,
+                decorate = level =>
+                {
+                    var props = level.AddComponent<PropLayer>();
+                    props.models = models;
+                    // Totens: a estátua é o próprio modelo do Capitão, assado na pose parada.
+                    props.totemModel = CharacterModels.Model("Capitao");
+                    props.totemMaterials = FiberMaterials(CharacterModels.Materials("Capitao"));
+                    props.totemBaseMaterial = FaseMaterial("Totem_Base", new Color(0.035f, 0.035f, 0.04f), 0.7f, null);
+                    props.bubbleWrapMaterial = FaseMaterial("PlasticoBolha", new Color(0.86f, 0.9f, 0.93f), 0.88f, BubbleTexture());
+                    // Objetivo: porta trancada por teclado, código nas etiquetas vermelhas.
+                    props.exitCode = true;
+                    props.labelMaterial = FaseMaterial("Etiqueta", Color.white, 0.25f, null);
+                    // Piso por zona e música de loja.
+                    props.laminateMaterial = FaseMaterial("PisoLaminado", Color.white, 0.45f, FloorTexture("PisoLaminado", PaintLaminate));
+                    props.vinylMaterial = FaseMaterial("PisoVinilico", Color.white, 0.35f, FloorTexture("PisoVinilico", PaintVinyl));
+                    props.shopMusic = true;
+                    // Placas penduradas com texto e anomalias longe do início.
+                    props.zoneSigns = true;
+                },
             });
             Debug.Log($"[BackRooms] Level 1 de teste montado com {models.Length} modelos: abra {ScenePath}, aperte Play e hospede (H).");
+        }
+
+        // ---------------------------------------------------------------- Materiais da fase
+
+        // Materiais e texturas da própria fase (não dos móveis do Blender): Art/Level1/Fase.
+        // Gerados aqui a cada montagem.
+        const string FaseFolder = "Assets/_Game/Art/Level1/Fase";
+
+        static Material FaseMaterial(string name, Color color, float smoothness, Texture2D albedo)
+        {
+            if (!AssetDatabase.IsValidFolder(FaseFolder)) AssetDatabase.CreateFolder("Assets/_Game/Art/Level1", "Fase");
+            string path = FaseFolder + "/" + name + ".mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            bool created = material == null;
+            if (created) material = new Material(Shader.Find("HDRP/Lit")) { name = name };
+
+            material.SetColor("_BaseColor", color);
+            material.SetFloat("_Metallic", 0f);
+            material.SetFloat("_Smoothness", smoothness);
+            material.SetTexture("_BaseColorMap", albedo);
+            UnityEngine.Rendering.HighDefinition.HDMaterial.ValidateMaterial(material);
+
+            if (created) AssetDatabase.CreateAsset(material, path);
+            else EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        // Totem: os materiais do Capitão em versão de fibra de vidro pintada (mais lisa e
+        // brilhante), um por parte do modelo. "Totem_Fibra_Pele" termina em "_Pele": o modelo acha
+        // a parte pelo fim do nome.
+        static Material[] FiberMaterials(Material[] source)
+        {
+            if (source == null) return null;
+            if (!AssetDatabase.IsValidFolder(FaseFolder)) AssetDatabase.CreateFolder("Assets/_Game/Art/Level1", "Fase");
+            var result = new Material[source.Length];
+            for (int i = 0; i < source.Length; i++)
+            {
+                if (source[i] == null) continue;
+                string slot = source[i].name.Substring(source[i].name.LastIndexOf('_') + 1);
+                string path = $"{FaseFolder}/Totem_Fibra_{slot}.mat";
+                var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                bool created = material == null;
+                if (created) material = new Material(source[i]) { name = "Totem_Fibra_" + slot };
+                else material.CopyPropertiesFromMaterial(source[i]);
+                material.SetFloat("_Smoothness", 0.72f);
+                material.SetFloat("_Metallic", 0f);
+                UnityEngine.Rendering.HighDefinition.HDMaterial.ValidateMaterial(material);
+                if (created) AssetDatabase.CreateAsset(material, path);
+                else EditorUtility.SetDirty(material);
+                result[i] = material;
+            }
+            return result;
+        }
+
+        // Plástico-bolha: bolhas redondas em fileiras desencontradas, com brilho no alto de cada
+        // uma e a película entre elas mais apagada. Emenda nas bordas (o quadrado repete).
+        static Texture2D BubbleTexture()
+        {
+            string path = FaseFolder + "/PlasticoBolha.png";
+            if (!AssetDatabase.IsValidFolder(FaseFolder)) AssetDatabase.CreateFolder("Assets/_Game/Art/Level1", "Fase");
+
+            const int size = 256, rows = 8;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            float pitch = size / (float)rows;
+            float radius = pitch * 0.38f;
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float best = float.MaxValue;
+                    Vector2 offset = Vector2.zero;
+                    for (int r = -1; r <= rows; r++)
+                    {
+                        float cy = (r + 0.5f) * pitch;
+                        float shift = (r & 1) == 0 ? 0f : pitch * 0.5f;
+                        for (int c = -1; c <= rows; c++)
+                        {
+                            float cx = (c + 0.5f) * pitch + shift;
+                            var d = new Vector2(x - cx, y - cy);
+                            if (d.sqrMagnitude < best) { best = d.sqrMagnitude; offset = d; }
+                        }
+                    }
+                    float dist = Mathf.Sqrt(best) / radius;
+                    float film = 0.72f;
+                    float value = film;
+                    if (dist < 1f)
+                    {
+                        // Bolha: mais clara no meio, aro escuro na borda, brilho em cima e à esquerda.
+                        float dome = Mathf.Sqrt(Mathf.Max(0f, 1f - dist * dist));
+                        value = Mathf.Lerp(0.62f, 0.9f, dome);
+                        if (dist > 0.82f) value -= 0.12f;
+                        Vector2 glint = offset / radius - new Vector2(-0.35f, 0.35f);
+                        if (glint.magnitude < 0.22f) value = 1f;
+                    }
+                    texture.SetPixel(x, y, new Color(value * 0.96f, value, value * 1.02f, 1f));
+                }
+            }
+
+            System.IO.File.WriteAllBytes(path, texture.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(texture);
+            AssetDatabase.ImportAsset(path);
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        }
+
+        // Textura de piso que cobre uma célula inteira (4 m): 1024 pontos, ~4 mm por ponto.
+        static Texture2D FloorTexture(string name, System.Func<int, int, int, Color> paint)
+        {
+            if (!AssetDatabase.IsValidFolder(FaseFolder)) AssetDatabase.CreateFolder("Assets/_Game/Art/Level1", "Fase");
+            string path = FaseFolder + "/" + name + ".png";
+            const int size = 1024;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                    texture.SetPixel(x, y, paint(x, y, size));
+            System.IO.File.WriteAllBytes(path, texture.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(texture);
+            AssetDatabase.ImportAsset(path);
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        }
+
+        // Laminado: tábuas de 19 cm de largura e 1,2 m de comprimento, emendas desencontradas,
+        // veio de madeira média e um pouco de desgaste.
+        static Color PaintLaminate(int x, int y, int size)
+        {
+            float meters = 4f / size;
+            float u = x * meters, v = y * meters;
+            int row = Mathf.FloorToInt(v / 0.19f);
+            float shift = Mathf.Repeat(row * 0.47f, 1.2f);
+            int plank = Mathf.FloorToInt((u + shift) / 1.2f);
+            float along = Mathf.Repeat(u + shift, 1.2f), across = Mathf.Repeat(v, 0.19f);
+            float seed = Mathf.Repeat(Mathf.Sin(row * 12.9898f + plank * 78.233f) * 43758.5453f, 1f);
+
+            var baseColor = Color.Lerp(new Color(0.42f, 0.29f, 0.17f), new Color(0.56f, 0.4f, 0.24f), seed);
+            float grain = Mathf.Sin((across * 90f + Mathf.Sin(along * 6f + seed * 10f) * 1.5f) * (1f + seed)) * 0.5f + 0.5f;
+            Color c = baseColor * Mathf.Lerp(0.88f, 1.08f, grain);
+            if (across < 0.004f || along < 0.004f) c *= 0.55f; // fresta entre as tábuas
+            return new Color(c.r, c.g, c.b, 1f);
+        }
+
+        // Vinílico: placas cinza de 50 cm com fuga escura e um pontilhado mais claro.
+        static Color PaintVinyl(int x, int y, int size)
+        {
+            float meters = 4f / size;
+            float u = x * meters, v = y * meters;
+            int tx = Mathf.FloorToInt(u / 0.5f), ty = Mathf.FloorToInt(v / 0.5f);
+            float seed = Mathf.Repeat(Mathf.Sin(tx * 12.9898f + ty * 78.233f) * 43758.5453f, 1f);
+            float speck = Mathf.Repeat(Mathf.Sin(x * 3.1f + y * 7.7f) * 9137.1f, 1f);
+            float g = Mathf.Lerp(0.42f, 0.5f, seed) + (speck > 0.93f ? 0.08f : 0f);
+            if (Mathf.Repeat(u, 0.5f) < 0.006f || Mathf.Repeat(v, 0.5f) < 0.006f) g *= 0.6f;
+            return new Color(g, g * 1.01f, g * 1.03f, 1f);
         }
 
         static GameObject[] LoadModels()
@@ -140,6 +312,7 @@ namespace BackRooms.EditorTools
 
             var problems = new List<string>();
             var lines = new List<string>();
+            int repeats = 0;
 
             try
             {
@@ -154,8 +327,9 @@ namespace BackRooms.EditorTools
                         problems.Add($"seed {seed}: a mesma seed deu mobília diferente ({count} x {props.Count} móveis)");
 
                     Transform root = builder.transform.Find("Moveis");
-                    int inRoom = CountInSpawnRoom(builder, root);
-                    if (inRoom > 0) problems.Add($"seed {seed}: {inRoom} móveis dentro da sala inicial");
+                    var roomItems = new List<string>();
+                    int inRoom = CountInSpawnRoom(builder, root, roomItems);
+                    if (inRoom > 0) problems.Add($"seed {seed}: {inRoom} móveis dentro da sala inicial ({string.Join(", ", roomItems)})");
 
                     List<string> blocked = BlockedPassages(builder, root);
                     if (blocked.Count > 0)
@@ -163,8 +337,33 @@ namespace BackRooms.EditorTools
 
                     if (count < Size * Size / 2) problems.Add($"seed {seed}: só {count} móveis");
 
-                    lines.Add($"seed {seed}: {count} móveis, sala dos sofás no bloco {props.SofaRoomBlock}, {blocked.Count} passagens bloqueadas");
+                    // Abrigo e perigo: tem de haver de tudo, e as barricadas não podem isolar nada.
+                    if (props.Totems < props.totemsMin) problems.Add($"seed {seed}: só {props.Totems} totens");
+                    if (props.Barricades < 1) problems.Add($"seed {seed}: nenhuma barricada");
+                    if (props.BubbleSheets < 1) problems.Add($"seed {seed}: nenhum plástico-bolha");
+                    if (props.HideSpots < 3) problems.Add($"seed {seed}: só {props.HideSpots} esconderijos em móvel");
+                    string isolated = Isolated(d: builder.Data);
+                    if (isolated != null) problems.Add($"seed {seed}: a barricada isolou {isolated}");
+
+                    // Conjunto repetido: as três células com a mesma mobília, no mesmo lugar dentro
+                    // de cada uma, até o giro de cada cadeira.
+                    if (props.RepeatCells.Count == 3)
+                    {
+                        string first = CellSignature(root, props.RepeatCells[0]);
+                        for (int k = 1; k < 3; k++)
+                            if (CellSignature(root, props.RepeatCells[k]) != first)
+                                problems.Add($"seed {seed}: o conjunto repetido saiu diferente na célula {props.RepeatCells[k]}");
+                        if (first.Length == 0) problems.Add($"seed {seed}: o conjunto repetido está vazio");
+                        repeats++;
+                    }
+
+                    lines.Add($"seed {seed}: {count} móveis, sala dos sofás no bloco {props.SofaRoomBlock}, {blocked.Count} passagens bloqueadas, " +
+                              $"{props.Barricades} barricadas, {props.Totems} totens, {props.BubbleSheets} plásticos-bolha, {props.HideSpots} esconderijos " +
+                              $"({HideCount(root, BackRooms.Player.HideKind.Wardrobe)} guarda-roupas, {HideCount(root, BackRooms.Player.HideKind.Table)} mesas), " +
+                              $"{props.Anomalies} anomalias, {props.ZoneSigns} placas penduradas");
                 }
+
+                lines.Add($"conjunto repetido em {repeats} de {CheckSeeds.Length} seeds");
 
                 builder.seed = CheckSeeds[0];
                 builder.Rebuild();
@@ -181,21 +380,94 @@ namespace BackRooms.EditorTools
             return problems.Count == 0;
         }
 
-        static int CountInSpawnRoom(LevelBuilder builder, Transform root)
+        static int CountInSpawnRoom(LevelBuilder builder, Transform root) => CountInSpawnRoom(builder, root, null);
+
+        static int CountInSpawnRoom(LevelBuilder builder, Transform root, List<string> names)
         {
             LevelData d = builder.Data;
             int count = 0;
             foreach (Transform item in root)
             {
-                Vector3 p = item.localPosition;
-                int x = Mathf.FloorToInt(p.x / LevelBuilder.Cell), z = Mathf.FloorToInt(p.z / LevelBuilder.Cell);
-                if (x >= 0 && z >= 0 && x < d.Width && z < d.Height && d.InRoom(x, z)) count++;
+                // O bilhete do código fica na sala inicial de propósito (é um papel na parede).
+                if (item.name == "Bilhete") continue;
+                // Pela caixa do móvel (encolhida 10 cm), não pelo pé: tombado, o pé fica num canto.
+                var box = item.GetComponent<BoxCollider>();
+                Bounds b = box != null ? box.bounds : new Bounds(item.position, Vector3.zero);
+                Vector3 min = root.InverseTransformPoint(b.min), max = root.InverseTransformPoint(b.max);
+                int x0 = Mathf.FloorToInt((Mathf.Min(min.x, max.x) + 0.1f) / LevelBuilder.Cell), x1 = Mathf.FloorToInt((Mathf.Max(min.x, max.x) - 0.1f) / LevelBuilder.Cell);
+                int z0 = Mathf.FloorToInt((Mathf.Min(min.z, max.z) + 0.1f) / LevelBuilder.Cell), z1 = Mathf.FloorToInt((Mathf.Max(min.z, max.z) - 0.1f) / LevelBuilder.Cell);
+                bool inside = false;
+                for (int z = Mathf.Min(z0, z1); z <= Mathf.Max(z0, z1) && !inside; z++)
+                    for (int x = Mathf.Min(x0, x1); x <= Mathf.Max(x0, x1) && !inside; x++)
+                        if (x >= 0 && z >= 0 && x < d.Width && z < d.Height && d.InRoom(x, z))
+                        {
+                            inside = true;
+                            count++;
+                            names?.Add($"{item.name} em ({x},{z})");
+                        }
             }
             return count;
         }
 
         // Para cada par de células vizinhas sem parede entre elas, uma cápsula do tamanho do
         // jogador (0,28 m de raio) vai de um centro ao outro; bater num móvel é passagem fechada.
+        static Vector3 Flat(Vector3 v)
+        {
+            v.y = 0f;
+            return v;
+        }
+
+        // A mobília de uma célula, relativa a ela: nome, posição (mm) e giro de cada móvel cujo pé
+        // fica nela, em ordem. Duas células com a mesma assinatura têm a mesma mobília.
+        static string CellSignature(Transform root, Vector2Int cell)
+        {
+            var items = new List<string>();
+            float cx = cell.x * LevelBuilder.Cell, cz = cell.y * LevelBuilder.Cell;
+            foreach (Transform item in root)
+            {
+                Vector3 p = item.localPosition;
+                if (Mathf.FloorToInt(p.x / LevelBuilder.Cell) != cell.x || Mathf.FloorToInt(p.z / LevelBuilder.Cell) != cell.y) continue;
+                if (item.name.StartsWith("Piso") || item.name == "PlacaCurvaDireita" || item.name == "PlacaCurvaEsquerda") continue;
+                items.Add($"{item.name}:{Mathf.RoundToInt((p.x - cx) * 1000f)},{Mathf.RoundToInt(p.y * 1000f)},{Mathf.RoundToInt((p.z - cz) * 1000f)}:{Mathf.RoundToInt(item.localEulerAngles.y * 10f)}");
+            }
+            items.Sort(StringComparer.Ordinal);
+            return string.Join(";", items);
+        }
+
+        static int HideCount(Transform root, BackRooms.Player.HideKind kind)
+        {
+            int count = 0;
+            foreach (HideSpot spot in root.GetComponentsInChildren<HideSpot>())
+                if (spot.kind == kind) count++;
+            return count;
+        }
+
+        // Alguma célula com piso, fora das barricadas, ficou sem caminho até a sala inicial? Devolve
+        // a primeira, ou nulo se não.
+        static string Isolated(LevelData d)
+        {
+            var seen = new bool[d.Width, d.Height];
+            var queue = new Queue<Vector2Int>();
+            queue.Enqueue(new Vector2Int(d.SpawnX, d.SpawnZ));
+            seen[d.SpawnX, d.SpawnZ] = true;
+            WallSide[] sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
+            while (queue.Count > 0)
+            {
+                Vector2Int c = queue.Dequeue();
+                foreach (WallSide side in sides)
+                {
+                    if (!d.CanWalk(c.x, c.y, side, false) || !d.Neighbor(c.x, c.y, side, out int nx, out int nz)) continue;
+                    if (seen[nx, nz] || d.IsBarricade(nx, nz)) continue;
+                    seen[nx, nz] = true;
+                    queue.Enqueue(new Vector2Int(nx, nz));
+                }
+            }
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                    if (!d.Pit[x, z] && !d.IsBarricade(x, z) && !seen[x, z]) return $"({x},{z})";
+            return null;
+        }
+
         static List<string> BlockedPassages(LevelBuilder builder, Transform root)
         {
             Physics.SyncTransforms();
@@ -217,6 +489,8 @@ namespace BackRooms.EditorTools
         {
             if (nx >= d.Width || nz >= d.Height) return;
             if (!d.CanWalk(x, z, side, false)) return;
+            // A barricada fecha a passagem de propósito; o que se confere é que nada fica isolado.
+            if (d.IsBarricade(x, z) || d.IsBarricade(nx, nz)) return;
 
             Vector3 a = builder.CellCenter(x, z), b = builder.CellCenter(nx, nz);
             Vector3 low = Vector3.up * 0.35f, high = Vector3.up * 1.5f;
@@ -312,6 +586,86 @@ namespace BackRooms.EditorTools
                     Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, $"level1_placa_saida_{signs}.png"));
                     signs++;
                     shots++;
+                }
+
+                // Um totem (de frente e de baixo, que é como se vê um personagem alto), uma
+                // barricada, um plástico-bolha e um guarda-roupa.
+                Totem firstTotem = root.GetComponentInChildren<Totem>();
+                if (firstTotem != null)
+                {
+                    Transform t = firstTotem.transform;
+                    Vector3 eye = t.position + t.forward * 3.2f;
+                    rig.transform.SetPositionAndRotation(new Vector3(eye.x, 0f, eye.z), Quaternion.LookRotation(-t.forward, Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(-12f, 0f, 0f);
+                    Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_totem.png"));
+                    eye = t.position + t.forward * 1.4f;
+                    rig.transform.SetPositionAndRotation(new Vector3(eye.x, 0f, eye.z), Quaternion.LookRotation(-t.forward, Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(-35f, 0f, 0f);
+                    Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_totem_de_baixo.png"));
+                    shots += 2;
+                }
+
+                // O conjunto repetido, visto de trás da primeira célula, ao longo das três.
+                if (props.RepeatCells.Count == 3)
+                {
+                    Vector3 a = builder.CellCenter(props.RepeatCells[0].x, props.RepeatCells[0].y);
+                    Vector3 b = builder.CellCenter(props.RepeatCells[2].x, props.RepeatCells[2].y);
+                    Vector3 along = (b - a).normalized;
+                    Vector3 eye = a - along * 1.6f;
+                    rig.transform.SetPositionAndRotation(new Vector3(eye.x, 0f, eye.z), Quaternion.LookRotation(along, Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(8f, 0f, 0f);
+                    Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_conjunto_repetido.png"));
+                    shots++;
+                }
+
+                // A primeira etiqueta vermelha, de frente, a 1,5 m.
+                Transform firstTag = root.Find("Etiqueta_1");
+                if (firstTag != null)
+                {
+                    Vector3 eye = firstTag.position - firstTag.forward * 1.5f;
+                    rig.transform.SetPositionAndRotation(new Vector3(eye.x, 0f, eye.z), Quaternion.LookRotation(Flat(firstTag.forward), Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(5f, 0f, 0f);
+                    Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_etiqueta.png"));
+                    shots++;
+                }
+
+                Transform barricade = root.Find("Barricada");
+                if (barricade != null)
+                {
+                    Vector3 at = barricade.position;
+                    foreach (WallSide side in sides)
+                    {
+                        Vector3 local = builder.transform.InverseTransformPoint(at);
+                        int bx = Mathf.FloorToInt(local.x / LevelBuilder.Cell), bz = Mathf.FloorToInt(local.z / LevelBuilder.Cell);
+                        if (!d.CanWalk(bx, bz, side, false) || !d.Neighbor(bx, bz, side, out int nx, out int nz)) continue;
+                        Vector3 eye = builder.CellCenter(nx, nz);
+                        rig.transform.SetPositionAndRotation(eye, Quaternion.LookRotation((builder.CellCenter(bx, bz) - eye).normalized, Vector3.up));
+                        camera.transform.localRotation = Quaternion.Euler(-5f, 0f, 0f);
+                        Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_barricada.png"));
+                        shots++;
+                        break;
+                    }
+                }
+
+                Transform wrap = root.Find("PlasticoBolha");
+                if (wrap != null)
+                {
+                    Vector3 eye = wrap.position + new Vector3(1.6f, 0f, 1.6f);
+                    rig.transform.SetPositionAndRotation(new Vector3(eye.x, 0f, eye.z), Quaternion.LookRotation(new Vector3(-1f, 0f, -1f), Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(40f, 0f, 0f);
+                    Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_plastico_bolha.png"));
+                    shots++;
+                }
+
+                foreach (HideSpot spot in root.GetComponentsInChildren<HideSpot>())
+                {
+                    if (spot.kind != BackRooms.Player.HideKind.Wardrobe) continue;
+                    Vector3 eye = spot.ExitWorld + spot.transform.forward * 0.8f;
+                    rig.transform.SetPositionAndRotation(new Vector3(eye.x, 0f, eye.z), Quaternion.LookRotation(-spot.transform.forward, Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(5f, 0f, 0f);
+                    Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, "level1_guarda_roupa.png"));
+                    shots++;
+                    break;
                 }
 
                 // Da porta da sala inicial para fora.

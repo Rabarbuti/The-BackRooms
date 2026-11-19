@@ -3,15 +3,23 @@
 Projeto da segunda fase. Escrito em 11/11/2026.
 
 **Já existe:** uma versão de teste jogável (`Scenes/Level1_Test.unity`, menu BackRooms > Montar
-Level 1 (teste)): a planta do Level 0 em 10 x 10 células, sem buracos nem nichos,
-mobiliada pela `PropLayer` com os 43 modelos do Blender, incluindo a sala dos sofás e placas
+Level 1 (teste)): a planta do Level 0 em 20 x 20 células, com pé-direito de 3,4 m, sem buracos nem nichos,
+mobiliada pela `PropLayer` com os 65 modelos do Blender, incluindo a sala dos sofás e placas
 de trânsito (PARE e STOP). No lugar das setas pintadas do Level 0, placas amarelas de curva
 (losango com a seta dobrada) pregadas na parede apontam o caminho até a saída. A porta do Level 0
 leva até aqui. **O Capitão está na fase** (desde 17/11/2026, `CaptainBrain`): aparece quando alguém
 chega a 5 células da sala inicial, ouve, congela quando é visto e está iluminado, cansa quem o
 encara, anda em arrancadas no apagão e pega como a entidade (seção 5.4, regras 1 a 4 e 6).
-**Falta:** totens, guarda-roupa como esconderijo, plástico-bolha, barricadas, objetivo e som (o
-jingle e a música da loja; a perna de pau já soa) (seção 8).
+Também já existem (17/11/2026): totens com troca no apagão, guarda-roupa e mesa de esconder,
+plástico-bolha, barricadas, o objetivo (teclado, etiquetas vermelhas e bilhete), a música da loja, o
+jingle do Capitão e o piso por zona (laminado e vinílico) com passos próprios.
+As zonas da seção 3.1 existem todas (lavanderia, festa, verão, quarto, escritório e cubículos
+com os lotes de 17/11/2026; o sorteio é um carro num beco sem saída), com placas penduradas com o
+nome da zona e anomalias longe do início (mesa no teto, móvel atravessando a parede, guarda-roupa
+de frente para a parede, batente solto). A mobília sai igual no host e no cliente (conferido em dois
+editores).
+**Falta:** jogar à mão e ajustar. A saída continua a porta corta-fogo com EXIT, não a porta da
+doca da seção 6 (decidido em 17/11/2026). O teto a 3,4 m não muda a iluminação das luminárias.
 
 ---
 
@@ -303,9 +311,11 @@ comprida no amarelo das salas; de perto, o que fica é o **branco dos olhos** e 
 
 ### 5.4 Regras
 
-As regras 1 a 4 e 6 estão feitas (`CaptainBrain`, que herda do `EntityBrain`; teste em
-`Level1CaptainTest`). As 5 e 7 dependem de totens, guarda-roupa e barricadas, que ainda não
-existem. Os números ficam no prefab (`CaptainPreview.CreatePrefab`) e no `CaptainBrain`.
+Todas as regras estão feitas (`CaptainBrain`, que herda do `EntityBrain`; testes em
+`Level1CaptainTest` e `Level1ShelterTest`). Da regra 5, os "olhos seguem" são a cabeça dele, que
+vira devagar para o jogador mais perto (até 40°, a até 10 m, mesmo congelado; os olhos fazem
+parte da malha do rosto), e a perna de pau marca o carpete com decalques redondos a cada passo
+dela (`PegMarks`, as 60 mais novas ficam). O totem não vira a cabeça nem anda. Os números ficam no prefab (`CaptainPreview.CreatePrefab`) e no `CaptainBrain`.
 
 1. **Ouve como a entidade do Level 0** — mesmo cálculo de barulho do `EntityBrain`, com o
    plástico-bolha valendo como corrida (quando existir). Também vê como ela: 22 m à frente, olho a
@@ -375,11 +385,11 @@ o Capitão.
 | 3 | Zonas e conjuntos; hash de objetos no teste de fumaça | 2 (**feito em parte**: temas por bloco 2 x 2, sala dos sofás, hash conferido por `Level1Setup.BatchCheck`; falta conferir entre host e cliente) |
 | 4 | Troca de fase: a porta EXIT leva ao Level 1; o host envia índice da fase + seed | — (**feito**: `LevelExit`, `GameSession.OpenExit`) |
 | 5 | Cérebro do Capitão: herda o ouvido do `EntityBrain`, regra de "visto e iluminado" | 1, 4 (**feito** em 17/11/2026: `CaptainBrain`, `Level1CaptainTest`) |
-| 6 | Totens e troca no apagão | 3, 5 |
-| 7 | Guarda-roupa como `HidingSpot`, plástico-bolha | 3 |
-| 8 | Etiquetas de LIQUIDAÇÃO, teclado, porta da doca | 3 |
-| 9 | Anomalias, barricadas, carro, vitrine de verão | 3 |
-| 10 | Som: jingle desafinado, perna de pau, música de loja | 5 (**feito em parte**: a perna de pau, "TOC… arrasta", em `CaptainAudio`) |
+| 6 | Totens e troca no apagão | 3, 5 (**feito**: `Totem`, `CaptainBrain.TrySwap`) |
+| 7 | Guarda-roupa como `HidingSpot`, plástico-bolha | 3 (**feito**: `HideSpot` com a tecla E, também a mesa; `BubbleWrap`) |
+| 8 | Etiquetas de LIQUIDAÇÃO, teclado, porta da doca | 3 (**feito**: `ExitLock`; a porta continua a corta-fogo com EXIT) |
+| 9 | Anomalias, barricadas, carro, vitrine de verão | 3 (**feito**: barricadas, sorteio com o carro, zona de verão e as anomalias; só a mesa no teto e o batente vieram como variação, o resto como o projeto descreve) |
+| 10 | Som: jingle desafinado, perna de pau, música de loja | 5 (**feito**: `CaptainAudio`, `ShopMusic`; piso por zona com passos próprios) |
 
 Os passos 2 e 4 não dependem um do outro e podem andar em paralelo.
 

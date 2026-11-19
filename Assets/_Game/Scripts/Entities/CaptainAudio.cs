@@ -1,3 +1,5 @@
+using BackRooms.Audio;
+using BackRooms.Net;
 using UnityEngine;
 
 namespace BackRooms.Entities
@@ -10,7 +12,9 @@ namespace BackRooms.Entities
     ///
     /// Roda em todas as máquinas: os passos vêm do <see cref="CaptainBody"/>, que anima pela
     /// posição recebida da rede. Congelado, ele não dá passo e fica em silêncio.
-    /// O jingle desafinado da loja fica para a etapa do som (level1-mostruario.md, seção 7).
+    /// Perto dele, o jingle da loja numa caixinha de música, "saindo de lugar nenhum" (meio 3D):
+    /// quanto mais perto de quem ouve, mais alto, mais rápido e mais desafinado. Congelado, a
+    /// caixinha para junto com ele.
     /// </summary>
     [RequireComponent(typeof(CaptainBody))]
     public sealed class CaptainAudio : MonoBehaviour
@@ -19,7 +23,19 @@ namespace BackRooms.Entities
         [Tooltip("Distância até onde se ouve, em metros.")]
         public float range = 26f;
 
+        [Tooltip("Até onde se ouve o jingle, em metros.")]
+        public float jingleRange = 16f;
+        [Range(0f, 1f)] public float jingleVolume = 0.45f;
+
+        /// <summary>Tom do jingle agora (1 = normal). Para os testes: sem placa de som não dá para ouvir.</summary>
+        public float JinglePitch { get; private set; } = 1f;
+
+        /// <summary>Volume do jingle agora, de 0 a 1.</summary>
+        public float JingleLevel { get; private set; }
+
         AudioSource _source;
+        AudioSource _jingle;
+        CaptainBrain _brain;
         AudioClip _knock;
         AudioClip _drag;
         CaptainBody _body;
@@ -38,6 +54,36 @@ namespace BackRooms.Entities
 
             _knock = CreateKnock();
             _drag = CreateDrag();
+
+            _brain = GetComponent<CaptainBrain>();
+            _jingle = gameObject.AddComponent<AudioSource>();
+            _jingle.clip = ShopMusic.CreateJingle();
+            _jingle.loop = true;
+            _jingle.playOnAwake = false;
+            _jingle.spatialBlend = 0.5f;
+            _jingle.rolloffMode = AudioRolloffMode.Linear;
+            _jingle.minDistance = 2f;
+            _jingle.maxDistance = jingleRange * 2f;
+            _jingle.dopplerLevel = 0f;
+            _jingle.volume = 0f;
+            _jingle.Play();
+        }
+
+        void Update()
+        {
+            // Quem ouve é a câmera do jogador desta máquina.
+            PlayerNetwork local = PlayerNetwork.Local;
+            Vector3 ear = local != null && local.playerCamera != null ? local.playerCamera.transform.position : transform.position + Vector3.one * 1000f;
+            float distance = Vector3.Distance(ear, transform.position + Vector3.up * 1.6f);
+            float near = Mathf.Clamp01(Mathf.InverseLerp(jingleRange, 2f, distance));
+            bool frozen = _brain != null && _brain.IsSpawned && _brain.Frozen;
+
+            // Mais rápido e mais errado de perto: o tom sobe e oscila cada vez mais.
+            float wobble = Mathf.Sin(Time.time * Mathf.Lerp(1.5f, 7f, near)) * 0.06f * near;
+            JinglePitch = Mathf.Lerp(0.88f, 1.35f, near) + wobble;
+            JingleLevel = frozen ? 0f : Mathf.Pow(near, 0.7f);
+            _jingle.pitch = JinglePitch;
+            _jingle.volume = jingleVolume * JingleLevel;
         }
 
         void OnEnable() { _body.Stepped += OnStepped; }

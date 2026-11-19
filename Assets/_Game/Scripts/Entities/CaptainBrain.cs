@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using BackRooms.Net;
 using BackRooms.Player;
@@ -22,6 +23,11 @@ namespace BackRooms.Entities
     /// • <b>Apagão é a hora dele.</b> No escuro, caçando, anda em arrancadas
     ///   (<see cref="darkDashSpeed"/> por <see cref="dashSeconds"/>, depois
     ///   <see cref="dashRestSeconds"/> mancando). Fora isso manca devagar.
+    ///
+    /// • <b>Troca com um totem no apagão</b> (regra 5): no começo de um apagão, com chance
+    ///   <see cref="swapChance"/>, se ninguém o vê, ele some e aparece no lugar de um totem que
+    ///   ninguém está olhando, e o totem vai para onde ele estava. A posição de cada totem movido
+    ///   vai pela rede (<see cref="TotemPose"/>), e quem entra depois recebe a lista.
     ///
     /// Só o host decide se ele está congelado. O quanto o jogador desta máquina o encarou
     /// (<see cref="LocalStare"/>, para o chuvisco) é contado em cada máquina com a mesma conta.
@@ -50,6 +56,37 @@ namespace BackRooms.Entities
         [Tooltip("Quão depressa o cansaço de encarar passa olhando para outro lado (segundos por segundo).")]
         public float stareRecovery = 1.5f;
 
+        [Header("Capitão: totens")]
+        [Tooltip("Chance de trocar de lugar com um totem em cada apagão.")]
+        [Range(0f, 1f)] public float swapChance = 0.5f;
+        [Tooltip("Segundos de escuro antes da troca.")]
+        public float swapDelay = 1.2f;
+        [Tooltip("O totem escolhido fica a pelo menos esta distância de todo jogador, em metros.")]
+        public float swapMinDistance = 8f;
+
+        /// <summary>Uma troca de lugar: o totem de índice <see cref="Index"/> foi para outro ponto.</summary>
+        public struct TotemPose : INetworkSerializable, IEquatable<TotemPose>
+        {
+            public ushort Index;
+            public Vector3 Position;
+            public float Yaw;
+
+            public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+            {
+                serializer.SerializeValue(ref Index);
+                serializer.SerializeValue(ref Position);
+                serializer.SerializeValue(ref Yaw);
+            }
+
+            public bool Equals(TotemPose other) => Index == other.Index && Position == other.Position && Yaw == other.Yaw;
+        }
+
+        /// <summary>Quantas vezes trocou de lugar com um totem (só no host). Para os testes.</summary>
+        public int Swaps { get; private set; }
+
+        /// <summary>Para os testes: a próxima troca acontece (sem sorteio) no próximo apagão.</summary>
+        public bool ForceNextSwap { get; set; }
+
         /// <summary>Congelado por estar sendo visto e iluminado. Vale em qualquer máquina.</summary>
         public bool Frozen => _frozen.Value;
 
@@ -71,6 +108,9 @@ namespace BackRooms.Entities
         static readonly RaycastHit[] Hits = new RaycastHit[24];
 
         readonly NetworkVariable<bool> _frozen = new NetworkVariable<bool>();
+        readonly NetworkList<TotemPose> _totems = new NetworkList<TotemPose>();
+        bool _swapDarkSeen;
+        float _swapAt = -1f;
         readonly Dictionary<PlayerNetwork, float> _stare = new Dictionary<PlayerNetwork, float>();
         readonly List<PlayerNetwork> _gone = new List<PlayerNetwork>();
 
@@ -89,12 +129,30 @@ namespace BackRooms.Entities
             base.OnNetworkSpawn();
             Captain = this;
             _lastPosition = transform.position;
+
+            // Quem entra depois recebe a lista inteira: põe os totens já trocados no lugar.
+            _totems.OnListChanged += OnTotemsChanged;
+            for (int i = 0; i < _totems.Count; i++) ApplyTotem(_totems[i]);
         }
 
         public override void OnNetworkDespawn()
         {
+            _totems.OnListChanged -= OnTotemsChanged;
             base.OnNetworkDespawn();
             if (Captain == this) Captain = null;
+        }
+
+        void OnTotemsChanged(NetworkListEvent<TotemPose> change)
+        {
+            if (change.Type == NetworkListEvent<TotemPose>.EventType.Add ||
+                change.Type == NetworkListEvent<TotemPose>.EventType.Value)
+                ApplyTotem(change.Value);
+        }
+
+        static void ApplyTotem(TotemPose pose)
+        {
+            if (pose.Index < Totem.All.Count && Totem.All[pose.Index] != null)
+                Totem.All[pose.Index].MoveTo(pose.Position, pose.Yaw);
         }
 
         // ---------------------------------------------------------------- Ser visto
@@ -114,6 +172,8 @@ namespace BackRooms.Entities
                     if (_watched) Freezes++;
                 }
             }
+
+            TrySwap(now);
 
             // Velocidade real, medida aqui mesmo (para o teste conferir as arrancadas). O passo
             // medido agora foi dado no quadro anterior, com o tempo daquele quadro.
@@ -156,7 +216,8 @@ namespace BackRooms.Entities
                 if (player == null || !player.IsSpawned || !player.InGame) continue;
                 if (!all && player != PlayerNetwork.Local) continue;
 
-                bool sees = lit && InSight(player);
+                // De dentro do guarda-roupa não se vigia ninguém (só se vê a fresta).
+                bool sees = lit && player.Hiding != BackRooms.Player.HideKind.Wardrobe && InSight(player);
                 _stare.TryGetValue(player, out float stare);
                 stare = sees ? stare + dt : Mathf.Max(0f, stare - dt * stareRecovery);
                 _stare[player] = stare;
@@ -263,6 +324,140 @@ namespace BackRooms.Entities
                 if (Hits[i].collider.transform.IsChildOf(levelRoot)) return true;
 
             return false;
+        }
+
+        // ---------------------------------------------------------------- Totens
+
+        // Host: no começo de cada apagão sorteia se troca; passado swapDelay de escuro, troca com
+        // um totem que ninguém está vendo e que está longe de todos.
+        void TrySwap(float now)
+        {
+            LightsOut power = LightsOut.Instance;
+            bool dark = power != null && power.Phase == PowerPhase.Dark;
+            if (!dark)
+            {
+                _swapDarkSeen = false;
+                _swapAt = -1f;
+                return;
+            }
+
+            if (!_swapDarkSeen)
+            {
+                _swapDarkSeen = true;
+                bool roll = ForceNextSwap || UnityEngine.Random.value < swapChance;
+                _swapAt = roll && Totem.All.Count > 0 ? now + swapDelay : -1f;
+            }
+
+            if (_swapAt < 0f || now < _swapAt) return;
+            if (_watched || State == EntityState.Feed) return; // tenta de novo no próximo quadro
+
+            Totem chosen = null;
+            float best = float.MaxValue;
+            foreach (Totem totem in Totem.All)
+            {
+                if (totem == null) continue;
+                Vector3 at = totem.transform.position;
+                float nearest = float.MaxValue;
+                bool seen = false;
+                foreach (PlayerNetwork player in PlayerNetwork.All)
+                {
+                    if (player == null || !player.IsSpawned || !player.InGame) continue;
+                    nearest = Mathf.Min(nearest, Vector3.Distance(player.transform.position, at));
+                    if (PointInSight(player, at)) seen = true;
+                }
+                if (seen || nearest < swapMinDistance) continue;
+                // O mais perto de algum jogador (sem passar do limite): a troca assusta onde há gente.
+                if (nearest < best)
+                {
+                    best = nearest;
+                    chosen = totem;
+                }
+            }
+
+            _swapAt = -1f;
+            if (chosen == null) return;
+
+            // O totem vai para o meio da célula em que ele estava (nunca fecha passagem); ele, para
+            // o canto do totem.
+            Vector3 from = transform.position;
+            Vector3 to = chosen.transform.position;
+            Vector3 cellCenter = CellCenterOf(from);
+            float yaw = Quaternion.LookRotation(Flat(to - from).sqrMagnitude > 0.01f ? Flat(to - from) : Vector3.forward).eulerAngles.y;
+
+            var pose = new TotemPose { Index = (ushort)chosen.Index, Position = cellCenter, Yaw = yaw };
+            ApplyTotem(pose);
+            bool replaced = false;
+            for (int i = 0; i < _totems.Count; i++)
+            {
+                if (_totems[i].Index != pose.Index) continue;
+                _totems[i] = pose;
+                replaced = true;
+            }
+            if (!replaced) _totems.Add(pose);
+
+            Quaternion facing = chosen.transform.rotation;
+            transform.SetPositionAndRotation(new Vector3(to.x, from.y, to.z), facing);
+            if (TryGetComponent(out Unity.Netcode.Components.NetworkTransform moved))
+                moved.Teleport(transform.position, transform.rotation, transform.localScale);
+            _lastPosition = transform.position;
+            ForgetPath();
+            Swaps++;
+        }
+
+        static Vector3 CellCenterOf(Vector3 world)
+        {
+            GameSession session = GameSession.Instance;
+            LevelBuilder level = session != null ? session.level : null;
+            if (level == null) return world;
+            Vector3 local = level.transform.InverseTransformPoint(world);
+            int x = Mathf.FloorToInt(local.x / LevelBuilder.Cell), z = Mathf.FloorToInt(local.z / LevelBuilder.Cell);
+            Vector3 center = level.CellCenter(x, z);
+            return new Vector3(center.x, world.y, center.z);
+        }
+
+        // O ponto (pé de um totem) aparece na tela do jogador, sem parede no meio, a até 25 m?
+        static bool PointInSight(PlayerNetwork viewer, Vector3 foot)
+        {
+            Camera camera = viewer.playerCamera;
+            Transform root = LevelRoot();
+            if (camera == null || root == null) return false;
+
+            Transform eye = camera.transform;
+            float tanV = Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
+            float tanH = tanV * Aspect;
+            foreach (float height in BodyHeights)
+            {
+                Vector3 point = foot + Vector3.up * height;
+                Vector3 local = eye.InverseTransformPoint(point);
+                if (local.z < 0.3f || local.z > 25f) continue;
+                if (Mathf.Abs(local.x) > local.z * tanH || Mathf.Abs(local.y) > local.z * tanV) continue;
+                if (!BlockedExcept(eye.position, point, root, foot)) return true;
+            }
+            return false;
+        }
+
+        // Como Blocked, mas sem contar o próprio totem (o raio termina dentro da caixa dele).
+        static bool BlockedExcept(Vector3 from, Vector3 to, Transform levelRoot, Vector3 foot)
+        {
+            Vector3 delta = to - from;
+            float distance = delta.magnitude;
+            if (distance < 0.01f) return false;
+
+            int count = Physics.RaycastNonAlloc(from, delta / distance, Hits, distance, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+            {
+                Transform hit = Hits[i].collider.transform;
+                if (!hit.IsChildOf(levelRoot)) continue;
+                if (hit.GetComponent<Totem>() != null && Flat(hit.position - foot).sqrMagnitude < 0.25f) continue;
+                return true;
+            }
+            return false;
+        }
+
+        static Vector3 Flat(Vector3 v)
+        {
+            v.y = 0f;
+            return v;
         }
 
         // ---------------------------------------------------------------- Andar

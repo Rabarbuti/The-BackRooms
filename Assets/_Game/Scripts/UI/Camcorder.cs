@@ -214,6 +214,8 @@ namespace BackRooms.UI
                 PlayerNetwork.CountAtExit(out int waiting, out int total);
 
                 if (exit.LocalWaiting) prompt = total > 1 ? $"WAITING {waiting}/{total}\nE - LET GO" : "OPENING";
+                else if (ExitLock.Prompt != null) prompt = ExitLock.Prompt;
+                else if (exit.LocalInReach && LevelExit.Locked) prompt = "LOCKED\nCODE ON KEYPAD";
                 else if (exit.LocalInReach) prompt = waiting > 0 ? $"E - OPEN DOOR\n{waiting}/{total} WAITING" : "E - OPEN DOOR";
                 else if (waiting > 0) footer = $"EXIT {waiting}/{total}";
             }
@@ -232,7 +234,13 @@ namespace BackRooms.UI
             if (prompt == null && cover == null && body != null && body.CanClimb && !body.IsClimbing && !body.IsReturning)
                 prompt = "W - CLIMB";
 
-            Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f, tape, prompt, footer, cover, underwater, air, swimHint);
+            // Esconderijo em móvel (Level 1): entrar, sair, agachar para a mesa.
+            if (prompt == null && cover == null) prompt = HideSpotInput.Prompt;
+
+            // Dentro do guarda-roupa só se vê pela fresta da porta.
+            bool slit = body != null && body.Hiding == HideKind.Wardrobe && !body.IsReturning;
+
+            Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f, tape, prompt, footer, cover, underwater, air, swimHint, slit);
         }
 
         /// <summary>
@@ -241,11 +249,12 @@ namespace BackRooms.UI
         /// <paramref name="prompt"/> é o aviso no meio da tela (até duas linhas, separadas por
         /// quebra de linha), <paramref name="footer"/> o do pé, e <paramref name="cover"/>,
         /// quando informado, tapa a imagem com a tela preta e esse texto. <paramref name="swimHint"/>
-        /// é a dica de tecla do nado, piscando abaixo da barra do fôlego.
+        /// é a dica de tecla do nado, piscando abaixo da barra do fôlego. <paramref name="slit"/> tapa
+        /// a imagem menos uma fresta vertical no meio (de dentro do guarda-roupa).
         /// </summary>
         public void Draw(bool recording, float recordSeconds, float clockSeconds, float battery, bool lightOn, string tool = null,
                          bool noSignal = false, string tape = null, string prompt = null, string footer = null, string cover = null,
-                         bool underwater = false, float air = 1f, string swimHint = null)
+                         bool underwater = false, float air = 1f, string swimHint = null, bool slit = false)
         {
             EnsureTexture();
 
@@ -273,12 +282,12 @@ namespace BackRooms.UI
             int bars = battery > 0.66f ? 3 : battery > 0.33f ? 2 : battery > 0.05f ? 1 : 0;
             int airStep = air < 0.999f ? Mathf.RoundToInt(Mathf.Clamp01(air) * 40f) : -1;
             bool airBlink = air < 0.25f && Mathf.FloorToInt(clockSeconds * 4f) % 2 == 0;
-            string state = $"{recording}|{blink}|{bars}|{battery < 0.15f}|{lightOn}|{tool}|{noSignal}|{tape}|{prompt}|{footer}|{cover}|{time}|{date}|{underwater}|{airStep}|{airBlink}|{swimHint}";
+            string state = $"{recording}|{blink}|{bars}|{battery < 0.15f}|{lightOn}|{tool}|{noSignal}|{tape}|{prompt}|{footer}|{cover}|{time}|{date}|{underwater}|{airStep}|{airBlink}|{swimHint}|{slit}";
 
             if (state != _drawn)
             {
                 _drawn = state;
-                DrawPanel(recording, clockSeconds, battery, lightOn, tool, noSignal, tape, prompt, footer, cover, time, date, underwater, air, airBlink,
+                DrawPanel(recording, clockSeconds, battery, lightOn, tool, noSignal, tape, prompt, footer, cover, time, date, underwater, air, airBlink, slit,
                           blink ? swimHint : null);
                 _osd.SetPixelData(_pixels, 0);
                 _osd.Apply(false);
@@ -294,7 +303,7 @@ namespace BackRooms.UI
 
         void DrawPanel(bool recording, float clockSeconds, float battery, bool lightOn, string tool, bool noSignal,
                        string tape, string prompt, string footer, string cover, string time, string date,
-                       bool underwater, float air, bool airBlink, string swimHint)
+                       bool underwater, float air, bool airBlink, bool slit, string swimHint)
         {
             // Sem sinal: o painel inteiro fica opaco e tapa a imagem do jogo.
             bool covered = noSignal || !string.IsNullOrEmpty(cover);
@@ -304,6 +313,18 @@ namespace BackRooms.UI
 
                 string message = string.IsNullOrEmpty(cover) ? "NO SIGNAL" : cover;
                 Text((Width - MeasureText(message, Huge)) / 2, Height / 2 - 21, message, Huge, White);
+            }
+            else if (slit)
+            {
+                // Escuro de dentro do móvel, com a fresta entre as portas: um filete de imagem no
+                // meio, um pouco mais largo embaixo (a porta empenada).
+                Array.Fill(_pixels, Black);
+                for (int y = 0; y < Height; y++)
+                {
+                    int half = Mathf.RoundToInt(Width * Mathf.Lerp(0.03f, 0.018f, y / (float)Height));
+                    int from = Width / 2 - half, to = Width / 2 + half;
+                    for (int x = from; x < to; x++) _pixels[y * Width + x] = default;
+                }
             }
             else
             {

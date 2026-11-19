@@ -138,6 +138,13 @@ atrapalham e dá para dividir o trabalho:
 | `loja` | EstanteAbertaMadeira, TorreExpositora, BalcaoDeCaixa, MonitorCRT, MesaSimples, PlacaPenduradaOferta, PlacaPenduradaLiquida | Agente (Sonnet) |
 | `detalhes` | CadeiraEncostoRipas, CadeiraDobravel, Comoda, CabideiroDePe, VasoAlto, MaquinaDeLavar, CilindroAzul | Agente (Sonnet) |
 | `transito` | PlacaPare, PlacaStop (inglês), PlacaSetas, PlacaAnimal, cada uma também com poste (`...Poste`); PlacaCurvaDireita e PlacaCurvaEsquerda (losango amarelo com seta dobrada; também com poste) | Agente (Sonnet); STOP e placas de curva pelo agente principal |
+| `quarto` | CamaDeCasal, CamaDeSolteiro, CriadoMudo (com abajur), Tapete | Agente (Opus), 17/11/2026 |
+| `escritorio` | MesaDeEscritorio, CadeiraGiratoria, Gaveteiro, ComputadorDeMesa (torre, teclado e mouse; o monitor é o MonitorCRT), DivisoriaCubiculo | Agente (Opus), 17/11/2026 |
+| `festa_verao` | MesaDeBolos, CachoDeBaloes, Bandeirinhas (origem nas pontas do cordão, pendurada; o lote aceita a base fora do chão), Espreguicadeira, GuardaSol, BolaDePraia | Agente (Opus), 17/11/2026 |
+| `sorteio_estoque` | Carro (sedã vermelho com laço), FaixaConcorra, PosteDeFila, CestoDeRoupa, RoupaNoChao, Palete, CarrinhoDeEstoque | Agente (Opus), 17/11/2026 |
+
+O limite de triângulos de cada móvel é o `TRI_BUDGET` de `moveis_base.py` (3000); o `run_lote` sai
+com 3 acima dele. Todos os lotes cabem, até o carro.
 
 Todos entram no jogo pela `PropLayer` (Level 1 de teste), achados pelo nome do FBX. Móvel novo só
 aparece na fase se a `PropLayer` souber onde pô-lo (as listas de cada tema em `PropLayer.cs`).

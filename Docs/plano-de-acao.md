@@ -12,7 +12,7 @@ nos projetos das fases (`level1-mostruario.md`, `level2-piscinas.md`, `plano-coo
 | Fase | Dá para jogar | Ameaça | Objetivo |
 |---|---|---|---|
 | Level 0 — o labirinto | Sim | A entidade (caça pelo barulho), buracos, apagão | Não: chegar à porta basta |
-| Level 1 — o Mostruário | Sim, versão de teste mobiliada | O Capitão (anda só quando não é visto iluminado) | Não |
+| Level 1 — o Mostruário | Sim, completo (17/11/2026) | O Capitão, totens, plástico-bolha, barricadas | Sim: teclado na porta, código em três etiquetas |
 | Level 2 — As Piscinas | Sim, versão de teste com nado | **Nenhuma** (sem maré, sem ralo) | Não |
 
 O que mais falta é **algo a fazer** em cada fase (objetivo) e **algo a temer** nas duas últimas.
@@ -65,8 +65,9 @@ parado na frente dele no escuro.
 **Testes:** `Level1Setup.BatchCheck`, `Level1PlayTest`, `Level1CaptainTest`, fumaça do Level 0,
 `LevelSelectTest` e dois editores (o Capitão é objeto de rede).
 
-**Segunda rodada** (outra branch): totens e a troca de lugar no apagão, guarda-roupa como
-esconderijo (as portas já são objetos com a origem na dobradiça), plástico-bolha.
+**Segunda rodada** — **feita em 17/11/2026**, junto com o resto do Level 1 (barricadas, objetivo,
+som; ver `historico.md`): totens e a troca de lugar no apagão, guarda-roupa e mesa de esconder,
+plástico-bolha.
 
 ---
 
