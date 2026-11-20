@@ -206,11 +206,20 @@ namespace BackRooms.Player
             PoolWater water = PoolWater.Current;
             if (water == null)
             {
-                // Fase sem água: carpete, como sempre foi, a não ser onde o Level 1 pôs laminado ou
-                // vinílico (FloorZones).
-                FloorKind floor = FloorZones.Count > 0 ? FloorZones.At(position) : FloorKind.Carpet;
-                Surface = floor == FloorKind.Laminate ? StepSurface.Laminate : floor == FloorKind.Vinyl ? StepSurface.Vinyl : StepSurface.Carpet;
-                if (Surface != StepSurface.Carpet) EnsureFloorClips();
+                // Fase sem água. No Escritório o piso é duro (placas de porcelanato e madeira), então
+                // os passos são os do azulejo seco. Nas outras, carpete, como sempre foi, a não ser
+                // onde o Level 1 pôs laminado ou vinílico (FloorZones).
+                if (LevelBuilder.HardFloorActive)
+                {
+                    EnsureWaterClips();
+                    Surface = StepSurface.Tile;
+                }
+                else
+                {
+                    FloorKind floor = FloorZones.Count > 0 ? FloorZones.At(position) : FloorKind.Carpet;
+                    Surface = floor == FloorKind.Laminate ? StepSurface.Laminate : floor == FloorKind.Vinyl ? StepSurface.Vinyl : StepSurface.Carpet;
+                    if (Surface != StepSurface.Carpet) EnsureFloorClips();
+                }
                 _waterKnown = false;
                 if (_remote) RemoteGroundSteps(dt);
                 return;

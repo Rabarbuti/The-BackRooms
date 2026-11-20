@@ -259,6 +259,13 @@ namespace BackRooms.World
             }
 
             Data = null;
+            HardFloorActive = false;
+            OfficeExitRoute.Clear();
+        }
+
+        void OnDestroy()
+        {
+            if (Data != null && Data.HasOffice) HardFloorActive = false;
         }
 
         /// <summary>Centro da célula, na altura do piso (0 fora das Piscinas).</summary>
@@ -272,6 +279,14 @@ namespace BackRooms.World
 
         void Build()
         {
+            // O Escritório (Level 3) também (OfficeGenerator e LevelBuilder.Office.cs).
+            if (officeEnabled)
+            {
+                Data = OfficeGenerator.Generate(seed, width, height);
+                BuildOffice();
+                return;
+            }
+
             // As Piscinas (Level 2) têm planta e construtor próprios (LevelBuilder.Pools.cs).
             if (poolsEnabled)
             {

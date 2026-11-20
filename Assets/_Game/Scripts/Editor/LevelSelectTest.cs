@@ -17,8 +17,8 @@ namespace BackRooms.EditorTools
     ///
     /// Sozinho (<see cref="BatchRun"/>): sem progresso e fora do modo desenvolvedor o Level 1
     /// fica bloqueado; no modo desenvolvedor troca para ele, hospeda e abre a porta, que zera
-    /// e leva ao Level 2 já hospedando; nada num poço e abre a porta das Piscinas (a última
-    /// fase), que zera e acaba no menu; volta ao Level 0, confere que nada da água sobrou e
+    /// e leva ao Level 2 já hospedando; nada num poço e abre a porta das Piscinas, que zera e
+    /// leva ao Level 3 (o Escritório), cuja porta (a última fase) zera e acaba no menu; volta ao Level 0, confere que nada da água sobrou e
     /// passa pela porta dele até o Level 1, onde sai da partida para o menu. Em cada fase confere
     /// que só existe uma sessão (um NetworkManager), a música do menu e o zumbido das lâmpadas
     /// (calado no menu, no volume de jogo jogando e calado de novo ao sair). O progresso salvo
@@ -253,29 +253,60 @@ namespace BackRooms.EditorTools
                         if (StageTimedOut(10)) Finish(false, "de frente para a porta do Level 2, ela não ficou ao alcance");
                         return;
                     }
+                    _previous = session;
                     if (!poolDoor.Interact()) { Finish(false, "a porta do Level 2 não aceitou a interação"); return; }
                     Next();
                     break;
 
                 case 7:
-                    // É a última fase: a porta zera, a tela escurece e a sessão acaba no menu.
-                    if (!LevelProgress.IsCleared(2) || !InMenu(session, 2))
+                {
+                    // O Level 2 não é mais a última fase: a porta zera e leva ao Escritório, já hospedando.
+                    if (session == _previous || !Playing(session) || session.LevelIndex != 3)
                     {
-                        if (StageTimedOut(15)) Finish(false, $"abriu a porta do Level 2 e não terminou no menu com a fase zerada (zerada={LevelProgress.IsCleared(2)}, fase da sessão={session?.Phase})");
+                        if (StageTimedOut(60)) Finish(false, $"abriu a porta do Level 2 e não começou a partida no Level 3 (zerada={LevelProgress.IsCleared(2)}, fase da sessão={session?.Phase})");
                         return;
                     }
-                    Notes.Add($"a porta zerou o Level 2 (última fase) e a sessão acabou no menu (níveis zerados: {LevelProgress.ClearedCount})");
+                    if (!LevelProgress.IsCleared(2)) { Finish(false, "passou pela porta do Level 2 e a fase não foi zerada"); return; }
+                    if (!OneSession(out string office)) { Finish(false, "duas sessões no Level 3: " + office); return; }
+                    if (PoolWater.Current != null || DaylightPanel.All.Count > 0) { Finish(false, "o Level 3 começou com restos das Piscinas"); return; }
+                    var officeLevel = Object.FindAnyObjectByType<LevelBuilder>();
+                    if (officeLevel == null || officeLevel.Data == null || !officeLevel.Data.HasOffice) { Finish(false, "a cena do Level 3 não montou o Escritório"); return; }
+                    Notes.Add("a porta do Level 2 zerou a fase e levou ao Level 3, já hospedando");
+                    if (!FaceExit()) { Finish(false, "o Level 3 não tem saída"); return; }
+                    Next();
+                    break;
+                }
+
+                case 8:
+                    LevelExit officeDoor = LevelExit.Instance;
+                    if (officeDoor == null || !officeDoor.LocalInReach)
+                    {
+                        if (StageTimedOut(10)) Finish(false, "de frente para a porta do Level 3, ela não ficou ao alcance");
+                        return;
+                    }
+                    if (!officeDoor.Interact()) { Finish(false, "a porta do Level 3 não aceitou a interação"); return; }
+                    Next();
+                    break;
+
+                case 9:
+                    // É a última fase: a porta zera, a tela escurece e a sessão acaba no menu.
+                    if (!LevelProgress.IsCleared(3) || !InMenu(session, 3))
+                    {
+                        if (StageTimedOut(15)) Finish(false, $"abriu a porta do Level 3 e não terminou no menu com a fase zerada (zerada={LevelProgress.IsCleared(3)}, fase da sessão={session?.Phase})");
+                        return;
+                    }
+                    Notes.Add($"a porta zerou o Level 3 (última fase) e a sessão acabou no menu (níveis zerados: {LevelProgress.ClearedCount})");
                     LevelProgress.DevModeOverride = false;
-                    bool stillOpen = LevelProgress.IsUnlocked(0) && LevelProgress.IsUnlocked(1) && LevelProgress.IsUnlocked(2);
+                    bool stillOpen = LevelProgress.IsUnlocked(0) && LevelProgress.IsUnlocked(1) && LevelProgress.IsUnlocked(2) && LevelProgress.IsUnlocked(3);
                     LevelProgress.DevModeOverride = null;
-                    if (!stillOpen) { Finish(false, "depois de zerar tudo, o jogador não tem as três fases liberadas"); return; }
+                    if (!stillOpen) { Finish(false, "depois de zerar tudo, o jogador não tem as quatro fases liberadas"); return; }
 
                     if (!session.SwitchLevel(0)) { Finish(false, "não trocou de volta para o Level 0"); return; }
                     _previous = session;
                     Next();
                     break;
 
-                case 8:
+                case 10:
                     if (!Switched(session, 0)) { if (StageTimedOut(30)) Finish(false, "a troca de volta para o Level 0 não terminou"); return; }
                     if (!OneSession(out string again)) { Finish(false, "duas sessões depois de voltar ao Level 0: " + again); return; }
                     // Zerou a última fase e voltou ao menu: a música voltou, do ponto em que parou.
@@ -290,7 +321,7 @@ namespace BackRooms.EditorTools
                     Next();
                     break;
 
-                case 9:
+                case 11:
                 {
                     if (!Playing(session)) { if (StageTimedOut(40)) Finish(false, "não começou a partida no Level 0 depois de voltar"); return; }
                     if (!StageTimedOut(1.5)) return;
@@ -307,6 +338,9 @@ namespace BackRooms.EditorTools
                     // Nem o anoitecer: os vidros de luz do dia e o ciclo mais longo do apagão são só das Piscinas.
                     if (DaylightPanel.All.Count > 0) leftovers.Add($"{DaylightPanel.All.Count} vidro(s) de luz do dia");
                     if (LightsOut.Instance != null && !Mathf.Approximately(LightsOut.Instance.litSeconds, 30f)) leftovers.Add($"apagão com {LightsOut.Instance.litSeconds} s de luz");
+                    // Nem do Escritório: o piso duro dos passos e o apagão desligado são só dele.
+                    if (LevelBuilder.HardFloorActive) leftovers.Add("passos de piso duro do Escritório");
+                    if (LightsOut.Instance != null && !LightsOut.Instance.eventEnabled) leftovers.Add("apagão desligado");
                     if (leftovers.Count > 0) { Finish(false, "voltou ao Level 0 com restos das Piscinas: " + string.Join(", ", leftovers)); return; }
                     Notes.Add("voltou ao Level 0 sem nada das Piscinas (água, nado, volumes, anoitecer)");
 
@@ -318,7 +352,7 @@ namespace BackRooms.EditorTools
                     break;
                 }
 
-                case 10:
+                case 12:
                     LevelExit exit0 = LevelExit.Instance;
                     if (exit0 == null || !exit0.LocalInReach)
                     {
@@ -329,7 +363,7 @@ namespace BackRooms.EditorTools
                     Next();
                     break;
 
-                case 11:
+                case 13:
                     // Quem hospedava hospeda a fase seguinte sozinho.
                     if (session == _previous || !Playing(session) || session.LevelIndex != 1)
                     {
@@ -342,7 +376,7 @@ namespace BackRooms.EditorTools
                     Next();
                     break;
 
-                case 12:
+                case 14:
                     // A fase aberta pela porta nasce conectando e o zumbido dela, calado: entra em
                     // fade até o volume de jogo. Depois sai da partida e confere que ele cala de novo.
                     if (!HumFull(out string humFull))
@@ -354,7 +388,7 @@ namespace BackRooms.EditorTools
                     Next();
                     break;
 
-                case 13:
+                case 15:
                     if (session == null || session.Phase != SessionPhase.Menu) { Finish(false, $"sair da partida não voltou ao menu (fase da sessão={session?.Phase})"); return; }
                     if (!HumMuted(out string humLeft))
                     {

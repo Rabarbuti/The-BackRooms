@@ -11,7 +11,11 @@ Capitão, que só anda quando ninguém o vê iluminado (seção "Level 1: onde p
 **Level 2 — As Piscinas** (as Poolrooms), tem projeto e uma versão de teste jogável: salas de
 azulejo sorteadas pelo `PoolGenerator` (não o labirinto do Level 0), água em quatro profundidades,
 luz só por claraboias e janelas, nado e fôlego; sem maré, ralo, objetivo nem inimigo ainda
-(`Docs/level2-piscinas.md`, cabeçalho "Já existe / Falta").
+(`Docs/level2-piscinas.md`, cabeçalho "Já existe / Falta"). A quarta, o **Level 3 — O Escritório**, tem
+projeto e uma versão de teste jogável: um andar de prédio vazio sorteado pelo `OfficeGenerator` (anel de
+corredores de teto técnico, salas, saguão de elevadores, cafeteria, vão da escada com a saída), luz fria,
+armários amarelos, a onda de luzes e o elevador que chega sozinho; sem inimigo nem modelos do Blender
+ainda (`Docs/level3-escritorio.md`, cabeçalho "Já existe / Falta").
 
 Conversa, comentários de código, documentação e mensagens de commit são em **português**.
 
@@ -45,7 +49,11 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   vinílico, para os passos). As Piscinas têm gerador e construtor próprios:
   `PoolGenerator` (planta por salas, C# puro, com `Validate`), `PoolData` (divisas, claraboias,
   salas, colunas, lâmpadas), `LevelBuilder.Pools.cs` (a geometria, parte do `LevelBuilder`) e
-  `PoolWater` (ondulação, cáustica, debaixo d'água, anoitecer, salas escuras).
+  `PoolWater` (ondulação, cáustica, debaixo d'água, anoitecer, salas escuras). O Escritório também:
+  `OfficeGenerator` (planta, C# puro, com `Validate` e `Hash`), `OfficeData` (tipos de célula e de
+  divisa, salas, vão da escada, elevadores), `LevelBuilder.Office.cs` (piso, tetos, divisas, luminárias)
+  e `LevelBuilder.OfficeProps.cs` (mobília, elevadores, vão da escada e saída, placas), e `OfficeEvents`
+  (`ElevatorDoors`, `OfficeElevators`, `OfficeLightWave` no lugar do apagão, `OfficeSounds`).
 - `Scripts/Player` — `PlayerController` (movimento, queda e captura), `Flashlight`, `Footsteps`
   (passos sintetizados por superfície: carpete sem água na fase; nas Piscinas, azulejo seco, água
   rasa, nado à tona, debaixo d'água e um espirro ao cruzar a linha d'água depressa; dos outros
@@ -82,7 +90,8 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   (`ProceduralPaint`, `StainPainter`, `EntityPainter`), o Level 1 (`Level1Setup`, `Level1Models`,
   `Level1PlayTest`, `CaptainPreview`), os inimigos esculpidos (`CharacterModels`: esqueleto para o
   Blender e materiais), o Level 2 (`Level2Setup`: materiais, perfil de Volume e conferência;
-  `Level2Preview`: fotos; `Level2PlayTest`) e as demais ferramentas de teste e prévia (menu
+  `Level2Preview`: fotos; `Level2PlayTest`), o Level 3 (`Level3Setup`: materiais, texturas pintadas,
+  perfil de Volume, cena, conferência e fotos; `Level3PlayTest`) e as demais ferramentas de teste e prévia (menu
   **BackRooms**).
 - `Tools/compila.ps1` — compila os scripts sem abrir o Unity (usa o compilador do editor e as
   referências da última compilação em `Library/Bee`). Serve para conferir erro de compilação em
@@ -94,7 +103,8 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   `personagens/` (`capitao.py`, `entidade.py`, `conferir_modelo.py`, `esqueleto_*.json`).
 - `Docs/` — `plano-coop.md` (estado atual e plano do jogo, arquitetura de rede; ler antes de
   mexer em rede ou em geração de fase), `historico.md` (registro cronológico de cada rodada),
-  `level1-mostruario.md` (projeto do Level 1 e do Capitão), `level2-piscinas.md` (projeto do Level 2, as
+  `level1-mostruario.md` (projeto do Level 1 e do Capitão), `level3-escritorio.md` (projeto do Level 3;
+  o prompt das referências em `level3-escritorio-prompt.md`), `level2-piscinas.md` (projeto do Level 2, as
   Poolrooms: referências, salas, luz e texturas; prompts em `level2-prompts.md`), `plano-de-acao.md` (o que fazer a seguir, em
   que ordem, com testes e decisões em aberto), `mecanicas.md` (as
   mecânicas de cada fase em linguagem de jogador, do que existe ao planejado, e ideias novas não decididas,
@@ -136,6 +146,11 @@ Level 1.
 Tudo em `Art/Personagens` é **gerado**: `<Nome>.bytes`, `_Cor.png` e `_Normal.png` pelos scripts de
 `Tools/Blender/personagens` com `--exportar`, e os materiais por `CharacterModels`. Os
 `esqueleto_*.json` de `Tools/Blender/personagens` são gravados pelo Unity (`CharacterModels`).
+
+A cena `Scenes/Level3_Test.unity` (O Escritório), os materiais e as texturas de `Art/Level3` (pintadas em
+código) e o perfil `Settings/Level3_Volume.asset` são **gerados** por `Level3Setup` (menu BackRooms >
+Montar Level 3 (teste)), que regrava tudo a cada montagem. A planta não fica na cena: sai do
+`OfficeGenerator` pela seed, em Play.
 
 A cena `Scenes/Level2_Test.unity` (As Piscinas), os materiais e texturas de `Art/Level2` e o perfil
 `Settings/Level2_Volume.asset` são **gerados** por `Level2Setup` (menu BackRooms > Montar Level 2
@@ -324,7 +339,7 @@ e rode `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`.
 
 No editor, pelo menu **BackRooms**: Abrir Level 0, Abrir Level 1 (teste), Testar Level 0
 (fumaça), Testar Level 1 (Play), Testar Capitão (Level 1), Conferir Level 1, Abrir Level 2 (teste), Testar Level 2 (Play), Testar fuga da água funda,
-Conferir Level 2, Fotografar Level 2, Conferir colisores do Level 0, Gerar mapa 2D,
+Conferir Level 2, Fotografar Level 2, Abrir Level 3 (teste), Testar Level 3 (Play), Conferir Level 3, Conferir colisores do Level 0, Gerar mapa 2D,
 Capturar prévia, Capturar prévia do Capitão, Móveis do Level 1 > Atualizar e fotografar,
 Testar passos do Level 2, Exportar sons (entidade e passos) (WAV em `Logs/Sons`, para ouvir e
 ajustar os sons sintetizados sem precisar jogar: os da entidade, `passo_carpete_*`,
@@ -435,6 +450,16 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   espirro) e correndo (um espirro); em cada lugar confere a superfície escolhida (`Footsteps.Surface`) e que o som
   dela tocou, e nenhum passo de carpete. Sai com 0 se passou, 3 se falhou; linha
   `[BackRooms] Teste de som do Level 2`. Ouvir de verdade é com gente: exporte os WAV (acima).
+- `Level3Setup.BatchCheck` — recria a cena e os materiais do Escritório e confere 8 seeds
+  (`OfficeGenerator.Validate` sem problemas, mesma seed = mesmo `Hash`, uma porta de saída, três
+  elevadores, início na cabine, caminho até a escada e escada até a porta livres para uma cápsula do
+  tamanho do jogador, chão sob cada ponto da escada); fotos em `Logs/Previews/level3_*.png` (cabine,
+  saguão, corredor nos dois sentidos, salas, cafeteria, área de estar, vão da escada, saída, placa).
+  Sai com 0 se passou, 3 se falhou.
+- `Level3PlayTest.BatchRun` — o Escritório em Play: nasce na cabine, a porta dela abre sozinha, anda o
+  caminho e desce a escada até a porta da saída (passos de piso duro), espera a onda de luzes apagar um
+  trecho e abre a porta: última fase, zera e acaba no menu. Restaura o progresso salvo; linha
+  `[BackRooms] Teste do Level 3`.
 - `Level1Models.BatchUpdateAndCapture` — cria os materiais dos lotes, reimporta os modelos,
   escreve as medidas no log e salva fotos em `Logs/Previews/moveis_*.png` (todos, ou só os de
   `-moveis Nome1,Nome2`), além da vitrine de jantar, da loja e da sala dos sofás.
@@ -451,7 +476,9 @@ em rede, depois do teste com dois editores; mudança no Level 2 (ou na água, no
 `LevelBuilder`, no `PoolGenerator` ou no `Level2Setup`), depois de `Level2Setup.BatchCheck`,
 `Level2PlayTest.BatchRun`, `Level2EscapeTest.BatchRun` (nas seeds de conferência),
 `Level0ColliderCheck.BatchRunLevel2` e `LevelSelectTest.BatchRun` (a
-porta do Level 1 leva às Piscinas); mudança no Level 1 (ou no `LevelBuilder`, no gerador
+porta do Level 1 leva às Piscinas e a delas, ao Escritório); mudança no Level 3 (ou no `OfficeGenerator`,
+no `LevelBuilder.Office*` ou no `Level3Setup`), depois de `Level3Setup.BatchCheck`, `Level3PlayTest.BatchRun`
+e `LevelSelectTest.BatchRun`; mudança no Level 1 (ou no `LevelBuilder`, no gerador
 ou nos modelos), depois de `Level1Setup.BatchCheck` e `Level1PlayTest.BatchRun`; mudança no
 Capitão (ou no `EntityBrain`, que ele herda), depois de `Level1CaptainTest.BatchRun` e do teste de
 fumaça; mudança no abrigo, no objetivo ou no som do Level 1 (`PropLayer`, `HideSpot`, `ExitLock`,

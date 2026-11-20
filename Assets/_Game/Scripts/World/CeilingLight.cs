@@ -22,8 +22,12 @@ namespace BackRooms.World
         PowerPhase _power = PowerPhase.Steady;
         bool _lit;
         float _timer;
+        bool _forcedDark;
 
         public LightState State => _state;
+
+        /// <summary>Apagada à força por um evento da fase (a onda de luzes do Escritório).</summary>
+        public bool ForcedDark => _forcedDark;
 
         /// <summary>Verdadeiro se a luminária está acesa neste instante.</summary>
         public bool IsLit => _lit;
@@ -63,7 +67,7 @@ namespace BackRooms.World
             _power = power;
             _timer = 0f;
 
-            if (power == PowerPhase.Dark || !Works)
+            if (power == PowerPhase.Dark || !Works || _forcedDark)
             {
                 Apply(false);
                 return;
@@ -72,8 +76,20 @@ namespace BackRooms.World
             Apply(true);
         }
 
+        /// <summary>
+        /// Apaga (ou devolve ao normal) por cima da fase da energia. Quem chama é um evento da
+        /// fase, como a onda de luzes do Escritório (<see cref="OfficeLightWave"/>).
+        /// </summary>
+        public void SetForcedDark(bool dark)
+        {
+            if (_forcedDark == dark) return;
+            _forcedDark = dark;
+            SetPower(_power);
+        }
+
         void Update()
         {
+            if (_forcedDark) return;
             // Só pisca quem funciona, e só se for luminária defeituosa ou se o andar estiver avisando.
             if (!Works || _power == PowerPhase.Dark) return;
             if (_power == PowerPhase.Steady && _state != LightState.Flicker) return;
