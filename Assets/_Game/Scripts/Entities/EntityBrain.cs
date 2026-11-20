@@ -67,10 +67,8 @@ namespace BackRooms.Entities
         [Header("Sentidos")]
         [Tooltip("Até onde enxerga à frente, em metros.")]
         public float sightRange = 26f;
-        [Tooltip("Meio ângulo do campo de visão, em graus.")]
+        [Tooltip("Meio ângulo do campo de visão, em graus. Fora dele não vê nem pega, por mais perto que esteja: de costas para ela, só o barulho a denuncia.")]
         public float sightHalfAngle = 65f;
-        [Tooltip("Dentro desta distância percebe o jogador mesmo de costas (se não houver parede).")]
-        public float closeSense = 3.5f;
         [Tooltip("Alcance do ouvido para um jogador correndo, em células de 4 m de caminho. Andando: 25% disso. Agachado: não ouve.")]
         public float hearCells = 8f;
         [Tooltip("Quem está debaixo de uma mesa só some fora do cone de visão ou além desta distância, em metros.")]
@@ -394,7 +392,7 @@ namespace BackRooms.Entities
             Vector3 to = Flat(playerAt - position);
             float distance = to.magnitude;
             if (distance > sightRange) return false;
-            if (distance > closeSense && Vector3.Angle(transform.forward, to) > sightHalfAngle) return false;
+            if (!InCone(to)) return false;
 
             return !SightBlocked(position + Vector3.up * eyeHeight, playerAt + Vector3.up * (crouching ? 0.7f : 1.3f));
         }
@@ -723,6 +721,8 @@ namespace BackRooms.Entities
 
                 if (!Reachable(player, track, now, at, out _, out _)) continue;
                 if (Flat(at - position).magnitude > catchRadius) continue;
+                // Fora do campo de visão não pega: encostar nas costas dela não é morte.
+                if (!InCone(Flat(at - position))) continue;
                 // Debaixo da mesa, o tampo tapa a visada: quem foi visto se enfiando ali é pego assim mesmo.
                 if (hiding != HideKind.Table &&
                     SightBlocked(position + Vector3.up * 1.4f, at + Vector3.up * (player.Crouching ? 0.7f : 1.2f))) continue;
@@ -738,6 +738,8 @@ namespace BackRooms.Entities
                 return;
             }
         }
+
+        bool InCone(Vector3 flatTo) => Vector3.Angle(transform.forward, flatTo) <= sightHalfAngle;
 
         static Vector3 Flat(Vector3 v)
         {

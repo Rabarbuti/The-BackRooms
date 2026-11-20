@@ -97,7 +97,8 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
 - **Ouvido:** o principal. O host estima o barulho pelo deslocamento de cada jogador: parado 0,
   agachado 0, andando 25% (só de perto), correndo 100%. O som viaja pelo labirinto, barrado por
   parede, até 8 células para quem corre (2 andando).
-- **Visão:** 26 m à frente num cone de 130°, ou 3,5 m em qualquer direção, com linha de visada.
+- **Visão:** 26 m à frente num cone de 130°, com linha de visada. Fora do cone não vê nem pega,
+  por mais perto que esteja (até 20/11/2026 percebia a 3,5 m em qualquer direção).
 - **Velocidade:** vagando 1,9 m/s, vasculhando 2,6, indo atrás de um barulho 3,4, perseguindo 4,6
   por 7 s e, cansada, 2,3 por 5 s (menos que o jogador andando), em ciclo.
 - **O que salva:** ficar parado ou agachado, entrar num esconderijo, atravessar um buraco pela
