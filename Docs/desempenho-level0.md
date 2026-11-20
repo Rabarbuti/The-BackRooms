@@ -120,3 +120,26 @@ O de dois editores não foi rodado: a mudança não mexe em rede.
   com isso a sombra some a 30 m. O fundo dos corredores fica mais escuro a partir de 25 m. Vale para
   os três níveis (o Level 2 usa o mesmo campo nas claraboias e nos janelões). Não foi medido nem
   testado.
+
+## As quatro fases na entrega (19/11/2026)
+
+`Level0Benchmark.BatchRun -benchQuick -benchScene <cena>` em cada fase, na máquina do Claude Code
+(**Intel Iris Xe integrada**, não a Quadro T2000 das medidas acima: os números absolutos não se
+comparam com os de cima, só entre si). Mesma conta de sempre: 1920 x 1080, processador e placa
+somados, caminhando pelo caminho seguro (nas Piscinas, o caminho a pé).
+
+| Fase | Quadros | Mediana sem lanterna | Mediana com lanterna | p95 com lanterna |
+|---|---|---|---|---|
+| Level 0 | 426 | 317,5 ms | 338,0 ms | 665 ms |
+| Level 1 | 280 | 366,1 ms | 379,3 ms | 727 ms |
+| Level 2 | 240 | 122,1 ms | 156,7 ms | 286 ms |
+| Level 3 | 88 | 210,9 ms | 243,3 ms | 529 ms |
+
+- **O Level 1 é o mais caro** (luminárias do Level 0 mais a mobília) e o Level 2 o mais barato
+  (nenhuma luminária com sombra de seis faces).
+- **A maré quase não custou:** as Piscinas no commit de antes dela (`fb34dd6`), na mesma máquina,
+  davam 117,6 ms sem lanterna e 141,6 com; depois, 122,1 e 156,7 (+4% e +10%). A diferença vem da
+  lâmina d'água cobrindo também o seco. Os disjuntores, válvulas, alarmes e pilhas são poucas caixas.
+- Numa placa integrada o jogo fica longe de jogável em 1080p com o perfil atual: o perfil
+  "Performant" (tela de opções) e uma resolução menor são o caminho; não foi medido aqui.
+- Pastas: `Logs/Desempenho/entrega_L0` a `entrega_L3` e `antes_L2`.

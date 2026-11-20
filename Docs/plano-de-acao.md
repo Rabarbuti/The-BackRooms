@@ -206,7 +206,9 @@ Cada uma é uma branch curta própria, em qualquer ordem:
   *Feito:* `SwitchObjective.PinNote` (cinco linhas; nas Piscinas, "MARQUE ONDE DA PE").
 - **Build para Windows** e uma partida inteira jogada nela, sozinho e em dois. *Feito o build*
   (`BuildTool.BatchWindows`, `Builds/Windows/TheBackRooms.exe`, ~40 min na primeira vez); falta jogar nela.
-- **Desempenho** medido nas quatro fases (`Level0Benchmark` e o equivalente das outras).
+- **Desempenho** medido nas quatro fases (`Level0Benchmark` e o equivalente das outras). *Feito
+  numa placa integrada (Iris Xe):* tabela em `desempenho-level0.md`; falta medir numa placa dedicada
+  e no perfil "Performant".
 - **Decisão 4 de `level1-mostruario.md`** (o desenho do Capitão a partir do filme) resolvida antes
   de publicar fora do grupo.
 
