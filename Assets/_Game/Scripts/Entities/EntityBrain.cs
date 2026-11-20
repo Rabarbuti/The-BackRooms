@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using BackRooms.Net;
 using BackRooms.Player;
@@ -347,11 +347,8 @@ namespace BackRooms.Entities
         /// </summary>
         public void HearNoise(Vector3 at)
         {
-            if (!IsServer || State == EntityState.Chase || State == EntityState.Feed || _nav == null) return;
-            if (!_nav.WorldToCell(at, out int x, out int z) || !_nav.Standable(x, z)) return;
-            SetGoal(at);
-            SetState(EntityState.Investigate);
-            _stateUntil = Time.time + 20f;
+            if (!IsServer || State == EntityState.Chase || State == EntityState.Feed) return;
+            Alert(at);
         }
 
         /// <summary>Barulho de um jogador, de 0 a 1, pelo jeito de andar.</summary>

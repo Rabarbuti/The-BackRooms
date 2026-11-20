@@ -48,6 +48,10 @@ namespace BackRooms.EditorTools
         static PlayerNetwork _local;
         static LevelBuilder _level;
         static SwitchObjective _objective;
+        static EntityBrain _entity;
+        static Vector3 _entityFrom;
+        static float _entityAt;
+        static bool _entityHeard, _entityChecked;
 
         [MenuItem("BackRooms/Testar objetivo (Level 0)")]
         public static void RunFromMenu()
@@ -271,6 +275,12 @@ namespace BackRooms.EditorTools
                         if (drop < 0.2f) { Finish(false, $"cumprido nas Piscinas, a água desceu só {drop:F2} m em 6 s"); return; }
                         Notes.Add($"a água desceu {drop:F2} m em 6 s");
                     }
+                    // Level 3: a entidade mora no Escritório e o alarme a chama.
+                    if (_objective.Kind == SwitchKind.FireAlarm && !_entityChecked)
+                    {
+                        if (!CheckEntity()) break;
+                        _entityChecked = true;
+                    }
                     {
                         LevelExit door = LevelExit.Instance;
                         Vector3 doorFront = door.DoorPosition - door.door.forward * 1.3f;
@@ -294,6 +304,41 @@ namespace BackRooms.EditorTools
                     Finish(true, string.Join("; ", Notes) + "; a porta abriu e a fase acabou");
                     break;
             }
+        }
+
+        // Põe a entidade no outro acionador, manda o barulho do alarme e confere que ela anda pela
+        // grade do Escritório (o LevelNav) na direção dele. Verdadeiro quando terminou.
+        static bool CheckEntity()
+        {
+            EntityDirector director = EntityDirector.Instance;
+            if (director == null) { Finish(false, "o Escritório não tem a entidade (EntityDirector)"); return false; }
+            if (_entity == null)
+            {
+                Vector2Int cell = _objective.PointCell(_objective.Count - 1); // longe do jogador, que está no 1
+                _entityFrom = _level.CellCenter(cell.x, cell.y);
+                _entity = director.SpawnAt(_entityFrom, Vector3.forward);
+                _entityAt = Now;
+                if (_entity == null) Finish(false, "a entidade não apareceu no Escritório");
+                return false;
+            }
+            if (Now - _entityAt < 0.5f) return false;
+            if (!_entityHeard)
+            {
+                _entityHeard = true;
+                _entity.HearNoise(_objective.PointPosition(0) + _objective.PointFacing(0) * 1.2f);
+                if (_entity.State != EntityState.Investigate && _entity.State != EntityState.Chase)
+                    Finish(false, $"o barulho do alarme não chamou a entidade (ficou em {_entity.State})");
+                return false;
+            }
+            Vector3 moved = _entity.transform.position - _entityFrom;
+            moved.y = 0f;
+            if (moved.magnitude >= 2f)
+            {
+                Notes.Add($"a entidade apareceu no Escritório, ouviu o alarme e andou {moved.magnitude:F1} m pela grade ({_entity.State})");
+                return true;
+            }
+            if (Now - _entityAt > 12f) Finish(false, $"a entidade não andou no Escritório ({_entity.State}, {moved.magnitude:F1} m em 12 s)");
+            return false;
         }
 
         static bool Ready(GameSession session)
