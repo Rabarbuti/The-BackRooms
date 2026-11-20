@@ -55,8 +55,12 @@ namespace BackRooms.World
         /// <summary>O pé da porta, no chão.</summary>
         public Vector3 DoorPosition => door != null ? door.position : transform.position;
 
-        /// <summary>Trancada pelo teclado do Level 1 (<see cref="ExitLock"/>) até alguém acertar o código.</summary>
-        public static bool Locked => ExitLock.Instance != null && !ExitLock.Instance.Unlocked;
+        /// <summary>
+        /// Trancada pelo teclado do Level 1 (<see cref="ExitLock"/>) até alguém acertar o código, ou
+        /// pelo objetivo comum (<see cref="SwitchObjective"/>: disjuntores, válvulas, alarmes) até ele
+        /// se cumprir.
+        /// </summary>
+        public static bool Locked => ExitLock.Instance != null && !ExitLock.Instance.Unlocked || SwitchObjective.Locked;
 
         void Update()
         {
@@ -86,7 +90,7 @@ namespace BackRooms.World
         public bool Interact()
         {
             if (LocalWaiting) LocalWaiting = false;
-            else if (LocalInReach && !Locked && ExitLock.Prompt == null) LocalWaiting = true;
+            else if (LocalInReach && !Locked && ExitLock.Prompt == null && SwitchObjective.Prompt == null) LocalWaiting = true;
             return LocalWaiting;
         }
 

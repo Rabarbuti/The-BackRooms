@@ -35,6 +35,10 @@ namespace BackRooms.Net
         // todos (e quem entra depois) de que a porta destrancou.
         const string ExitCodeMessage = "BackRooms.ExitCode";
         const string ExitOpenMessage = "BackRooms.ExitOpen";
+        // Objetivo comum (SwitchObjective): o cliente avisa o host de que terminou de armar um
+        // ponto; o host manda o estado inteiro a todos (e a quem entra depois).
+        const string SwitchArmMessage = "BackRooms.SwitchArm";
+        const string SwitchStateMessage = "BackRooms.SwitchState";
 
         /// <summary>Do abrir da porta até a troca de cena, em segundos (a tela fica preta).</summary>
         public const float PassSeconds = 1.6f;
@@ -306,7 +310,9 @@ namespace BackRooms.Net
 
             Address = "esta máquina";
             ExitLock.PendingUnlock = false;
+            SwitchObjective.Pending = default;
             _net.CustomMessagingManager.RegisterNamedMessageHandler(ExitCodeMessage, OnExitCodeMessage);
+            _net.CustomMessagingManager.RegisterNamedMessageHandler(SwitchArmMessage, OnSwitchArmMessage);
             _epoch = _net.ServerTime.Time;
             int seed = fixedSeed != 0 ? fixedSeed : new System.Random().Next(1, int.MaxValue);
             BuildLevel(seed);
@@ -342,6 +348,8 @@ namespace BackRooms.Net
             _net.CustomMessagingManager.RegisterNamedMessageHandler(PassMessage, OnPassMessage);
             // E, no Level 1, que a porta destrancou.
             _net.CustomMessagingManager.RegisterNamedMessageHandler(ExitOpenMessage, OnExitOpenMessage);
+            // E o estado do objetivo comum (disjuntores, válvulas, alarmes).
+            _net.CustomMessagingManager.RegisterNamedMessageHandler(SwitchStateMessage, OnSwitchStateMessage);
             return true;
         }
 
@@ -397,6 +405,58 @@ namespace BackRooms.Net
 
             // Porta do Level 1 já destrancada: quem entra depois também a encontra aberta.
             if (ExitLock.Instance != null && ExitLock.Instance.Unlocked) SendExitOpen(clientId);
+
+            // Objetivo comum: quem entra depois acha os pontos como estão (e a porta, se cumprido).
+            if (SwitchObjective.Instance != null && SwitchObjective.Instance.Count > 0) SendSwitchState(clientId, SwitchObjective.Instance.Snapshot());
+        }
+
+        // ---------------------------------------------------------------- Objetivo comum
+
+        /// <summary>Cliente: terminou de armar o ponto <paramref name="index"/> do objetivo; o host confere.</summary>
+        public void SendSwitchArm(int index)
+        {
+            if (_net == null || !_net.IsConnectedClient) return;
+            using (var writer = new FastBufferWriter(sizeof(int), Allocator.Temp))
+            {
+                writer.WriteValueSafe(index);
+                _net.CustomMessagingManager.SendNamedMessage(SwitchArmMessage, NetworkManager.ServerClientId, writer);
+            }
+        }
+
+        /// <summary>Host: manda a todos os clientes o estado do objetivo comum.</summary>
+        public void BroadcastSwitchState()
+        {
+            if (!IsHosting || SwitchObjective.Instance == null) return;
+            SwitchObjective.State state = SwitchObjective.Instance.Snapshot();
+            foreach (ulong clientId in _net.ConnectedClientsIds)
+                if (clientId != _net.LocalClientId) SendSwitchState(clientId, state);
+        }
+
+        void SendSwitchState(ulong clientId, SwitchObjective.State state)
+        {
+            using (var writer = new FastBufferWriter(SwitchObjective.Size(state), Allocator.Temp))
+            {
+                SwitchObjective.Write(writer, state);
+                _net.CustomMessagingManager.SendNamedMessage(SwitchStateMessage, clientId, writer);
+            }
+        }
+
+        void OnSwitchArmMessage(ulong senderClientId, FastBufferReader reader)
+        {
+            reader.ReadValueSafe(out int index);
+            if (SwitchObjective.Instance == null) return;
+            Vector3? at = null;
+            foreach (PlayerNetwork player in PlayerNetwork.All)
+                if (player != null && player.IsSpawned && player.OwnerClientId == senderClientId) at = player.transform.position;
+            if (at.HasValue) SwitchObjective.Instance.HostArm(index, at);
+        }
+
+        void OnSwitchStateMessage(ulong senderClientId, FastBufferReader reader)
+        {
+            SwitchObjective.State state = SwitchObjective.Read(reader);
+            // Guarda também para a montagem que ainda vai acontecer (a seed pode ter acabado de chegar).
+            SwitchObjective.Pending = state;
+            if (SwitchObjective.Instance != null) SwitchObjective.Instance.Apply(state);
         }
 
         // ---------------------------------------------------------------- Teclado da porta (Level 1)
@@ -458,8 +518,10 @@ namespace BackRooms.Net
             reader.ReadValueSafe(out int seed);
             reader.ReadValueSafe(out _epoch);
             reader.ReadValueSafe(out int levelIndex);
-            // Partida nova: a porta do Level 1 volta a nascer trancada (o host avisa se não estiver).
+            // Partida nova: a porta do Level 1 volta a nascer trancada (o host avisa se não estiver),
+            // e os pontos do objetivo comum, desarmados.
             ExitLock.PendingUnlock = false;
+            SwitchObjective.Pending = default;
 
             if (levelIndex != LevelIndex && LevelCatalog.IsValid(levelIndex))
             {

@@ -52,6 +52,10 @@ namespace BackRooms.Net
 
         // Índice da tinta da caneta na mão (ordem de PenTool.ColorNames), para o corpo que os
         // outros veem segurar a caneta da mesma cor. Quem entra depois recebe o valor atual.
+        // Segurando E num ponto do objetivo comum: faz barulho (o inimigo ouve).
+        readonly NetworkVariable<bool> _working = new NetworkVariable<bool>(
+            false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+
         readonly NetworkVariable<byte> _penColor = new NetworkVariable<byte>(
             0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
@@ -80,6 +84,12 @@ namespace BackRooms.Net
 
         /// <summary>Com a mão na porta de saída, esperando os outros? Vale em qualquer máquina.</summary>
         public bool AtExit => _atExit.Value;
+
+        /// <summary>
+        /// Segurando E num disjuntor, válvula ou alarme (<see cref="BackRooms.World.SwitchObjective"/>):
+        /// faz barulho de corrida. Vale em qualquer máquina.
+        /// </summary>
+        public bool Working => IsOwner ? BackRooms.World.SwitchObjective.LocalWorking : _working.Value;
 
         /// <summary>Cor da caneta publicada na rede (índice da tinta). Vale em qualquer máquina.</summary>
         public int PenColor => _penColor.Value;
@@ -208,6 +218,9 @@ namespace BackRooms.Net
 
             bool atExit = BackRooms.World.LevelExit.Instance != null && BackRooms.World.LevelExit.Instance.LocalWaiting;
             if (_atExit.Value != atExit) _atExit.Value = atExit;
+
+            bool working = BackRooms.World.SwitchObjective.LocalWorking;
+            if (_working.Value != working) _working.Value = working;
 
             if (Time.unscaledTime < _nextSend) return;
             _nextSend = Time.unscaledTime + SendInterval;

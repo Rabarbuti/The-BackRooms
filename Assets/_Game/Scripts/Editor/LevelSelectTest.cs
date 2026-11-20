@@ -558,6 +558,7 @@ namespace BackRooms.EditorTools
         {
             LevelExit exit = LevelExit.Instance;
             if (exit == null || PlayerNetwork.Local == null) return false;
+            CompleteObjective();
 
             Vector3 foot = exit.DoorPosition;
             Vector3 inward = exit.transform.position - foot;
@@ -569,11 +570,21 @@ namespace BackRooms.EditorTools
             return true;
         }
 
+        // O objetivo comum (disjuntores, válvulas, alarmes) tem teste próprio (ObjectiveTest): aqui
+        // o host o cumpre de uma vez, para a porta destrancar.
+        static void CompleteObjective()
+        {
+            GameSession session = GameSession.Instance;
+            if (session != null && session.IsHosting && SwitchObjective.Instance != null && !SwitchObjective.Instance.Complete)
+                SwitchObjective.Instance.CompleteForTest();
+        }
+
         // ---------------------------------------------------------------- Dois editores
 
         static void TickHost()
         {
             GameSession session = GameSession.Instance;
+            if (session != null && session.Phase == SessionPhase.Playing) CompleteObjective();
 
             switch (_stage)
             {

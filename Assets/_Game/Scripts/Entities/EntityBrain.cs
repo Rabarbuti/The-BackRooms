@@ -281,6 +281,8 @@ namespace BackRooms.Entities
                 float loudness = Loudness(track.Speed, player.Crouching);
                 // Plástico-bolha estala como corrida, mesmo agachado.
                 if (track.Speed >= 0.4f && BubbleWrap.Under(at)) loudness = 1f;
+                // Armar um disjuntor, girar uma válvula, puxar um alarme: barulho de corrida, parado.
+                if (player.Working) loudness = 1f;
                 if (loudness <= 0f || _sound[px, pz] < 0) continue;
 
                 float margin = loudness * hearCells - _sound[px, pz];
@@ -337,6 +339,19 @@ namespace BackRooms.Entities
 
             Vector3 to = Flat(playerAt - position);
             return to.magnitude > tableSightRange || Vector3.Angle(transform.forward, to) > sightHalfAngle;
+        }
+
+        /// <summary>
+        /// Host: um barulho forte em <paramref name="at"/> (o objetivo cumprido, o alarme disparando).
+        /// Vai até lá investigar, se não está caçando nem comendo e se o lugar está ao alcance dele.
+        /// </summary>
+        public void HearNoise(Vector3 at)
+        {
+            if (!IsServer || State == EntityState.Chase || State == EntityState.Feed || _nav == null) return;
+            if (!_nav.WorldToCell(at, out int x, out int z) || !_nav.Standable(x, z)) return;
+            SetGoal(at);
+            SetState(EntityState.Investigate);
+            _stateUntil = Time.time + 20f;
         }
 
         /// <summary>Barulho de um jogador, de 0 a 1, pelo jeito de andar.</summary>

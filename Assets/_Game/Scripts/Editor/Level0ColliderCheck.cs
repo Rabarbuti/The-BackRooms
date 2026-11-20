@@ -91,6 +91,8 @@ namespace BackRooms.EditorTools
 
                     var go = new GameObject("Visual_" + filter.name) { layer = VisualLayer };
                     go.transform.SetPositionAndRotation(filter.transform.position, filter.transform.rotation);
+                    // Peças em escala (as caixas do objetivo e das pilhas): a cópia leva a mesma escala.
+                    go.transform.localScale = filter.transform.lossyScale;
                     go.AddComponent<MeshCollider>().sharedMesh = filter.sharedMesh;
                     visual.Add(go);
                 }

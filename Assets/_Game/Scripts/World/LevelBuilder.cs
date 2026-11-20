@@ -284,6 +284,7 @@ namespace BackRooms.World
             {
                 Data = OfficeGenerator.Generate(seed, width, height);
                 BuildOffice();
+                BuildObjective();
                 return;
             }
 
@@ -292,6 +293,7 @@ namespace BackRooms.World
             {
                 Data = PoolGenerator.Generate(seed, width, height);
                 BuildPools();
+                BuildObjective();
                 return;
             }
 
@@ -437,6 +439,9 @@ namespace BackRooms.World
 
             // Móveis do Level 1: a camada de objetos lê a mesma planta e mobília por cima.
             if (TryGetComponent(out PropLayer props)) props.Place(this);
+
+            // Objetivo comum (disjuntores do Level 0): por último, com sorteio próprio.
+            BuildObjective();
         }
 
         // ---------------------------------------------------------------- Buracos
