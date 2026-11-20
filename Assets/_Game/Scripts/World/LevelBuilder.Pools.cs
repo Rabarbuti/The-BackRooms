@@ -1653,9 +1653,10 @@ namespace BackRooms.World
 
         // ---------------------------------------------------------------- Água
 
-        // Lâmina vista de cima e de baixo, só sobre as células com piso abaixo da água. A malha fica
-        // em Y = 0 do objeto "Agua", que sobe até LevelData.WaterLevel (CreatePoolRenderers): a
-        // altura da superfície é a do objeto (PoolWater.SurfaceY), e a maré só vai movê-lo.
+        // Lâmina vista de cima e de baixo sobre todas as células com piso. A malha fica em Y = 0 do
+        // objeto "Agua", que sobe até LevelData.WaterLevel (CreatePoolRenderers): a altura da
+        // superfície é a do objeto (PoolWater.SurfaceY), e a maré (PoolTide) só o move. Sobre o seco
+        // a lâmina fica escondida sob o piso enquanto a água está baixa e aparece na maré alta.
         // Sem colisor: o jogador decide sozinho se anda, vadeia ou nada (PlayerController).
         void BuildPoolWater()
         {
@@ -1664,7 +1665,7 @@ namespace BackRooms.World
                 int runStart = -1;
                 for (int x = 0; x <= Data.Width; x++)
                 {
-                    bool wet = x < Data.Width && OpenCell(x, z) && FloorTop(x, z) < WaterY;
+                    bool wet = x < Data.Width && OpenCell(x, z);
                     if (wet && runStart < 0) runStart = x;
                     if (wet || runStart < 0) continue;
 
@@ -1711,6 +1712,8 @@ namespace BackRooms.World
                 MeshRenderer water = CreateRenderer("Agua", _kit.Water.ToMesh("Agua"), waterMaterial, ShadowCastingMode.Off);
                 water.transform.localPosition = new Vector3(0f, WaterY, 0f);
                 water.gameObject.AddComponent<PoolWater>();
+                // A maré, o ralo e a drenagem (só em Play).
+                if (Application.isPlaying) water.gameObject.AddComponent<PoolTide>();
             }
         }
 

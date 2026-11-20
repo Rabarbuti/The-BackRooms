@@ -111,6 +111,8 @@ namespace BackRooms.EditorTools
             {
                 case 0:
                     session.fixedSeed = SessionState.GetInt(SeedKey, 1998);
+                    // A maré tem teste próprio (Level2TideTest): aqui a água fica parada.
+                    PoolTide.Paused = true;
                     session.Host(localOnly: true);
                     Next();
                     break;
@@ -397,6 +399,7 @@ namespace BackRooms.EditorTools
 
         static void Finish(bool ok, string report)
         {
+            PoolTide.Paused = false;
             EditorApplication.update -= Tick;
             Application.logMessageReceived -= OnLog;
             SessionState.SetBool(ActiveKey, false);

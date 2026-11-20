@@ -190,6 +190,20 @@ namespace BackRooms.Player
         /// <summary>Quantas vezes este jogador se afogou nesta sessão (também contam em <see cref="Falls"/>).</summary>
         public int Drownings { get; private set; }
 
+        /// <summary>
+        /// Corrente que arrasta quem está nadando, em m/s (o ralo das Piscinas na vazante,
+        /// <c>PoolTide</c>). Zero fora d'água.
+        /// </summary>
+        public Vector3 WaterCurrent { get; set; }
+
+        /// <summary>Afogado sem ser pelo fôlego (puxado até a grade do ralo): volta ao início.</summary>
+        public void Drown()
+        {
+            if (IsReturning || !enabled) return;
+            Drownings++;
+            FallIntoPit();
+        }
+
         /// <summary>Verdadeiro durante a subida numa borda, saindo da água (uns 0,5 s).</summary>
         public bool IsClimbing { get; private set; }
 
@@ -506,7 +520,8 @@ namespace BackRooms.Player
                 _verticalVelocity -= gravity * dt;
             }
 
-            CollisionFlags flags = _controller.Move((_horizontalVelocity + Vector3.up * _verticalVelocity) * dt);
+            Vector3 current = IsSwimming ? WaterCurrent : Vector3.zero;
+            CollisionFlags flags = _controller.Move((_horizontalVelocity + Vector3.up * _verticalVelocity + current) * dt);
 
             // Bateu a cabeça no teto: para de subir.
             if ((flags & CollisionFlags.Above) != 0 && _verticalVelocity > 0f) _verticalVelocity = 0f;
