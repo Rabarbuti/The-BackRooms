@@ -182,6 +182,19 @@ namespace BackRooms.World
             return x >= RoomX0 && x < RoomX0 + RoomWidth && z >= RoomZ0 && z < RoomZ0 + RoomHeight;
         }
 
+        /// <summary>
+        /// Abrigo: a entidade não entra nem pega quem está dentro. A sala inicial e, no Escritório,
+        /// as salas pequenas acesas (técnica, depósito), para haver onde fugir longe da cabine.
+        /// </summary>
+        public bool IsShelter(int x, int z)
+        {
+            if (InRoom(x, z)) return true;
+            if (!HasOffice) return false;
+
+            int room = OfficeRoomOf[x, z];
+            return room >= 0 && OfficeRooms[room].Kind == OfficeCell.Small && OfficeRooms[room].Lit;
+        }
+
         public bool IsRoomWall(int x, int z, WallSide side)
         {
             switch (side)

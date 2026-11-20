@@ -55,6 +55,12 @@ namespace BackRooms.Entities
         public float investigateSpeed = 3.4f;
         public float chaseSpeed = 4.6f;
         public float acceleration = 9f;
+        [Tooltip("Caçando, corre isto em segundos e cansa (o jogador corre 6 s e depois anda: sem cansar ela sempre alcançava).")]
+        public float chaseBurstSeconds = 7f;
+        [Tooltip("Segundos cansada, caçando devagar, antes de correr de novo.")]
+        public float chaseTiredSeconds = 5f;
+        [Tooltip("Velocidade cansada, em fração de chaseSpeed. 0,5 dá 2,3 m/s: menos que o jogador andando.")]
+        public float chaseTiredFactor = 0.5f;
         [Tooltip("Graus por segundo.")]
         public float turnSpeed = 420f;
 
@@ -65,7 +71,7 @@ namespace BackRooms.Entities
         public float sightHalfAngle = 65f;
         [Tooltip("Dentro desta distância percebe o jogador mesmo de costas (se não houver parede).")]
         public float closeSense = 3.5f;
-        [Tooltip("Alcance do ouvido para um jogador correndo, em células de 4 m de caminho. Andando: 55% disso. Agachado: 25%.")]
+        [Tooltip("Alcance do ouvido para um jogador correndo, em células de 4 m de caminho. Andando: 25% disso. Agachado: não ouve.")]
         public float hearCells = 8f;
         [Tooltip("Quem está debaixo de uma mesa só some fora do cone de visão ou além desta distância, em metros.")]
         public float tableSightRange = 6f;
@@ -136,6 +142,10 @@ namespace BackRooms.Entities
 
         PlayerNetwork _target;
         float _lastSeen;
+        float _chaseSince;
+
+        /// <summary>Cansa na caça? O Capitão não: ele manca sempre no mesmo passo.</summary>
+        protected virtual bool TiresInChase => true;
 
         /// <summary>Falso no Capitão: ele não é "a entidade" que a filmadora e os testes procuram.</summary>
         protected virtual bool IsLevel0Entity => true;
@@ -351,12 +361,14 @@ namespace BackRooms.Entities
             Alert(at);
         }
 
-        /// <summary>Barulho de um jogador, de 0 a 1, pelo jeito de andar.</summary>
+        /// <summary>
+        /// Barulho de um jogador, de 0 a 1, pelo jeito de andar: correndo ouve-se de longe
+        /// (<see cref="hearCells"/>), andando só de perto (um quarto disso), agachado nada.
+        /// </summary>
         public static float Loudness(float speed, bool crouching)
         {
-            if (speed < 0.4f) return 0f;
-            if (crouching) return 0.25f;
-            return speed > 3.9f ? 1f : 0.55f;
+            if (speed < 0.4f || crouching) return 0f;
+            return speed > 3.9f ? 1f : 0.25f;
         }
 
         Track TrackOf(PlayerNetwork player, float now)
@@ -374,7 +386,7 @@ namespace BackRooms.Entities
         {
             x = z = -1;
             if (now < track.IgnoreUntil || at.y < -1f) return false;
-            return _nav.WorldToCell(at, out x, out z) && !_nav.Data.InRoom(x, z);
+            return _nav.WorldToCell(at, out x, out z) && !_nav.Data.IsShelter(x, z);
         }
 
         bool CanSee(Vector3 position, Vector3 playerAt, bool crouching)
@@ -434,6 +446,7 @@ namespace BackRooms.Entities
         {
             if (State == state) return;
 
+            if (state == EntityState.Chase) _chaseSince = Time.time;
             _state.Value = (byte)state;
             _waitUntil = 0f;
         }
@@ -482,20 +495,20 @@ namespace BackRooms.Entities
         {
             PlayerNetwork lure = null;
 
-            if (UnityEngine.Random.value < 0.65f)
+            if (UnityEngine.Random.value < 0.4f)
             {
                 int seenPlayers = 0;
                 foreach (PlayerNetwork player in PlayerNetwork.All)
                 {
                     if (player == null || !player.IsSpawned || !player.InGame) continue;
-                    if (!_nav.WorldToCell(player.transform.position, out int px, out int pz) || _nav.Data.InRoom(px, pz)) continue;
+                    if (!_nav.WorldToCell(player.transform.position, out int px, out int pz) || _nav.Data.IsShelter(px, pz)) continue;
 
                     seenPlayers++;
                     if (UnityEngine.Random.Range(0, seenPlayers) == 0) lure = player;
                 }
             }
 
-            if (lure != null && PickNear(lure.transform.position, 3f, 8f)) return;
+            if (lure != null && PickNear(lure.transform.position, 4f, 10f)) return;
             if (PickNear(transform.position, 6f, 1000f)) return;
             PickNear(transform.position, 1f, 1000f);
         }
@@ -539,7 +552,12 @@ namespace BackRooms.Entities
         {
             switch (State)
             {
-                case EntityState.Chase: return chaseSpeed;
+                case EntityState.Chase:
+                {
+                    if (!TiresInChase || chaseTiredSeconds <= 0f) return chaseSpeed;
+                    float into = (Time.time - _chaseSince) % Mathf.Max(0.1f, chaseBurstSeconds + chaseTiredSeconds);
+                    return into < chaseBurstSeconds ? chaseSpeed : chaseSpeed * chaseTiredFactor;
+                }
                 case EntityState.Investigate: return investigateSpeed;
                 case EntityState.Search: return searchSpeed;
                 case EntityState.Feed: return 0f;
