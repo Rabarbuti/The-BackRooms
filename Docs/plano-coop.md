@@ -100,7 +100,8 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
 - **Visão:** 26 m à frente num cone de 130°, com linha de visada. Fora do cone não vê nem pega,
   por mais perto que esteja (até 20/11/2026 percebia a 3,5 m em qualquer direção).
 - **Velocidade:** vagando 1,9 m/s, vasculhando 2,6, indo atrás de um barulho 3,4, perseguindo 4,6
-  por 7 s e, cansada, 2,3 por 5 s (menos que o jogador andando), em ciclo.
+  por 7 s e, cansada, 2,3 por 5 s (menos que o jogador andando), em ciclo. Fora da caça, quando
+  nenhum jogador a tem na tela, anda 50% mais rápido.
 - **O que salva:** ficar parado ou agachado, entrar num esconderijo, atravessar um buraco pela
   faixa (ela não anda em faixa) ou voltar a um abrigo (`LevelData.IsShelter`: a sala inicial e,
   no Escritório, as salas pequenas acesas).
