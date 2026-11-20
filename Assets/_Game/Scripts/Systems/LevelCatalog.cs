@@ -99,5 +99,34 @@ namespace BackRooms
             Debug.Log($"[BackRooms] {LevelCatalog.Get(index).Name} zerado. Níveis zerados: {ClearedCount}.");
             LevelCleared?.Invoke(index);
         }
+
+        // ---------------------------------------------------------------- Tempos e fim da fita
+
+        const string TimeKey = "BackRooms.Tempo.";
+
+        /// <summary>Disparado quando a porta da última fase abre: a fita acabou (a tela de fim aparece no menu).</summary>
+        public static event Action TapeEnded;
+
+        /// <summary>Guarda quanto a última partida levou na fase, em segundos (da entrada à porta).</summary>
+        public static void RecordTime(int index, float seconds)
+        {
+            if (!LevelCatalog.IsValid(index) || seconds <= 0f) return;
+            PlayerPrefs.SetFloat(TimeKey + index, seconds);
+            PlayerPrefs.Save();
+        }
+
+        /// <summary>Segundos da última vez que a fase foi zerada nesta máquina; 0 se nunca.</summary>
+        public static float LastTime(int index) => PlayerPrefs.GetFloat(TimeKey + index, 0f);
+
+        /// <summary>"m:ss", ou "--:--" sem tempo.</summary>
+        public static string FormatTime(float seconds)
+        {
+            if (seconds <= 0f) return "--:--";
+            int total = Mathf.RoundToInt(seconds);
+            return $"{total / 60}:{total % 60:00}";
+        }
+
+        /// <summary>A porta da última fase abriu.</summary>
+        public static void EndTape() => TapeEnded?.Invoke();
     }
 }

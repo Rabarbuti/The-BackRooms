@@ -113,6 +113,8 @@ namespace BackRooms.Net
         bool _clearedThisSession;
         bool _localOnly;
         Coroutine _passRoutine;
+        // Quando o jogador desta máquina entrou na fase: o tempo dela vai para a tela de fim.
+        float _playStart = -1f;
         // Fase pedida pelo host a um cliente que está em outra; a troca acontece no Update.
         int _switchTo = -1;
 
@@ -257,6 +259,7 @@ namespace BackRooms.Net
 
             if (!_clearedThisSession)
             {
+                if (_playStart >= 0f) LevelProgress.RecordTime(LevelIndex, Time.realtimeSinceStartup - _playStart);
                 _clearedThisSession = true;
                 LevelProgress.MarkCleared(LevelIndex);
             }
@@ -277,6 +280,7 @@ namespace BackRooms.Net
             if (next < 0)
             {
                 EndSession("Fim da fita. " + cleared + " zerado.");
+                LevelProgress.EndTape();
                 yield break;
             }
 
@@ -369,6 +373,7 @@ namespace BackRooms.Net
         /// <summary>Chamado pelo jogador local quando já está posicionado e com a câmera ligada.</summary>
         public void NotifyLocalPlayerReady()
         {
+            _playStart = Time.realtimeSinceStartup;
             if (menuCamera != null) menuCamera.enabled = false;
             if (menuListener != null) menuListener.enabled = false;
             SetPhase(SessionPhase.Playing, "");

@@ -209,6 +209,10 @@ namespace BackRooms.EditorTools
                         return;
                     }
                     Notes.Add("a porta zerou o Level 3 (última fase) e a sessão acabou no menu");
+                    // A tela de fim da fita, com o tempo da fase gravado.
+                    if (!BackRooms.UI.ConnectionMenu.EndingShown) { Finish(false, "acabou a última fase e a tela de fim da fita não apareceu"); return; }
+                    if (LevelProgress.LastTime(3) <= 0f) { Finish(false, "o tempo do Level 3 não foi gravado"); return; }
+                    Notes.Add($"a tela de fim da fita apareceu (Level 3 em {LevelProgress.FormatTime(LevelProgress.LastTime(3))})");
                     Finish(true, string.Join("; ", Notes));
                     break;
             }

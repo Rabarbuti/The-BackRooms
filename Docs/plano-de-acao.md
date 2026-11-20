@@ -197,13 +197,15 @@ Cada uma é uma branch curta própria, em qualquer ordem:
 
 ---
 
-## Etapa 6 — Fechar como produto
+## Etapa 6 — Fechar como produto (fim, bilhetes e build feitos em 19/11/2026)
 
 - **Fim do jogo:** passar a porta do Level 3 mostra um encerramento ("fim da fita") com o tempo de
-  cada fase, e volta ao menu (hoje já volta ao menu).
+  cada fase, e volta ao menu. *Feito:* `LevelProgress.RecordTime`/`EndTape` e a tela no `ConnectionMenu`.
 - **Bilhete de ensino** em cada sala inicial (o que fazer nesta fase, sem texto em excesso), no molde
   do bilhete do Level 1: disjuntores, válvulas, alarme, e `P2.5` (marcar onde dá pé com a caneta).
-- **Build para Windows** e uma partida inteira jogada nela, sozinho e em dois.
+  *Feito:* `SwitchObjective.PinNote` (cinco linhas; nas Piscinas, "MARQUE ONDE DA PE").
+- **Build para Windows** e uma partida inteira jogada nela, sozinho e em dois. *Feito o build*
+  (`BuildTool.BatchWindows`, `Builds/Windows/TheBackRooms.exe`, ~40 min na primeira vez); falta jogar nela.
 - **Desempenho** medido nas quatro fases (`Level0Benchmark` e o equivalente das outras).
 - **Decisão 4 de `level1-mostruario.md`** (o desenho do Capitão a partir do filme) resolvida antes
   de publicar fora do grupo.

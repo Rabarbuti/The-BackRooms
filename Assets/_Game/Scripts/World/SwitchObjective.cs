@@ -235,6 +235,78 @@ namespace BackRooms.World
 
             Required = Mathf.Min(2, _points.Count);
             if (Pending.ArmedAt != null) Apply(Pending);
+            PinNote(level, bodyTemplate);
+        }
+
+        /// <summary>O bilhete de ensino da sala inicial (Etapa 6 do plano), ou nulo se não coube.</summary>
+        public Transform Note { get; private set; }
+
+        // As linhas do bilhete: o que fazer nesta fase, em poucas palavras (até 21 letras por linha).
+        string[] NoteLines()
+        {
+            switch (Kind)
+            {
+                case SwitchKind.Valve:
+                    return new[] { "PARA DRENAR:", "ABRA 2 VALVULAS", "AO MESMO TEMPO", "CUIDADO COM OS RALOS", "MARQUE ONDE DA PE" };
+                case SwitchKind.FireAlarm:
+                    return new[] { "PORTA CORTA-FOGO:", "PUXE 2 ALARMES", "AO MESMO TEMPO", "ELA OUVE A SIRENE", "CORRA PARA A ESCADA" };
+                default:
+                    return new[] { "SEM ENERGIA:", "LIGUE 2 DISJUNTORES", "AO MESMO TEMPO", "SIGA O ZUMBIDO", "NAO CORRA PERTO DELA" };
+            }
+        }
+
+        // Prega o bilhete na primeira parede lisa em volta do meio da sala inicial (ordem fixa: igual
+        // em todas as máquinas). Sem colisor: "Placa" é enfeite para o Level0ColliderCheck.
+        void PinNote(LevelBuilder level, Material template)
+        {
+            LevelData data = level.Data;
+            // Uma parede fechada de alguma célula da sala inicial, em ordem fixa (z, x, lado).
+            for (int z = data.RoomZ0; z < data.RoomZ0 + Mathf.Max(1, data.RoomHeight); z++)
+            for (int x = data.RoomX0; x < data.RoomX0 + Mathf.Max(1, data.RoomWidth); x++)
+            foreach (WallSide wall in Sides)
+            {
+                if (x < 0 || z < 0 || x >= data.Width || z >= data.Height || !data.HasWall(x, z, wall)) continue;
+                Vector3 dir = level.transform.TransformDirection(SideDirection(wall));
+                Vector3 center = level.CellCenter(x, z) + Vector3.up * 1.4f;
+                if (!Physics.Raycast(center, dir, out RaycastHit hit, LevelBuilder.Cell * 0.5f + 0.4f, ~0, QueryTriggerInteraction.Ignore)) continue;
+                if (Vector3.Dot(hit.normal, -dir) < 0.97f) continue;
+                Vector3 side = Vector3.Cross(Vector3.up, hit.normal).normalized;
+                bool flat = true;
+                for (int s = -1; s <= 1; s += 2)
+                    if (!Physics.Raycast(center + side * (0.3f * s), dir, out RaycastHit other, hit.distance + 0.3f, ~0, QueryTriggerInteraction.Ignore) ||
+                        Mathf.Abs(other.distance - hit.distance) > 0.03f) flat = false;
+                if (!flat) continue;
+
+                string[] lines = NoteLines();
+                const int w = 128, h = 64;
+                var pixels = new Color32[w * h];
+                var paper = new Color32(236, 228, 196, 255);
+                var ink = new Color32(30, 34, 90, 255);
+                for (int i = 0; i < pixels.Length; i++) pixels[i] = paper;
+                for (int i = 0; i < lines.Length; i++)
+                    PixelFont.Draw(pixels, w, h, (w - PixelFont.Measure(lines[i], 1)) / 2, 5 + i * 11, lines[i], 1, ink);
+                var texture = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, name = "BilheteEnsino" };
+                texture.SetPixels32(pixels);
+                texture.Apply(false);
+
+                var root = new GameObject("Bilhete");
+                root.transform.SetParent(transform, false);
+                root.transform.SetPositionAndRotation(hit.point + hit.normal * 0.012f, Quaternion.LookRotation(-hit.normal, Vector3.up));
+                var card = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                card.name = "Placa";
+                Collider c = card.GetComponent<Collider>();
+                if (Application.isPlaying) Destroy(c); else DestroyImmediate(c);
+                card.transform.SetParent(root.transform, false);
+                card.transform.localScale = new Vector3(0.48f, 0.24f, 1f);
+                Material material = Tinted(template, Color.white, 0.2f);
+                material.name = "BilheteEnsino";
+                material.SetTexture("_BaseColorMap", texture);
+                var renderer = card.GetComponent<MeshRenderer>();
+                renderer.sharedMaterial = material;
+                renderer.shadowCastingMode = ShadowCastingMode.Off;
+                Note = root.transform;
+                return;
+            }
         }
 
         /// <summary>Um número que muda se qualquer ponto mudar de lugar (para comparar máquinas).</summary>
