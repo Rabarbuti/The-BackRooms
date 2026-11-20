@@ -417,7 +417,7 @@ namespace BackRooms.Player
             if (!MouseCaptured) return;
 
             // O delta do mouse já é por quadro; o analógico é uma taxa e precisa do dt.
-            Vector2 look = _lookMouse.ReadValue<Vector2>() * mouseSensitivity
+            Vector2 look = _lookMouse.ReadValue<Vector2>() * (mouseSensitivity * GameOptions.MouseScale)
                          + _lookStick.ReadValue<Vector2>() * (stickSensitivity * dt);
 
             transform.Rotate(0f, look.x, 0f, Space.Self);

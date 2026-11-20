@@ -36,6 +36,8 @@ namespace BackRooms.UI
         Label _devNote;
         Label _notice;
         Button[] _levelButtons;
+        VisualElement _options;
+        Label _volumeValue, _mouseValue, _qualityValue;
         float _noticeUntil;
         string _localAddresses;
 
@@ -114,11 +116,67 @@ namespace BackRooms.UI
 
             _panel.Add(MenuButton("Entrar        [J]", () => session.Join(_address.value)));
 
+            BuildOptions();
+
             _status = Text("", 15, Paper);
             _status.style.marginTop = 18;
             _status.style.whiteSpace = WhiteSpace.Normal;
             _status.style.unityTextAlign = TextAnchor.MiddleCenter;
             _panel.Add(_status);
+        }
+
+        // Opções desta máquina (GameOptions): um botão abre as três linhas, cada uma com - e +.
+        void BuildOptions()
+        {
+            Button toggle = MenuButton("Opções", () =>
+            {
+                _options.style.display = _options.style.display == DisplayStyle.None ? DisplayStyle.Flex : DisplayStyle.None;
+                RefreshOptions();
+            });
+            toggle.style.marginTop = 14;
+            toggle.style.height = 36;
+            toggle.style.fontSize = 16;
+            _panel.Add(toggle);
+
+            _options = new VisualElement();
+            _options.style.display = DisplayStyle.None;
+            _options.style.marginTop = 6;
+            _panel.Add(_options);
+
+            _volumeValue = OptionRow("Volume", () => GameOptions.SetVolume(GameOptions.Volume - 0.1f), () => GameOptions.SetVolume(GameOptions.Volume + 0.1f));
+            _mouseValue = OptionRow("Mouse", () => GameOptions.SetMouseScale(GameOptions.MouseScale - 0.25f), () => GameOptions.SetMouseScale(GameOptions.MouseScale + 0.25f));
+            _qualityValue = OptionRow("Qualidade", () => GameOptions.SetQuality(GameOptions.Quality - 1), () => GameOptions.SetQuality(GameOptions.Quality + 1));
+        }
+
+        Label OptionRow(string name, System.Action less, System.Action more)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginBottom = 4;
+            var label = Text(name, 15, Paper);
+            label.style.width = 120;
+            row.Add(label);
+            Button minus = MenuButton("-", () => { less(); RefreshOptions(); });
+            minus.style.width = 40; minus.style.height = 30;
+            row.Add(minus);
+            var value = Text("", 15, Yellow);
+            value.style.width = 150;
+            value.style.unityTextAlign = TextAnchor.MiddleCenter;
+            row.Add(value);
+            Button plus = MenuButton("+", () => { more(); RefreshOptions(); });
+            plus.style.width = 40; plus.style.height = 30;
+            row.Add(plus);
+            _options.Add(row);
+            return value;
+        }
+
+        void RefreshOptions()
+        {
+            if (_volumeValue == null) return;
+            _volumeValue.text = Mathf.RoundToInt(GameOptions.Volume * 100f) + "%";
+            _mouseValue.text = GameOptions.MouseScale.ToString("0.00") + "x";
+            _qualityValue.text = GameOptions.QualityName;
         }
 
         // Uma linha por fase: a atual em destaque, as liberadas clicáveis, as outras apagadas.

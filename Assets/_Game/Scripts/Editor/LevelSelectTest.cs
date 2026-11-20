@@ -409,6 +409,7 @@ namespace BackRooms.EditorTools
         static void TickHostDoor()
         {
             GameSession session = GameSession.Instance;
+            if (session != null && session.Phase == SessionPhase.Playing) CompleteObjective();
 
             switch (_stage)
             {
@@ -521,6 +522,8 @@ namespace BackRooms.EditorTools
                         if (StageTimedOut(10)) Finish(false, "de frente para a porta, ela não ficou ao alcance do cliente");
                         return;
                     }
+                    // A porta destranca quando o estado do objetivo chega do host.
+                    if (LevelExit.Locked) { if (StageTimedOut(30)) Finish(false, "a porta continuou trancada para o cliente"); return; }
                     if (!door.Interact()) { Finish(false, "a porta não aceitou a interação do cliente"); return; }
                     Next();
                     break;

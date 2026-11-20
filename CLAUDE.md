@@ -10,12 +10,15 @@ projeto, uma versão de teste jogável mobiliada com modelos feitos no Blender e
 Capitão, que só anda quando ninguém o vê iluminado (seção "Level 1: onde parou e como continuar"). A terceira, o
 **Level 2 — As Piscinas** (as Poolrooms), tem projeto e uma versão de teste jogável: salas de
 azulejo sorteadas pelo `PoolGenerator` (não o labirinto do Level 0), água em quatro profundidades,
-luz só por claraboias e janelas, nado e fôlego; sem maré, ralo, objetivo nem inimigo ainda
+luz só por claraboias e janelas, nado e fôlego, a maré e o ralo (`PoolTide`) e as válvulas que drenam
 (`Docs/level2-piscinas.md`, cabeçalho "Já existe / Falta"). A quarta, o **Level 3 — O Escritório**, tem
 projeto e uma versão de teste jogável: um andar de prédio vazio sorteado pelo `OfficeGenerator` (anel de
 corredores de teto técnico, salas, saguão de elevadores, cafeteria, vão da escada com a saída), luz fria,
-armários amarelos, a onda de luzes e o elevador que chega sozinho; sem inimigo nem modelos do Blender
-ainda (`Docs/level3-escritorio.md`, cabeçalho "Já existe / Falta").
+armários amarelos, a onda de luzes, o elevador que chega sozinho, a entidade do Level 0 e o alarme de
+incêndio que destrava a saída; sem modelos do Blender ainda (`Docs/level3-escritorio.md`, cabeçalho
+"Já existe / Falta"). **Toda fase tem objetivo** (a porta só destranca cumprido): o teclado do Level 1
+(`ExitLock`) e, nas outras, o objetivo comum `SwitchObjective` (disjuntores, válvulas, alarmes; seção
+"Objetivo comum"). O plano até a entrega está em `Docs/plano-de-acao.md`.
 
 Conversa, comentários de código, documentação e mensagens de commit são em **português**.
 
@@ -53,7 +56,9 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   `OfficeGenerator` (planta, C# puro, com `Validate` e `Hash`), `OfficeData` (tipos de célula e de
   divisa, salas, vão da escada, elevadores), `LevelBuilder.Office.cs` (piso, tetos, divisas, luminárias)
   e `LevelBuilder.OfficeProps.cs` (mobília, elevadores, vão da escada e saída, placas), e `OfficeEvents`
-  (`ElevatorDoors`, `OfficeElevators`, `OfficeLightWave` no lugar do apagão, `OfficeSounds`).
+  (`ElevatorDoors`, `OfficeElevators`, `OfficeLightWave` no lugar do apagão, `OfficeSounds`). Em todas:
+  `SwitchObjective` (o objetivo comum, posto por `LevelBuilder.Objective.cs`), `BatteryPickups` (pilhas
+  da lanterna) e, nas Piscinas, `PoolTide` (maré, ralo na vazante, drenagem).
 - `Scripts/Player` — `PlayerController` (movimento, queda e captura), `Flashlight`, `Footsteps`
   (passos sintetizados por superfície: carpete sem água na fase; nas Piscinas, azulejo seco, água
   rasa, nado à tona, debaixo d'água e um espirro ao cruzar a linha d'água depressa; dos outros
@@ -116,7 +121,8 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
 WASD anda, Shift corre, Ctrl ou C agacha, Espaço pula, F lanterna, uma tecla por caneta (1 preta,
 2 azul, 3 vermelha: puxa a caneta, troca de cor ou, se já é a da mão, guarda), botão esquerdo
 risca, E abre a porta
-de saída (ou solta, se já estava esperando os outros), F9 grava a tela, Esc solta o mouse. No menu: H hospeda,
+de saída (ou solta, se já estava esperando os outros), mira + E pega pilhas, mira + segurar E arma um
+disjuntor, gira uma válvula ou puxa um alarme, F9 grava a tela, Esc solta o mouse. No menu: H hospeda,
 J entra; a lista "Fase" troca de nível (no editor todas ficam liberadas). Na água funda das
 Piscinas (piscinas, raias, canais e poços: não dá pé), segurar Espaço sobe e fica à tona; sem tecla,
 afunda devagar até o fundo; Ctrl ou C mergulha; da água funda sai-se por escada ou, à tona,
@@ -460,6 +466,21 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   caminho e desce a escada até a porta da saída (passos de piso duro), espera a onda de luzes apagar um
   trecho e abre a porta: última fase, zera e acaba no menu. Restaura o progresso salvo; linha
   `[BackRooms] Teste do Level 3`.
+- `ObjectiveTest.BatchRun` (Level 0), `BatchRunLevel2`, `BatchRunLevel3` — o objetivo comum em Play:
+  pontos longe uns dos outros e do início, porta trancada (chacoalha), aviso da mira, segurar E faz
+  barulho e arma, sozinho não expira, com dois jogadores contados (`SwitchObjective.PlayersForTest`) o
+  ponto vence na janela e dois fora dela não cumprem, dois dentro cumprem, a porta abre com som. No
+  Level 2 confere que a água desce; no Level 3, que a entidade aparece, ouve o alarme e anda. Dois
+  editores (Level 0): `BatchHost` + `BatchJoin` (cada um arma um ponto dentro da janela). Linha
+  `[BackRooms] Teste do objetivo`.
+- `Level2TideTest.BatchRun` (`-seed N`) — a maré com o relógio forçado (`PoolTide.ForceSeconds`): sobe
+  0,9 m, o seco vadeia, de pé no raso a cabeça fica fora d'água, na vazante o ralo puxa quem nada sobre o
+  poço até a grade, parada não puxa, longe dos poços não puxa. Linha `[BackRooms] Teste da maré`. Os
+  outros testes das Piscinas pausam a maré (`PoolTide.Paused`).
+- `BatteryTest.BatchRun` — a lanterna gasta bateria; pilhas no mapa; mira + E pega, some e recarrega;
+  não se pega duas vezes. Linha `[BackRooms] Teste das pilhas`.
+- `GameOptionsCheck.BatchRun` — fora do Play: volume, mouse e qualidade presos aos limites, aplicados e
+  guardados (`GameOptions`). Linha `[BackRooms] Conferência das opções`.
 - `Level1Models.BatchUpdateAndCapture` — cria os materiais dos lotes, reimporta os modelos,
   escreve as medidas no log e salva fotos em `Logs/Previews/moveis_*.png` (todos, ou só os de
   `-moveis Nome1,Nome2`), além da vitrine de jantar, da loja e da sala dos sofás.
@@ -484,8 +505,27 @@ Capitão (ou no `EntityBrain`, que ele herda), depois de `Level1CaptainTest.Batc
 fumaça; mudança no abrigo, no objetivo ou no som do Level 1 (`PropLayer`, `HideSpot`, `ExitLock`,
 `ShopMusic`), depois de `Level1Setup.BatchCheck`, `Level1ShelterTest`, `Level1ObjectiveTest` e
 `Level1SoundTest` (os dois primeiros também em dois editores); mudança nos
-passos (`Footsteps`), depois do teste de fumaça e de `Level2SoundTest.BatchRun`. Diga no resumo o
+passos (`Footsteps`), depois do teste de fumaça e de `Level2SoundTest.BatchRun`; mudança no objetivo
+comum (`SwitchObjective`), depois do `ObjectiveTest` nas três fases e em dois editores; mudança na maré
+(`PoolTide`, `PoolWater`), depois do `Level2TideTest` e dos testes das Piscinas. Diga no resumo o
 que foi testado por máquina e o que não foi testado à mão.
+
+## Objetivo comum
+
+`SwitchObjective` (`PC.1` de `Docs/mecanicas.md`): N pontos distantes armados dentro de uma janela de
+tempo. O `LevelBuilder.objective` diz o tipo (`Breaker` no Level 0, posto sempre pelo `Level0Setup`;
+`Valve` no Level 2 e `FireAlarm` no Level 3, pelo `SceneOptions.objective`). Regras:
+
+- Os pontos (e as pilhas, `BatteryPickups`) saem de um `System.Random` próprio, **depois de tudo**: não
+  mudam o hash da planta. Parede lisa e livre achada por raio a partir do meio da célula.
+- Quem segura E faz barulho de corrida (`PlayerNetwork.Working`, lido pelo `EntityBrain`); cumprido, o
+  host chama o inimigo para o último ponto (`EntityBrain.HearNoise`).
+- O cliente avisa o host (`BackRooms.SwitchArm`); o host arma pela hora de `SessionSeconds` e manda o
+  estado inteiro a todos e a quem entra depois (`BackRooms.SwitchState`, guardado em
+  `SwitchObjective.Pending` se chegar antes da montagem). Pilhas: `BackRooms.Pickup` / `BackRooms.Pickups`.
+- `LevelExit.Locked` junta o `ExitLock` e o `SwitchObjective`. Nos testes que só querem passar pela
+  porta, o host cumpre com `SwitchObjective.Instance.CompleteForTest()` (o `LevelSelectTest` faz isso).
+- Peças em escala (cubos primitivos com o colisor deles): o `Level0ColliderCheck` copia a escala.
 
 ## Git
 

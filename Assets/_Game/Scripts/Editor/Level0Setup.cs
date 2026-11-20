@@ -46,7 +46,7 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 21;
+        public const int ContentVersion = 22;
 
         /// <summary>Música da tela inicial (cópia do arquivo mandado pelo usuário; não é gerada).</summary>
         public const string MenuMusicPath = "Assets/_Game/Audio/Musica/Menu_Tema.mp3";
@@ -308,6 +308,7 @@ namespace BackRooms.EditorTools
             builder.exitSignMaterial = exitSign;
             // Objetivo comum: disjuntores no Level 0; nas outras, o que a fase pedir.
             builder.objective = level0 ? SwitchKind.Breaker : options.objective;
+            builder.batteriesEnabled = true;
             builder.switchBodyMaterial = EnsureMaterial("Objetivo_Peca", new Color(0.45f, 0.46f, 0.47f), null, null, 0.5f, Color.black);
             builder.switchLampMaterial = EnsureUnlit("Objetivo_Lampada", Color.white, null, false);
             builder.exitDoorMaterial = exitDoor;
@@ -546,6 +547,8 @@ namespace BackRooms.EditorTools
             var flashlight = torch.AddComponent<Flashlight>();
             flashlight.follow = pivot.transform;
             flashlight.inputEnabled = false;
+            // A bateria acaba (10 min acesa); as pilhas do chão recarregam (BatteryPickups, P0.3).
+            flashlight.infiniteBattery = false;
 
             // Corpo visto pelos outros: explorador em traje de proteção. As peças são montadas
             // em código quando o jogador aparece (PlayerBody); o prefab leva só os materiais.

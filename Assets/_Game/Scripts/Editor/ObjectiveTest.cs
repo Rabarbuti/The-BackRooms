@@ -175,6 +175,7 @@ namespace BackRooms.EditorTools
                     if (_stageTicks < 3) break;
                     if (!exit.LocalInReach) { if (InStage > 2f) Finish(false, "de frente para a porta, ela não ficou ao alcance"); break; }
                     if (exit.Interact()) { Finish(false, "a porta trancada pelo objetivo aceitou o E"); return; }
+                    if (exit.Rattles < 1) { Finish(false, "a porta trancada não chacoalhou com o E"); return; }
                     string locked = _objective.LockedText;
                     // Sozinho de verdade: o último ponto, armado, não expira.
                     SwitchObjective.PlayersForTest = 0;
@@ -301,7 +302,8 @@ namespace BackRooms.EditorTools
 
                 case 11:
                     if (!session.Passing) { if (InStage > 3f) Finish(false, "a porta aceitou o E e a fase não acabou"); break; }
-                    Finish(true, string.Join("; ", Notes) + "; a porta abriu e a fase acabou");
+                    if (!LevelExit.Instance.OpenedSound) { Finish(false, "a fase acabou sem o som da porta abrindo"); return; }
+                    Finish(true, string.Join("; ", Notes) + "; a porta chacoalhou trancada, abriu com som e a fase acabou");
                     break;
             }
         }

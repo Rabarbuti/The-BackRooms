@@ -25,39 +25,31 @@ junto** (sanidade), **se separar** (objetivos), **falar** (coordenação) ou **f
 - **Co-op de 1 a 4 por IP.** Um hospeda, os outros entram. Cada máquina monta o mesmo mapa a partir
   da seed que o host envia.
 - **Movimento:** anda, corre (6 s de fôlego), agacha, pula.
-- **Lanterna** (F), com bateria infinita.
+- **Lanterna** (F), com bateria: 10 min acesa. **Pilhas no chão** (desde 19/11/2026, `BatteryPickups`):
+  de 4 a 9 cartelas por mapa, postas pela seed; mira + E pega e a lanterna de quem pegou volta cheia;
+  quem chega primeiro leva (o host decide).
 - **Filmadora VHS:** a tela inteira é a imagem de uma fita, com REC, contador e hora. F9 grava um
   vídeo de verdade.
 - **Caneta de riscar** em três cores (1, 2, 3). Risca parede, chão e teto; todos veem os riscos.
 - **Não há morte.** Cair num buraco, ser pego ou se afogar dá NO SIGNAL e o jogador volta para a
   sala inicial.
 - **Porta de saída** (E): todos precisam chegar nela. Quando todos esperam, a fase acaba e o grupo
-  passa para a seguinte.
+  passa para a seguinte. Trancada, a maçaneta chacoalha; abrindo, range e bate.
+- **Objetivo em toda fase** (desde 19/11/2026): a porta só destranca cumprido o objetivo da fase.
+  Nas fases 0, 2 e 3 é o mesmo componente (`SwitchObjective`, antes a proposta `PC.1`): *pontos
+  distantes armados dentro de uma janela de tempo*. Mira + segurar E; enquanto segura, o jogador faz
+  barulho de corrida (o inimigo ouve). Com até dois jogadores valem 2 pontos ao mesmo tempo, com três
+  ou quatro, 3; **sozinho a janela some** (ponto armado fica armado). O painel diz o que falta.
+- **Opções** no menu: volume, sensibilidade do mouse e qualidade (os três perfis do HDRP).
 
-### Planejado (`plano-coop.md`, seção 2)
+### Planejado (`plano-coop.md`, seção 2; fora da entrega, ver `plano-de-acao.md`)
 
-- **Objetivo de verdade em cada fase.** Hoje chegar à porta basta. A saída passa a exigir tarefas
-  em lugares distantes, ao mesmo tempo, por pessoas diferentes (seção 2.3).
 - **Sala de contenção:** quem é pego fica preso numa sala do mapa, que só um colega abre por fora.
   Todos presos = derrota (seção 2.2).
 - **Voz por proximidade:** só se ouve quem está perto, e o inimigo ouve a voz (seção 2.1).
 - **Sanidade:** cai sozinho e no escuro, sobe perto dos colegas; baixa, gera alucinações que só
   aquele jogador vê (seção 2.5).
-- **Itens:** pilhas da lanterna, walkie-talkie, Almond Water (seção 2.4).
-
-### Propostas
-
-**PC.1 — Um componente de objetivo para as três fases.** Os três objetivos planejados têm a
-mesma forma: *N pontos distantes que precisam ser ativados dentro de uma janela de tempo*
-(disjuntores no Level 0, teclado e etiquetas no Level 1, válvulas no Level 2). Vale um componente
-só, posto pela seed e conferido pelo host, com:
-
-- quantos pontos, quanto tempo de janela e quanto tempo segurando E cada um leva;
-- o barulho que cada ponto faz enquanto é ativado (o inimigo ouve);
-- com 1 jogador, a janela desligada (cada ponto fica ativado), como os documentos já pedem.
-
-*Força:* se separar. *Cuidado:* estado que quem entra depois precisa ver, como os riscos da caneta
-(`DrawingBoard.SendAll`).
+- **Itens:** walkie-talkie, Almond Water (seção 2.4).
 
 ---
 
@@ -77,12 +69,15 @@ só, posto pela seed e conferido pelo host, com:
   perto e num cone à frente. Avisa com um ronco e chuvisco na filmadora. Salva-se quem se esconde,
   fica parado, atravessa um buraco pela viga (ela não anda nelas) ou volta à sala inicial (ela não
   entra).
+- **Disjuntores** (desde 19/11/2026): a porta está sem energia (`NO POWER`). Quatro caixas cinza na
+  parede, longe do início e umas das outras, cada uma **zumbindo de longe** (a pista é o som), com
+  uma lâmpada vermelha. Segurar E por 3 s arma uma (a lâmpada fica verde por 10 s); dois armados
+  dentro dos 10 s religam a energia (três com três ou quatro jogadores). Armar faz barulho, e o
+  estrondo da energia voltando chama a entidade para o último disjuntor.
 
 ### Planejado (`plano-coop.md`, seção 2.3)
 
-- **Elevador sem energia.** Achar **disjuntores** que zumbem (a pista é o som), armar dois
-  **quase ao mesmo tempo** em lugares diferentes e digitar num painel um **código que aparece em
-  outro ponto do mapa**: um lê, outro digita.
+- **Painel de código** (fora da entrega): digitar um código que aparece em outro ponto do mapa.
 - **Entidade:** aproveitar o apagão, reagir à lanterna, mais de uma, vigiar esconderijos
   (`plano-coop.md`, "O que ainda não existe").
 
@@ -104,11 +99,6 @@ riscos da caneta viram a única prova ("eu risquei aqui e agora é parede").
 - *Cuidado:* depois de cada troca, buraco nenhum pode isolar parte do mapa (a regra do
   `SafeDetour`) e ninguém pode ficar preso dentro de uma parede nova. As setas pintadas mentem
   depois da troca, o que pode ser bom.
-
-**P0.3 — Lanterna com bateria e pilhas no chão.** Já está nos itens planejados; a proposta é
-fazê-la cedo, porque é barata e deixa o apagão tenso de verdade.
-
-- *Força:* ficar junto (dividir pilhas, andar perto de quem tem luz).
 
 **P0.4 — Visão noturna na filmadora.** Uma tecla liga o modo noturno: imagem verde, enxerga no
 escuro, gasta a bateria da filmadora depressa. No apagão, mostra a entidade, que hoje quase some.
@@ -221,23 +211,21 @@ Projeto completo em `level2-piscinas.md`.
 - **O caminho até a saída nunca exige nadar.**
 - **Luz só de claraboias e janelas.** No lugar do apagão, o **anoitecer**: a luz esquenta, cai até
   a noite e volta.
-- **Sem inimigo e sem objetivo.**
+- **Não há monstro perseguindo**: o perigo é a água (desde 19/11/2026).
+- **A maré** (`PoolTide`): a partir de 90 s de partida e a cada 90 s a água sobe 0,9 m em 15 s e
+  desce em 15 s, em todas as máquinas juntas. 10 s antes, um "glub" grave. Na maré alta o raso vira
+  nado (devagar; de pé, a cabeça fica fora d'água) e o seco fica com água no joelho.
+- **O ralo**: na **vazante** (a maré descendo) a água sai pelos ralos dos poços e puxa para a grade
+  quem nada no poço ou na funda perto dele; chegar à grade é afogar. As lâmpadas perto do poço piscam
+  e os ralos gorgolejam.
+- **Objetivo: drenar** (`SwitchObjective`, válvulas). Duas rodas vermelhas na parede, em células
+  secas longe uma da outra; girar leva 6 s, e as duas precisam estar abertas dentro de 5 s (sozinho,
+  basta abrir as duas). Abertas, a água do mapa desce 2 m em 30 s, a maré para e a saída destranca.
 
-### Planejado (`level2-piscinas.md`)
+### Planejado (`level2-piscinas.md`; fora da entrega)
 
-A ideia é **não ter monstro perseguindo**: o perigo é a água.
-
-- **A maré** (seção 4.3): a cada 90 s a água sobe quase 1 m e depois desce, em todas as máquinas
-  juntas. O raso vira nado, quem estava num lugar baixo fica ilhado. Os ralos borbulham antes, de
-  aviso. *Em aberto* (decisão 5): na maré alta até o seco fica com água; falta decidir se haverá
-  patamares altos de refúgio ou maré defasada por região.
-- **O ralo** (seção 5): uma grade escura no fundo de cada poço. Barulho perto **acorda** o ralo,
-  que por 8 s puxa para baixo quem nada no poço; chegar à grade é afogar. Antes, as luzes do poço
-  piscam e a água gira. Nunca se vê o que há atrás, no máximo uma mão branca por meio segundo.
-- **Túneis submersos** nos poços: atalho curto e arriscado entre partes distantes.
-- **Objetivo: esvaziar a piscina** (seção 6). A saída é uma porta no fundo do maior poço. Dois
-  jogadores abrem **válvulas em casas de máquinas** em pontas opostas, quase ao mesmo tempo; girar
-  faz barulho e acorda os ralos. Drenado, a água desce no mapa todo e a porta aparece.
+- **O ralo que acorda com barulho** (seção 5), a mão branca atrás da grade e os **túneis submersos**.
+- **Casas de máquinas** como salas e a porta no fundo do maior poço (mudam a planta).
 
 ### Propostas
 
@@ -277,14 +265,28 @@ onde é seguro. Com a maré (planejado), essas marcas ficam erradas quando a ág
 
 ---
 
-## 5. Por onde começar
+## 5. Level 3 — O Escritório
 
-Sugestão de ordem, do que mais muda o jogo pelo menor esforço. O detalhe de cada etapa (passos,
-testes, decisões) está em `plano-de-acao.md`.
+Projeto completo em `level3-escritorio.md`.
 
-1. **O cérebro do Capitão** (Level 1). O corpo está pronto e o ouvido vem do `EntityBrain`; falta a
-   regra "visto e iluminado". É o que dá identidade à fase.
-2. **O componente de objetivo (PC.1), começando pelos disjuntores do Level 0.** Dá sentido às três
-   fases e é a base do teclado do Level 1 e das válvulas do Level 2.
-3. **A maré** (Level 2), depois de decidir o refúgio (decisão 5 de `level2-piscinas.md`). É o
-   evento global da fase, feito como o apagão.
+### Existe
+
+- O andar de um prédio vazio: anel de corredores de teto técnico, salas de aula, saguão de
+  elevadores, cafeteria, área de estar e o vão da escada com a saída (a porta corta-fogo no patamar).
+- **Onda de luzes** no lugar do apagão e o **elevador que chega sozinho**.
+- **A entidade do Level 0** caça aqui também (desde 19/11/2026): ouve o piso duro.
+- **Objetivo: o alarme de incêndio** (`SwitchObjective`, alarmes): três acionadores vermelhos nos
+  corredores; puxar leva 2 s e dois precisam valer dentro de 8 s. Disparado, a sirene toca, a porta
+  corta-fogo destrava e a entidade corre para o último acionador: a fuga até a escada é o fim.
+
+### Planejado (`level3-escritorio.md`, seção 6)
+
+- Cadeiras viradas para a porta, telas que ligam, armários batendo; modelos do Blender.
+
+---
+
+## 6. Por onde começar
+
+A ordem até a entrega, com testes e critério de pronta, está em `plano-de-acao.md` (reescrito em
+19/11/2026). Das propostas acima, nenhuma entra na entrega além de `P0.3` (feita) e `P2.5` (como
+bilhete de ensino); as outras ficam para depois.

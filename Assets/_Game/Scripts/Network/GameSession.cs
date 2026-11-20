@@ -39,6 +39,9 @@ namespace BackRooms.Net
         // ponto; o host manda o estado inteiro a todos (e a quem entra depois).
         const string SwitchArmMessage = "BackRooms.SwitchArm";
         const string SwitchStateMessage = "BackRooms.SwitchState";
+        // Pilhas da lanterna (BatteryPickups): o cliente pede; o host diz quais sumiram e quem pegou.
+        const string PickupMessage = "BackRooms.Pickup";
+        const string PickupsMessage = "BackRooms.Pickups";
 
         /// <summary>Do abrir da porta até a troca de cena, em segundos (a tela fica preta).</summary>
         public const float PassSeconds = 1.6f;
@@ -311,6 +314,8 @@ namespace BackRooms.Net
             Address = "esta máquina";
             ExitLock.PendingUnlock = false;
             SwitchObjective.Pending = default;
+            BatteryPickups.PendingTaken = 0;
+            _net.CustomMessagingManager.RegisterNamedMessageHandler(PickupMessage, OnPickupMessage);
             _net.CustomMessagingManager.RegisterNamedMessageHandler(ExitCodeMessage, OnExitCodeMessage);
             _net.CustomMessagingManager.RegisterNamedMessageHandler(SwitchArmMessage, OnSwitchArmMessage);
             _epoch = _net.ServerTime.Time;
@@ -350,6 +355,8 @@ namespace BackRooms.Net
             _net.CustomMessagingManager.RegisterNamedMessageHandler(ExitOpenMessage, OnExitOpenMessage);
             // E o estado do objetivo comum (disjuntores, válvulas, alarmes).
             _net.CustomMessagingManager.RegisterNamedMessageHandler(SwitchStateMessage, OnSwitchStateMessage);
+            // E as pilhas que alguém já pegou.
+            _net.CustomMessagingManager.RegisterNamedMessageHandler(PickupsMessage, OnPickupsMessage);
             return true;
         }
 
@@ -408,6 +415,57 @@ namespace BackRooms.Net
 
             // Objetivo comum: quem entra depois acha os pontos como estão (e a porta, se cumprido).
             if (SwitchObjective.Instance != null && SwitchObjective.Instance.Count > 0) SendSwitchState(clientId, SwitchObjective.Instance.Snapshot());
+
+            // Pilhas que já sumiram (ninguém recarrega por isso).
+            if (BatteryPickups.Instance != null && BatteryPickups.Instance.Taken != 0) SendPickups(clientId, BatteryPickups.Instance.Taken, ulong.MaxValue);
+        }
+
+        // ---------------------------------------------------------------- Pilhas da lanterna
+
+        /// <summary>Cliente: quer pegar a pilha <paramref name="index"/>; o host confere.</summary>
+        public void SendPickup(int index)
+        {
+            if (_net == null || !_net.IsConnectedClient) return;
+            using (var writer = new FastBufferWriter(sizeof(int), Allocator.Temp))
+            {
+                writer.WriteValueSafe(index);
+                _net.CustomMessagingManager.SendNamedMessage(PickupMessage, NetworkManager.ServerClientId, writer);
+            }
+        }
+
+        /// <summary>Host: estas pilhas sumiram; a última foi pega por <paramref name="who"/>.</summary>
+        public void BroadcastPickups(ulong taken, ulong who)
+        {
+            if (!IsHosting) return;
+            foreach (ulong clientId in _net.ConnectedClientsIds)
+                if (clientId != _net.LocalClientId) SendPickups(clientId, taken, who);
+        }
+
+        void SendPickups(ulong clientId, ulong taken, ulong who)
+        {
+            using (var writer = new FastBufferWriter(sizeof(ulong) * 2, Allocator.Temp))
+            {
+                writer.WriteValueSafe(taken);
+                writer.WriteValueSafe(who);
+                _net.CustomMessagingManager.SendNamedMessage(PickupsMessage, clientId, writer);
+            }
+        }
+
+        void OnPickupMessage(ulong senderClientId, FastBufferReader reader)
+        {
+            reader.ReadValueSafe(out int index);
+            if (BatteryPickups.Instance == null) return;
+            foreach (PlayerNetwork player in PlayerNetwork.All)
+                if (player != null && player.IsSpawned && player.OwnerClientId == senderClientId)
+                    BatteryPickups.Instance.HostPick(index, senderClientId, player.transform.position);
+        }
+
+        void OnPickupsMessage(ulong senderClientId, FastBufferReader reader)
+        {
+            reader.ReadValueSafe(out ulong taken);
+            reader.ReadValueSafe(out ulong who);
+            BatteryPickups.PendingTaken = taken;
+            if (BatteryPickups.Instance != null) BatteryPickups.Instance.Apply(taken, who);
         }
 
         // ---------------------------------------------------------------- Objetivo comum
@@ -522,6 +580,7 @@ namespace BackRooms.Net
             // e os pontos do objetivo comum, desarmados.
             ExitLock.PendingUnlock = false;
             SwitchObjective.Pending = default;
+            BatteryPickups.PendingTaken = 0;
 
             if (levelIndex != LevelIndex && LevelCatalog.IsValid(levelIndex))
             {
