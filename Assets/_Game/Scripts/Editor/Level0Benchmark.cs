@@ -49,8 +49,9 @@ namespace BackRooms.EditorTools
         const int Height = 1080;
         const float NearRadius = 20f;
         const float StepMeters = 0.5f;
-        const double SecondsPerSetup = 150.0;
-        const double Timeout = 1500.0;
+        // -benchParts mede mais configurações, cada uma por menos tempo (o mesmo trecho do caminho).
+        static double SecondsPerSetup = 150.0;
+        static double Timeout = 1500.0;
 
         sealed class Setup
         {
@@ -253,6 +254,12 @@ namespace BackRooms.EditorTools
             _decals = level.GetComponentsInChildren<DecalProjector>();
             _walk = Walk(level);
             _setups = level.Data.HasPools ? PoolSetups(level) : Setups();
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-benchParts") >= 0)
+            {
+                _setups = PartSetups();
+                SecondsPerSetup = 60.0;
+                Timeout = 4000.0;
+            }
 
             // -benchQuick: só a primeira passada e as duas medidas de base (sem e com lanterna),
             // para comparar uma fase antes e depois de uma mudança sem esperar as outras.
@@ -565,6 +572,143 @@ namespace BackRooms.EditorTools
             });
 
             return setups;
+        }
+
+        // -benchParts: o custo fixo do quadro, parte por parte, em qualquer fase. Cada uma desliga
+        // uma coisa só na câmera do jogador (as "frame settings" do HDRP) ou muda a resolução.
+        static List<Setup> PartSetups()
+        {
+            return new List<Setup>
+            {
+                new Setup { Name = "0 Primeira passada (sombras sendo calculadas)", Note = "Só para as sombras ficarem prontas." },
+                new Setup { Name = "1 Atual, sem lanterna", Note = "Como o jogo está hoje." },
+                new Setup { Name = "2 Atual, com lanterna", Torch = true, Note = "Base de comparação." },
+                new Setup { Name = "3 STP a 67%", Torch = true, Note = "Resolução dinâmica: desenha a 67% e o STP do HDRP reconstrói 1920 x 1080.", Apply = () => DynamicResolution(67f) },
+                new Setup { Name = "4 STP a 50%", Torch = true, Note = "Desenha a 50% e o STP reconstrói.", Apply = () => DynamicResolution(50f) },
+                new Setup { Name = "5 Nevoa volumetrica em qualidade baixa", Torch = true, Note = "A mesma névoa, com metade do orçamento (Fog.quality = Low).", Apply = () => FogQuality(0) },
+                new Setup { Name = "6 Sem nevoa volumetrica", Torch = true, Note = "Frame setting Volumetrics desligada.", Apply = () => FrameOff(FrameSettingsField.Volumetrics) },
+                new Setup { Name = "7 Sem pos-processamento", Torch = true, Note = "Bloom, grão, aberração, vinheta, distorção, tons (e o TAA).", Apply = () => FrameOff(FrameSettingsField.Postprocess) },
+                new Setup { Name = "8 Sem passada da filmadora", Torch = true, Note = "Custom Pass desligado (CamcorderPass).", Apply = () => FrameOff(FrameSettingsField.CustomPass) },
+                new Setup { Name = "9 Sem mapas de sombra", Torch = true, Note = "Nenhuma sombra (mede ler as sombras, não só calculá-las).", Apply = () => FrameOff(FrameSettingsField.ShadowMaps) },
+                new Setup { Name = "10 Sem decalques", Torch = true, Note = "Frame setting Decals desligada.", Apply = () => FrameOff(FrameSettingsField.Decals) },
+                new Setup { Name = "11 Sem transparentes", Torch = true, Note = "Frame setting TransparentObjects desligada (água, vidro, painéis).", Apply = () => FrameOff(FrameSettingsField.TransparentObjects) },
+                new Setup { Name = "12 Sem TAA", Torch = true, Note = "Antialiasing da câmera desligado.", Apply = () => Antialiasing(HDAdditionalCameraData.AntialiasingMode.None) },
+                new Setup { Name = "13 Sombras com filtro medio", Torch = true, Note = "Filtro das sombras pontuais e direcionais em Medium (hoje High, que procura a borda da sombra antes de filtrar).", Apply = () => ShadowFilter(1) },
+                new Setup
+                {
+                    Name = "14 Pacote: STP 67% + filtro medio + nevoa baixa",
+                    Torch = true,
+                    Note = "As três que quase não mudam a imagem, juntas.",
+                    Apply = () =>
+                    {
+                        Action a = ShadowFilter(1), b = DynamicResolution(67f), c = FogQuality(0);
+                        return () => { c(); b(); a(); };
+                    }
+                },
+            };
+        }
+
+        static Action FrameOff(FrameSettingsField field)
+        {
+            var data = _camera.GetComponent<HDAdditionalCameraData>();
+            bool custom = data.customRenderingSettings;
+            FrameSettingsOverrideMask mask = data.renderingPathCustomFrameSettingsOverrideMask;
+            FrameSettings settings = data.renderingPathCustomFrameSettings;
+
+            data.customRenderingSettings = true;
+            data.renderingPathCustomFrameSettingsOverrideMask.mask[(uint)field] = true;
+            data.renderingPathCustomFrameSettings.SetEnabled(field, false);
+
+            return () =>
+            {
+                data.customRenderingSettings = custom;
+                data.renderingPathCustomFrameSettingsOverrideMask = mask;
+                data.renderingPathCustomFrameSettings = settings;
+            };
+        }
+
+        static Action Antialiasing(HDAdditionalCameraData.AntialiasingMode mode)
+        {
+            var data = _camera.GetComponent<HDAdditionalCameraData>();
+            HDAdditionalCameraData.AntialiasingMode old = data.antialiasing;
+            data.antialiasing = mode;
+            return () => data.antialiasing = old;
+        }
+
+        static Action FogQuality(int level)
+        {
+            var go = new GameObject("NevoaQualidade");
+            var profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            Fog fog = profile.Add<Fog>(false);
+            fog.quality.Override(level);
+
+            var volume = go.AddComponent<Volume>();
+            volume.isGlobal = true;
+            volume.priority = 100f;
+            volume.sharedProfile = profile;
+
+            return () =>
+            {
+                UnityEngine.Object.Destroy(go);
+                UnityEngine.Object.Destroy(profile);
+            };
+        }
+
+        // Filtro das sombras no perfil do HDRP em uso (0 baixo, 1 médio, 2 alto). Trocar o perfil
+        // recria o pipeline: as sombras em cache são refeitas nos primeiros quadros.
+        static Action ShadowFilter(int quality)
+        {
+            var asset = (QualitySettings.renderPipeline ?? GraphicsSettings.defaultRenderPipeline) as HDRenderPipelineAsset;
+            if (asset == null) return null;
+
+            var serialized = new SerializedObject(asset);
+            SerializedProperty punctual = serialized.FindProperty("m_RenderPipelineSettings.hdShadowInitParams.punctualShadowFilteringQuality");
+            SerializedProperty directional = serialized.FindProperty("m_RenderPipelineSettings.hdShadowInitParams.directionalShadowFilteringQuality");
+            int oldPunctual = punctual.intValue, oldDirectional = directional.intValue;
+            punctual.intValue = quality;
+            directional.intValue = quality;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            return () =>
+            {
+                var back = new SerializedObject(asset);
+                back.FindProperty("m_RenderPipelineSettings.hdShadowInitParams.punctualShadowFilteringQuality").intValue = oldPunctual;
+                back.FindProperty("m_RenderPipelineSettings.hdShadowInitParams.directionalShadowFilteringQuality").intValue = oldDirectional;
+                back.ApplyModifiedPropertiesWithoutUndo();
+            };
+        }
+
+        // Liga a resolução dinâmica do perfil do HDRP em uso, forçada num percentual, com o STP
+        // como reconstrutor. Mexe no asset só em memória e devolve tudo como estava.
+        static Action DynamicResolution(float percent)
+        {
+            var asset = (QualitySettings.renderPipeline ?? GraphicsSettings.defaultRenderPipeline) as HDRenderPipelineAsset;
+            if (asset == null) return null;
+
+            var serialized = new SerializedObject(asset);
+            SerializedProperty root = serialized.FindProperty("m_RenderPipelineSettings.dynamicResolutionSettings");
+            string before = EditorJsonUtility.ToJson(asset);
+
+            root.FindPropertyRelative("enabled").boolValue = true;
+            root.FindPropertyRelative("dynResType").intValue = 0;
+            root.FindPropertyRelative("forceResolution").boolValue = true;
+            root.FindPropertyRelative("forcedPercentage").floatValue = percent;
+            root.FindPropertyRelative("minPercentage").floatValue = percent;
+            root.FindPropertyRelative("maxPercentage").floatValue = 100f;
+            SerializedProperty upscalers = root.FindPropertyRelative("advancedUpscalersByPriority");
+            upscalers.arraySize = 1;
+            upscalers.GetArrayElementAtIndex(0).intValue = (int)AdvancedUpscalers.STP;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            var data = _camera.GetComponent<HDAdditionalCameraData>();
+            bool allow = data.allowDynamicResolution;
+            data.allowDynamicResolution = true;
+
+            return () =>
+            {
+                EditorJsonUtility.FromJsonOverwrite(before, asset);
+                data.allowDynamicResolution = allow;
+            };
         }
 
         // Muda o alcance, a participação na névoa e o alcance das marcas; devolve o que desfaz.
