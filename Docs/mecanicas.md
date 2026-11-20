@@ -41,6 +41,8 @@ junto** (sanidade), **se separar** (objetivos), **falar** (coordenação) ou **f
   barulho de corrida (o inimigo ouve). Com até dois jogadores valem 2 pontos ao mesmo tempo, com três
   ou quatro, 3; **sozinho a janela some** (ponto armado fica armado). O painel diz o que falta.
 - **Opções** no menu: volume, sensibilidade do mouse e qualidade (os três perfis do HDRP).
+- **Bilhete de ensino** pregado na sala inicial das fases 0, 2 e 3: o objetivo em cinco linhas.
+- **Fim da fita:** a porta do Level 3 encerra a fita com o tempo de cada fase.
 
 ### Planejado (`plano-coop.md`, seção 2; fora da entrega, ver `plano-de-acao.md`)
 

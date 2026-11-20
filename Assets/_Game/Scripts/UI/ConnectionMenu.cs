@@ -37,6 +37,11 @@ namespace BackRooms.UI
         Label _notice;
         Button[] _levelButtons;
         VisualElement _options;
+        VisualElement _ending;
+        Label _endingTimes;
+
+        /// <summary>A tela de fim da fita está aberta (testes).</summary>
+        public static bool EndingShown { get; private set; }
         Label _volumeValue, _mouseValue, _qualityValue;
         float _noticeUntil;
         string _localAddresses;
@@ -51,13 +56,62 @@ namespace BackRooms.UI
             BuildPanel(root);
             BuildHud(root);
 
+            BuildEnding(root);
+
             _localAddresses = FindLocalAddresses();
             LevelProgress.LevelCleared += OnLevelCleared;
+            LevelProgress.TapeEnded += ShowEnding;
         }
 
         void OnDisable()
         {
             LevelProgress.LevelCleared -= OnLevelCleared;
+            LevelProgress.TapeEnded -= ShowEnding;
+        }
+
+        // Fim da fita: passou pela porta da última fase. Tela preta com o tempo de cada fase.
+        void BuildEnding(VisualElement root)
+        {
+            _ending = new VisualElement();
+            _ending.style.position = Position.Absolute;
+            _ending.style.left = 0; _ending.style.right = 0; _ending.style.top = 0; _ending.style.bottom = 0;
+            _ending.style.backgroundColor = new Color(0f, 0f, 0f, 0.96f);
+            _ending.style.alignItems = Align.Center;
+            _ending.style.justifyContent = Justify.Center;
+            _ending.style.display = DisplayStyle.None;
+            root.Add(_ending);
+
+            var title = Text("FIM DA FITA", 44, Yellow);
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.marginBottom = 8;
+            _ending.Add(title);
+            var line = Text("Vocês saíram. Por enquanto.", 18, Paper);
+            line.style.opacity = 0.75f;
+            line.style.marginBottom = 26;
+            _ending.Add(line);
+            _endingTimes = Text("", 20, Paper);
+            _endingTimes.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _endingTimes.style.marginBottom = 30;
+            _ending.Add(_endingTimes);
+            Button back = MenuButton("Voltar ao menu", () => { _ending.style.display = DisplayStyle.None; EndingShown = false; });
+            back.style.width = 260;
+            _ending.Add(back);
+        }
+
+        void ShowEnding()
+        {
+            if (_ending == null) return;
+            string text = "";
+            float total = 0f;
+            for (int i = 0; i < LevelCatalog.Count; i++)
+            {
+                float t = LevelProgress.LastTime(i);
+                total += t;
+                text += LevelCatalog.Get(i).Name + "   " + LevelProgress.FormatTime(t) + "\n";
+            }
+            _endingTimes.text = text + "\nTotal   " + LevelProgress.FormatTime(total);
+            _ending.style.display = DisplayStyle.Flex;
+            EndingShown = true;
         }
 
         void OnLevelCleared(int index)
@@ -286,6 +340,11 @@ namespace BackRooms.UI
             if (session == null || _panel == null) return;
 
             bool inMenu = session.Phase == SessionPhase.Menu;
+            if (EndingShown && !inMenu)
+            {
+                _ending.style.display = DisplayStyle.None;
+                EndingShown = false;
+            }
             bool playing = session.Phase == SessionPhase.Playing;
 
             _panel.style.display = playing ? DisplayStyle.None : DisplayStyle.Flex;

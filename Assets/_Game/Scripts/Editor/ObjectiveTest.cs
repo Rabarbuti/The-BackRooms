@@ -160,6 +160,9 @@ namespace BackRooms.EditorTools
                         }
                     }
                     if (!SwitchObjective.Locked || !LevelExit.Locked) { Finish(false, "a porta de saída não começou trancada pelo objetivo"); return; }
+                    if (_objective.Note == null) { Finish(false, "sem o bilhete de ensino na sala inicial"); return; }
+                    Vector3 noteFrom = _level.SpawnCenter;
+                    if (new Vector2(_objective.Note.position.x - noteFrom.x, _objective.Note.position.z - noteFrom.z).magnitude > 8.5f) { Finish(false, "o bilhete de ensino ficou longe do início"); return; }
 
                     LevelExit exit = LevelExit.Instance;
                     Vector3 front = exit.DoorPosition - exit.door.forward * 1.3f;

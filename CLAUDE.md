@@ -479,6 +479,9 @@ Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo
   outros testes das Piscinas pausam a maré (`PoolTide.Paused`).
 - `BatteryTest.BatchRun` — a lanterna gasta bateria; pilhas no mapa; mira + E pega, some e recarrega;
   não se pega duas vezes. Linha `[BackRooms] Teste das pilhas`.
+- `BuildTool.BatchWindows` — o jogo para Windows 64 bits com as fases da lista da build, em
+  `Builds/Windows/TheBackRooms.exe` (fora do Git; ~40 min na primeira vez). Linha
+  `[BackRooms] Build para Windows`.
 - `GameOptionsCheck.BatchRun` — fora do Play: volume, mouse e qualidade presos aos limites, aplicados e
   guardados (`GameOptions`). Linha `[BackRooms] Conferência das opções`.
 - `Level1Models.BatchUpdateAndCapture` — cria os materiais dos lotes, reimporta os modelos,
@@ -526,6 +529,9 @@ tempo. O `LevelBuilder.objective` diz o tipo (`Breaker` no Level 0, posto sempre
 - `LevelExit.Locked` junta o `ExitLock` e o `SwitchObjective`. Nos testes que só querem passar pela
   porta, o host cumpre com `SwitchObjective.Instance.CompleteForTest()` (o `LevelSelectTest` faz isso).
 - Peças em escala (cubos primitivos com o colisor deles): o `Level0ColliderCheck` copia a escala.
+- Cada fase com objetivo comum ganha o bilhete de ensino na sala inicial (`SwitchObjective.PinNote`;
+  "Placa" sem colisor). A porta do Level 3 encerra a fita: `LevelProgress.EndTape` e a tela de fim
+  no `ConnectionMenu`, com os tempos de `LevelProgress.RecordTime`.
 
 ## Git
 
