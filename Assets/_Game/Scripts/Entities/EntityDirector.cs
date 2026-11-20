@@ -216,7 +216,7 @@ namespace BackRooms.Entities
                 // (só não pode vê-la surgir). Quem está em cima de uma faixa fica fora do
                 // alcance dela: para esse, vale a distância em linha reta.
                 bool onMap = _nav.WorldToCell(at, out int px, out int pz);
-                bool inRoom = onMap && _nav.Data.InRoom(px, pz);
+                bool inRoom = onMap && _nav.Data.IsShelter(px, pz);
                 int steps = onMap ? _fromPlayer[px, pz] : -1;
                 float straight = Vector3.Distance(position, at) / LevelBuilder.Cell;
 

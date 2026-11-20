@@ -55,17 +55,23 @@ namespace BackRooms.Entities
         public float investigateSpeed = 3.4f;
         public float chaseSpeed = 4.6f;
         public float acceleration = 9f;
+        [Tooltip("Caçando, corre isto em segundos e cansa (o jogador corre 6 s e depois anda: sem cansar ela sempre alcançava).")]
+        public float chaseBurstSeconds = 7f;
+        [Tooltip("Segundos cansada, caçando devagar, antes de correr de novo.")]
+        public float chaseTiredSeconds = 5f;
+        [Tooltip("Velocidade cansada, em fração de chaseSpeed. 0,5 dá 2,3 m/s: menos que o jogador andando.")]
+        public float chaseTiredFactor = 0.5f;
+        [Tooltip("Quando nenhum jogador a tem na tela, vagando, vasculhando ou indo atrás de um barulho anda isto vezes mais rápido. Na caça não: fugir continua possível.")]
+        public float unseenSpeedFactor = 1.5f;
         [Tooltip("Graus por segundo.")]
         public float turnSpeed = 420f;
 
         [Header("Sentidos")]
         [Tooltip("Até onde enxerga à frente, em metros.")]
         public float sightRange = 26f;
-        [Tooltip("Meio ângulo do campo de visão, em graus.")]
+        [Tooltip("Meio ângulo do campo de visão, em graus. Fora dele não vê nem pega, por mais perto que esteja: de costas para ela, só o barulho a denuncia.")]
         public float sightHalfAngle = 65f;
-        [Tooltip("Dentro desta distância percebe o jogador mesmo de costas (se não houver parede).")]
-        public float closeSense = 3.5f;
-        [Tooltip("Alcance do ouvido para um jogador correndo, em células de 4 m de caminho. Andando: 55% disso. Agachado: 25%.")]
+        [Tooltip("Alcance do ouvido para um jogador correndo, em células de 4 m de caminho. Andando: 25% disso. Agachado: não ouve.")]
         public float hearCells = 8f;
         [Tooltip("Quem está debaixo de uma mesa só some fora do cone de visão ou além desta distância, em metros.")]
         public float tableSightRange = 6f;
@@ -136,6 +142,16 @@ namespace BackRooms.Entities
 
         PlayerNetwork _target;
         float _lastSeen;
+        float _chaseSince;
+
+        /// <summary>Cansa na caça? O Capitão não: ele manca sempre no mesmo passo.</summary>
+        protected virtual bool TiresInChase => true;
+
+        /// <summary>Apressa quando ninguém a vê? O Capitão não: ele já só anda sem ser visto.</summary>
+        protected virtual bool HurriesUnseen => true;
+
+        /// <summary>Algum jogador a tem na tela agora, sem parede no meio (só no host, a cada escuta).</summary>
+        public bool Watched { get; private set; }
 
         /// <summary>Falso no Capitão: ele não é "a entidade" que a filmadora e os testes procuram.</summary>
         protected virtual bool IsLevel0Entity => true;
@@ -225,6 +241,8 @@ namespace BackRooms.Entities
             if (!_nav.WorldToCell(position, out int cx, out int cz)) return;
 
             _nav.SoundDistances(cx, cz, Mathf.CeilToInt(hearCells), _sound);
+
+            if (HurriesUnseen) Watched = AnyoneWatching(position);
 
             PlayerNetwork seen = null;
             float seenDistance = float.MaxValue;
@@ -351,12 +369,14 @@ namespace BackRooms.Entities
             Alert(at);
         }
 
-        /// <summary>Barulho de um jogador, de 0 a 1, pelo jeito de andar.</summary>
+        /// <summary>
+        /// Barulho de um jogador, de 0 a 1, pelo jeito de andar: correndo ouve-se de longe
+        /// (<see cref="hearCells"/>), andando só de perto (um quarto disso), agachado nada.
+        /// </summary>
         public static float Loudness(float speed, bool crouching)
         {
-            if (speed < 0.4f) return 0f;
-            if (crouching) return 0.25f;
-            return speed > 3.9f ? 1f : 0.55f;
+            if (speed < 0.4f || crouching) return 0f;
+            return speed > 3.9f ? 1f : 0.25f;
         }
 
         Track TrackOf(PlayerNetwork player, float now)
@@ -374,7 +394,34 @@ namespace BackRooms.Entities
         {
             x = z = -1;
             if (now < track.IgnoreUntil || at.y < -1f) return false;
-            return _nav.WorldToCell(at, out x, out z) && !_nav.Data.InRoom(x, z);
+            return _nav.WorldToCell(at, out x, out z) && !_nav.Data.IsShelter(x, z);
+        }
+
+        static readonly float[] WatchHeights = { 2.6f, 1.5f, 0.5f };
+
+        // Algum jogador tem a cabeça, o peito ou as pernas dela no quadro da câmera, sem parede no meio?
+        bool AnyoneWatching(Vector3 position)
+        {
+            foreach (PlayerNetwork player in PlayerNetwork.All)
+            {
+                if (player == null || !player.IsSpawned || !player.InGame || player.playerCamera == null) continue;
+                if (player.Hiding == HideKind.Wardrobe) continue;
+
+                Camera camera = player.playerCamera;
+                Transform eye = camera.transform;
+                float tanV = Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
+                float tanH = tanV * 16f / 9f;
+
+                foreach (float height in WatchHeights)
+                {
+                    Vector3 point = position + Vector3.up * height;
+                    Vector3 local = eye.InverseTransformPoint(point);
+                    if (local.z < 0.3f || local.z > sightRange * 1.5f) continue;
+                    if (Mathf.Abs(local.x) > local.z * tanH || Mathf.Abs(local.y) > local.z * tanV) continue;
+                    if (!SightBlocked(eye.position, point)) return true;
+                }
+            }
+            return false;
         }
 
         bool CanSee(Vector3 position, Vector3 playerAt, bool crouching)
@@ -382,7 +429,7 @@ namespace BackRooms.Entities
             Vector3 to = Flat(playerAt - position);
             float distance = to.magnitude;
             if (distance > sightRange) return false;
-            if (distance > closeSense && Vector3.Angle(transform.forward, to) > sightHalfAngle) return false;
+            if (!InCone(to)) return false;
 
             return !SightBlocked(position + Vector3.up * eyeHeight, playerAt + Vector3.up * (crouching ? 0.7f : 1.3f));
         }
@@ -434,6 +481,7 @@ namespace BackRooms.Entities
         {
             if (State == state) return;
 
+            if (state == EntityState.Chase) _chaseSince = Time.time;
             _state.Value = (byte)state;
             _waitUntil = 0f;
         }
@@ -482,20 +530,20 @@ namespace BackRooms.Entities
         {
             PlayerNetwork lure = null;
 
-            if (UnityEngine.Random.value < 0.65f)
+            if (UnityEngine.Random.value < 0.4f)
             {
                 int seenPlayers = 0;
                 foreach (PlayerNetwork player in PlayerNetwork.All)
                 {
                     if (player == null || !player.IsSpawned || !player.InGame) continue;
-                    if (!_nav.WorldToCell(player.transform.position, out int px, out int pz) || _nav.Data.InRoom(px, pz)) continue;
+                    if (!_nav.WorldToCell(player.transform.position, out int px, out int pz) || _nav.Data.IsShelter(px, pz)) continue;
 
                     seenPlayers++;
                     if (UnityEngine.Random.Range(0, seenPlayers) == 0) lure = player;
                 }
             }
 
-            if (lure != null && PickNear(lure.transform.position, 3f, 8f)) return;
+            if (lure != null && PickNear(lure.transform.position, 4f, 10f)) return;
             if (PickNear(transform.position, 6f, 1000f)) return;
             PickNear(transform.position, 1f, 1000f);
         }
@@ -534,16 +582,23 @@ namespace BackRooms.Entities
 
         // ---------------------------------------------------------------- Movimento
 
+        float Hurry => HurriesUnseen && !Watched ? unseenSpeedFactor : 1f;
+
         /// <summary>Velocidade desejada agora, pelo estado. O Capitão muda no apagão.</summary>
         protected virtual float SpeedNow()
         {
             switch (State)
             {
-                case EntityState.Chase: return chaseSpeed;
-                case EntityState.Investigate: return investigateSpeed;
-                case EntityState.Search: return searchSpeed;
+                case EntityState.Chase:
+                {
+                    if (!TiresInChase || chaseTiredSeconds <= 0f) return chaseSpeed;
+                    float into = (Time.time - _chaseSince) % Mathf.Max(0.1f, chaseBurstSeconds + chaseTiredSeconds);
+                    return into < chaseBurstSeconds ? chaseSpeed : chaseSpeed * chaseTiredFactor;
+                }
+                case EntityState.Investigate: return investigateSpeed * Hurry;
+                case EntityState.Search: return searchSpeed * Hurry;
                 case EntityState.Feed: return 0f;
-                default: return roamSpeed;
+                default: return roamSpeed * Hurry;
             }
         }
 
@@ -705,6 +760,8 @@ namespace BackRooms.Entities
 
                 if (!Reachable(player, track, now, at, out _, out _)) continue;
                 if (Flat(at - position).magnitude > catchRadius) continue;
+                // Fora do campo de visão não pega: encostar nas costas dela não é morte.
+                if (!InCone(Flat(at - position))) continue;
                 // Debaixo da mesa, o tampo tapa a visada: quem foi visto se enfiando ali é pego assim mesmo.
                 if (hiding != HideKind.Table &&
                     SightBlocked(position + Vector3.up * 1.4f, at + Vector3.up * (player.Crouching ? 0.7f : 1.2f))) continue;
@@ -720,6 +777,8 @@ namespace BackRooms.Entities
                 return;
             }
         }
+
+        bool InCone(Vector3 flatTo) => Vector3.Angle(transform.forward, flatTo) <= sightHalfAngle;
 
         static Vector3 Flat(Vector3 v)
         {

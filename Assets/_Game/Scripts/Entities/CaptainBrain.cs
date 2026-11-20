@@ -123,6 +123,8 @@ namespace BackRooms.Entities
         float _lastStep;
 
         protected override bool IsLevel0Entity => false;
+        protected override bool TiresInChase => false;
+        protected override bool HurriesUnseen => false;
 
         public override void OnNetworkSpawn()
         {

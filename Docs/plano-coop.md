@@ -95,12 +95,16 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
   da sala inicial, com pelo menos 15 s de partida, numa célula entre esse jogador e a sala, a 4
   células ou mais de todos e fora da vista de todos (`EntityDirector`).
 - **Ouvido:** o principal. O host estima o barulho pelo deslocamento de cada jogador: parado 0,
-  agachado 25%, andando 55%, correndo 100%. O som viaja pelo labirinto, barrado por parede,
-  até 8 células para quem corre.
-- **Visão:** 26 m à frente num cone de 130°, ou 3,5 m em qualquer direção, com linha de visada.
-- **Velocidade:** vagando 1,9 m/s, vasculhando 2,6, indo atrás de um barulho 3,4, perseguindo 4,6.
+  agachado 0, andando 25% (só de perto), correndo 100%. O som viaja pelo labirinto, barrado por
+  parede, até 8 células para quem corre (2 andando).
+- **Visão:** 26 m à frente num cone de 130°, com linha de visada. Fora do cone não vê nem pega,
+  por mais perto que esteja (até 20/11/2026 percebia a 3,5 m em qualquer direção).
+- **Velocidade:** vagando 1,9 m/s, vasculhando 2,6, indo atrás de um barulho 3,4, perseguindo 4,6
+  por 7 s e, cansada, 2,3 por 5 s (menos que o jogador andando), em ciclo. Fora da caça, quando
+  nenhum jogador a tem na tela, anda 50% mais rápido.
 - **O que salva:** ficar parado ou agachado, entrar num esconderijo, atravessar um buraco pela
-  faixa (ela não anda em faixa) ou voltar para a sala inicial.
+  faixa (ela não anda em faixa) ou voltar a um abrigo (`LevelData.IsShelter`: a sala inicial e,
+  no Escritório, as salas pequenas acesas).
 - **Captura:** a menos de 1,25 m ela ruge, o jogador vê NO SIGNAL e reaparece na sala inicial
   em 1,6 s. **Provisório** — o plano (seção 2.2) é sala de contenção com resgate.
 - **Avisos:** ronco grave em 3D e chuvisco na filmadora a menos de 16 m.

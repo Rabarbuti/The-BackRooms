@@ -249,7 +249,7 @@ namespace BackRooms.World
                 case SwitchKind.Valve:
                     return new[] { "PARA DRENAR:", "ABRA 2 VALVULAS", "AO MESMO TEMPO", "CUIDADO COM OS RALOS", "MARQUE ONDE DA PE" };
                 case SwitchKind.FireAlarm:
-                    return new[] { "PORTA CORTA-FOGO:", "PUXE 2 ALARMES", "AO MESMO TEMPO", "ELA OUVE A SIRENE", "CORRA PARA A ESCADA" };
+                    return new[] { "PUXE 2 ALARMES", "AO MESMO TEMPO", "ABRIGO: SALINHA", "COM A LUZ ACESA", "AGACHADO ELA NAO OUVE" };
                 default:
                     return new[] { "SEM ENERGIA:", "LIGUE 2 DISJUNTORES", "AO MESMO TEMPO", "SIGA O ZUMBIDO", "NAO CORRA PERTO DELA" };
             }

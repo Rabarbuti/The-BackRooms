@@ -8,9 +8,9 @@ namespace BackRooms.Entities
     /// Navegação da entidade sobre a grade do nível. Não usa NavMesh: o mapa já é uma grade
     /// de células de 4 m com as paredes nas divisas, então o caminho sai direto do LevelData.
     ///
-    /// Onde a entidade pisa: em qualquer célula com piso, menos a sala inicial (ela não passa
-    /// no vão da porta) e os buracos (ela não anda nas faixas). Isso faz da sala inicial um
-    /// abrigo e das faixas uma rota de fuga.
+    /// Onde a entidade pisa: em qualquer célula com piso, menos os abrigos (a sala inicial e,
+    /// no Escritório, as salas pequenas acesas: <see cref="LevelData.IsShelter"/>) e os buracos
+    /// (ela não anda nas faixas). Isso faz dos abrigos um refúgio e das faixas uma rota de fuga.
     ///
     /// O som é outra conta: atravessa buracos e portas e só é barrado por parede.
     /// </summary>
@@ -53,7 +53,7 @@ namespace BackRooms.Entities
         /// <summary>A entidade pode ficar nesta célula?</summary>
         public bool Standable(int x, int z)
         {
-            return !Data.Pit[x, z] && !Data.InRoom(x, z) && !Data.IsBarricade(x, z);
+            return !Data.Pit[x, z] && !Data.IsShelter(x, z) && !Data.IsBarricade(x, z);
         }
 
         /// <summary>A entidade pode passar da célula (x, z) para a vizinha daquele lado?</summary>
