@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using BackRooms.Audio;
 using BackRooms.World;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -59,6 +60,10 @@ namespace BackRooms.EditorTools
         {
             LevelBuilder.OfficeLook look = EnsureMaterials();
             VolumeProfile profile = EnsureVolumeProfile();
+            // O Zelador, o inimigo do escuro (prefab regravado a cada montagem, como o do Capitão).
+            GameObject janitorPrefab = JanitorPreview.CreatePrefab();
+            // O Ascensorista, o inimigo cego que chega de elevador: é ele que o EntityDirector põe aqui.
+            GameObject attendantPrefab = AttendantPreview.CreatePrefab();
 
             Level0Setup.BuildScene(false, new Level0Setup.SceneOptions
             {
@@ -67,8 +72,12 @@ namespace BackRooms.EditorTools
                 size = Width,
                 pits = false,
                 alcoves = false,
-                // A entidade do Level 0 caça também aqui (decisão D6 de plano-de-acao.md, 19/11/2026).
+                // O diretor de inimigos põe o Ascensorista no lugar da entidade do Level 0 (que sai
+                // desta fase, 20/11/2026). Ele aparece logo que alguém sai da cabine e fica escondido
+                // num poço até a hora de chegar (AttendantBrain); o Zelador tem diretor próprio.
                 entity = true,
+                enemyPrefab = attendantPrefab,
+                enemyWakeCells = 1,
                 paintedArrows = false,
                 // O alarme de incêndio destrava a porta corta-fogo (decisão D7).
                 objective = SwitchKind.FireAlarm,
@@ -88,6 +97,21 @@ namespace BackRooms.EditorTools
                     // A onda de luzes (OfficeLightWave) toma o lugar do apagão do Level 0.
                     foreach (LightsOut lightsOut in Object.FindObjectsByType<LightsOut>(FindObjectsInactive.Include))
                         lightsOut.eventEnabled = false;
+
+                    // Sem o zumbido 2D das outras fases: aqui os reatores soam em cada luminária
+                    // (OfficeAmbience, montado com a planta) e calam onde a onda apaga.
+                    foreach (FluorescentHum hum in Object.FindObjectsByType<FluorescentHum>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                        Object.DestroyImmediate(hum);
+
+                    // O Zelador tem diretor próprio na sessão (só aparece no escuro e faz o corte de
+                    // energia do alarme); o EntityDirector fica com o inimigo do elevador.
+                    var session = Object.FindFirstObjectByType<BackRooms.Net.GameSession>();
+                    if (session != null)
+                    {
+                        var janitor = session.gameObject.AddComponent<BackRooms.Entities.JanitorDirector>();
+                        janitor.session = session;
+                        janitor.janitorPrefab = janitorPrefab;
+                    }
                 },
             });
             Debug.Log($"[BackRooms] Level 3 de teste montado em {ScenePath}: abra a cena, aperte Play e hospede (H).");
@@ -614,6 +638,13 @@ namespace BackRooms.EditorTools
                     if (builder.OfficeExitRoute.Count != 4) problems.Add($"seed {seed}: caminho da escada com {builder.OfficeExitRoute.Count} pontos");
                     if (Object.FindObjectsByType<LevelExit>().Length != 1) problems.Add($"seed {seed}: não há uma porta de saída só");
                     if (Object.FindObjectsByType<ElevatorDoors>().Length != 3) problems.Add($"seed {seed}: o saguão não tem 3 elevadores");
+                    if (Object.FindObjectsByType<ElevatorButton>().Length != 9) problems.Add($"seed {seed}: os elevadores não têm 9 botões (abrir, fechar e chamar em cada um)");
+                    if (Object.FindFirstObjectByType<FluorescentHum>() != null) problems.Add($"seed {seed}: a cena tem o zumbido 2D das outras fases");
+                    var ambience = Object.FindFirstObjectByType<OfficeAmbience>();
+                    if (ambience == null || ambience.LightCount == 0) problems.Add($"seed {seed}: sem som ambiente (ou sem luminárias nele)");
+                    var bangs = Object.FindFirstObjectByType<LockerBangs>();
+                    if (bangs == null || bangs.RowCount == 0) problems.Add($"seed {seed}: nenhum corredor com armários que batem");
+                    else Debug.Log($"[BackRooms] Level 3 seed {seed}: {bangs.DoorCount} portas de armário soltas em {bangs.RowCount} corredores, {ambience?.LightCount} luminárias e {ambience?.VentCount} difusores no som ambiente");
                     if (!d.InRoom(d.SpawnX, d.SpawnZ) || d.Office[d.SpawnX, d.SpawnZ] != OfficeCell.Cab) problems.Add($"seed {seed}: o início não é a cabine");
 
                     List<string> blocked = BlockedPath(builder);
@@ -780,8 +811,25 @@ namespace BackRooms.EditorTools
 
                 OfficeAtrium at = d.Atrium;
                 Vector3 head = Center(at.HeadX, at.HeadZ);
-                Shot("vao_escada", head - Side(at.Inward) * 1.2f, head + Side(at.Inward) * 6f, 18f);
-                Shot("vao_para_cima", head - Side(at.Inward) * 0.5f + Side(at.EndSide) * -3f, head + Side(at.Inward) * 6f + Side(at.EndSide) * -3f, -40f);
+                // O vão fica atrás de parede (21/11/2026): a porta da escada vista do corredor (de
+                // perto e de longe, ao longo do anel) e, do patamar de cima, o vão para cima.
+                Vector3 doorFront = head + Side(at.EndSide) * (LevelBuilder.Cell * 0.5f - 0.075f - 0.8f);
+                Shot("porta_escada", doorFront - Side(at.Inward) * 1.8f, doorFront + Side(at.Inward) * 4f, 4f);
+                Vector3 along = Vector3.Cross(Vector3.up, Side(at.Inward));
+                for (int k = 3; k >= 1; k--)
+                {
+                    Vector3 far = head + along * (k * LevelBuilder.Cell);
+                    int fx = Mathf.FloorToInt(far.x / LevelBuilder.Cell), fz = Mathf.FloorToInt(far.z / LevelBuilder.Cell);
+                    if (fx < 0 || fz < 0 || fx >= d.Width || fz >= d.Height || d.Office[fx, fz] != OfficeCell.Corridor) continue;
+                    Shot("porta_escada_longe", far, head, 2f);
+                    break;
+                }
+                if (builder.OfficeExitRoute.Count == 4)
+                {
+                    Vector3 top = builder.OfficeExitRoute[1];
+                    Shot("vao_escada", top - Side(at.Inward) * 0.3f, top + Side(at.Inward) * 6f, 18f);
+                    Shot("vao_para_cima", top, top + Side(at.Inward) * 6f - Side(at.EndSide) * 3f, -40f);
+                }
                 if (builder.OfficeExitRoute.Count == 4)
                 {
                     Vector3 landing = builder.OfficeExitRoute[3];
@@ -842,6 +890,155 @@ namespace BackRooms.EditorTools
                 case WallSide.West: return Vector3.left;
                 default: return Vector3.right;
             }
+        }
+    }
+    /// <summary>
+    /// Foto do menu inicial com o Level 3 escolhido (a vista do Escritório atrás do menu), em
+    /// Logs/Previews/office/menu_level3.png, mais a mesma vista sem o menu (menu_level3_vista.png).
+    /// Não é teste: abre a cena, entra em Play, espera a fase de fundo montar, junta a câmera do
+    /// menu com o documento do menu e sai. Linha de comando:
+    /// -executeMethod BackRooms.EditorTools.Level3MenuPhoto.BatchRun (pela fila).
+    /// </summary>
+    public static class Level3MenuPhoto
+    {
+        const string ActiveKey = "BackRooms.Level3MenuPhoto.Active";
+        const string DoneKey = "BackRooms.Level3MenuPhoto.Done";
+        const double Timeout = 180.0;
+
+        static double _began;
+        static int _step;
+        static int _ticks;
+        static UnityEngine.UIElements.UIDocument _document;
+        static UnityEngine.UIElements.PanelSettings _original, _panel;
+        static RenderTexture _ui;
+
+        static string Folder => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Logs", "Previews", "office"));
+
+        [MenuItem("BackRooms/Fotografar menu do Level 3")]
+        public static void Run() => Start();
+
+        public static void BatchRun() => Start();
+
+        static void Start()
+        {
+            if (!File.Exists(Level3Setup.ScenePath)) { Debug.LogError("[BackRooms] Foto do menu do Level 3: sem a cena; monte o Level 3 antes."); EditorApplication.Exit(1); return; }
+            SessionState.SetBool(ActiveKey, true);
+            SessionState.EraseInt(DoneKey);
+            EditorSceneManager.OpenScene(Level3Setup.ScenePath, OpenSceneMode.Single);
+            EditorApplication.EnterPlaymode();
+        }
+
+        [InitializeOnLoadMethod]
+        static void Hook()
+        {
+            if (SessionState.GetInt(DoneKey, -1) >= 0)
+            {
+                EditorApplication.playModeStateChanged -= AfterPlay;
+                EditorApplication.playModeStateChanged += AfterPlay;
+                if (!EditorApplication.isPlayingOrWillChangePlaymode) AfterPlay(PlayModeStateChange.EnteredEditMode);
+            }
+            if (!SessionState.GetBool(ActiveKey, false)) return;
+            EditorApplication.update -= Tick;
+            EditorApplication.update += Tick;
+        }
+
+        static void Tick()
+        {
+            if (!EditorApplication.isPlaying) return;
+            var session = BackRooms.Net.GameSession.Instance;
+            if (session == null) return;
+            if (_began <= 0.0) _began = EditorApplication.timeSinceStartup;
+            if (EditorApplication.timeSinceStartup - _began > Timeout) { Finish(1, "tempo esgotado"); return; }
+
+            _ticks++;
+            switch (_step)
+            {
+                case 0:
+                    // A fase de fundo montada e uns segundos para as sombras e os shaders.
+                    if (session.level == null || session.level.Data == null || EditorApplication.timeSinceStartup - _began < 6.0) return;
+                    var menu = Object.FindAnyObjectByType<BackRooms.UI.ConnectionMenu>();
+                    if (menu == null) { Finish(1, "a cena não tem o menu inicial"); return; }
+                    _document = menu.GetComponent<UnityEngine.UIElements.UIDocument>();
+                    _original = _document.panelSettings;
+                    _ui = new RenderTexture(1920, 1080, 24, RenderTextureFormat.ARGB32);
+                    _panel = Object.Instantiate(_original);
+                    _panel.targetTexture = _ui;
+                    _panel.clearColor = true;
+                    _panel.colorClearValue = Color.clear;
+                    _document.panelSettings = _panel;
+                    _ticks = 0;
+                    _step = 1;
+                    return;
+
+                case 1:
+                    if (_ticks < 8) return;
+                    Camera camera = session.menuCamera;
+                    if (camera == null) { Finish(1, "sem a câmera do menu"); return; }
+                    // Sem o balanço: a vista de MenuView no meio do vaivém (a mesma que o GameSession põe).
+                    if (session.level.MenuView(out Vector3 viewEye, out Quaternion viewLook))
+                        camera.transform.SetPositionAndRotation(viewEye, viewLook);
+                    var scene = new RenderTexture(1920, 1080, 24);
+                    camera.targetTexture = scene;
+                    for (int i = 0; i < 6; i++) camera.Render();
+                    camera.targetTexture = null;
+
+                    Texture2D back = Read(scene), front = Read(_ui);
+                    Directory.CreateDirectory(Folder);
+                    File.WriteAllBytes(Path.Combine(Folder, "menu_level3_vista.png"), back.EncodeToPNG());
+                    Color32[] a = back.GetPixels32(), b = front.GetPixels32();
+                    for (int i = 0; i < a.Length; i++)
+                        a[i] = Color32.Lerp(a[i], new Color32(b[i].r, b[i].g, b[i].b, 255), b[i].a / 255f);
+                    back.SetPixels32(a);
+                    back.Apply();
+                    string path = Path.Combine(Folder, "menu_level3.png");
+                    File.WriteAllBytes(path, back.EncodeToPNG());
+                    Object.Destroy(back);
+                    Object.Destroy(front);
+                    scene.Release();
+
+                    LevelData d = session.level.Data;
+                    Finish(0, $"{path} (seed do menu {session.menuSeed}, câmera em {camera.transform.position:F1} olhando {camera.transform.forward:F2}, " +
+                              $"{(d.HasOffice ? "Escritório" : "outra fase")})");
+                    return;
+            }
+        }
+
+        static Texture2D Read(RenderTexture target)
+        {
+            var texture = new Texture2D(target.width, target.height, TextureFormat.RGBA32, false);
+            RenderTexture previous = RenderTexture.active;
+            RenderTexture.active = target;
+            texture.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
+            texture.Apply();
+            RenderTexture.active = previous;
+            return texture;
+        }
+
+        static void Finish(int code, string report)
+        {
+            EditorApplication.update -= Tick;
+            SessionState.SetBool(ActiveKey, false);
+            if (_document != null && _original != null) _document.panelSettings = _original;
+            if (_ui != null) _ui.Release();
+            _document = null;
+            _ui = null;
+            Debug.Log("[BackRooms] Foto do menu do Level 3 " + (code == 0 ? "PRONTA" : "FALHOU") + ": " + report);
+            SessionState.SetInt(DoneKey, code);
+            EditorApplication.playModeStateChanged -= AfterPlay;
+            EditorApplication.playModeStateChanged += AfterPlay;
+            EditorApplication.ExitPlaymode();
+        }
+
+        static void AfterPlay(PlayModeStateChange change)
+        {
+            if (change != PlayModeStateChange.EnteredEditMode) return;
+            EditorApplication.playModeStateChanged -= AfterPlay;
+            int code = SessionState.GetInt(DoneKey, 0);
+            SessionState.EraseInt(DoneKey);
+            _step = 0;
+            _ticks = 0;
+            _began = 0.0;
+            if (Application.isBatchMode) Level1Setup.ExitWithLevel0Open(code);
         }
     }
 }

@@ -36,6 +36,9 @@ namespace BackRooms.EditorTools
         {
             Dump("capitao", () => new GameObject("Capitao").AddComponent<CaptainBody>());
             Dump("entidade", () => new GameObject("Entidade").AddComponent<EntityBody>());
+            Dump("afogado", () => new GameObject("Afogado").AddComponent<UndertowBody>());
+            Dump("ascensorista", () => new GameObject("Ascensorista").AddComponent<AttendantBody>());
+            Dump("zelador", () => new GameObject("Zelador").AddComponent<JanitorBody>());
         }
 
         /// <summary>Linha de comando: grava os esqueletos e fecha (0 = ok).</summary>
@@ -57,12 +60,18 @@ namespace BackRooms.EditorTools
         {
             CaptainBody.KeepAllJoints = true;
             EntityBody.KeepAllJoints = true;
+            UndertowBody.KeepAllJoints = true;
+            AttendantBody.KeepAllJoints = true;
+            JanitorBody.KeepAllJoints = true;
             Component body = null;
             try
             {
                 body = make();
                 if (body is CaptainBody captain) captain.Build();
                 if (body is EntityBody entity) entity.Build();
+                if (body is UndertowBody undertow) undertow.Build();
+                if (body is AttendantBody attendant) attendant.Build();
+                if (body is JanitorBody janitor) janitor.Build();
 
                 Transform root = body.transform;
                 var json = new StringBuilder();
@@ -80,6 +89,9 @@ namespace BackRooms.EditorTools
             {
                 CaptainBody.KeepAllJoints = false;
                 EntityBody.KeepAllJoints = false;
+                UndertowBody.KeepAllJoints = false;
+                AttendantBody.KeepAllJoints = false;
+                JanitorBody.KeepAllJoints = false;
                 if (body != null) UnityEngine.Object.DestroyImmediate(body.gameObject);
             }
         }
@@ -117,7 +129,7 @@ namespace BackRooms.EditorTools
         [MenuItem("BackRooms/Personagens/Atualizar modelos")]
         public static void UpdateModels()
         {
-            foreach (string name in new[] { "Capitao", "Entidade" }) Materials(name);
+            foreach (string name in new[] { "Capitao", "Entidade", "Afogado", "Ascensorista", "Zelador" }) Materials(name);
             AssetDatabase.SaveAssets();
         }
 
@@ -136,6 +148,12 @@ namespace BackRooms.EditorTools
                 case "Madeira": return (0.2f, 0f);
                 case "Casco": return (0.72f, 0f);
                 case "Casca": return (0.12f, 0f);
+                case "Encharcada": return (0.62f, 0f);
+                case "Uniforme": return (0.22f, 0f);
+                case "Gaze": return (0.08f, 0f);
+                case "Bengala": return (0.5f, 0f);
+                case "Macacao": return (0.15f, 0f);
+                case "Borracha": return (0.55f, 0f);
                 default: return (0.3f, 0f);
             }
         }

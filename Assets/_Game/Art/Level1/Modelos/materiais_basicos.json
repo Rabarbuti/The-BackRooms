@@ -91,21 +91,21 @@
       "metal": 0.25
     },
     {
-      "nome": "Papel_Branco",
+      "nome": "Papel_Amarelo",
       "cor": [
-        236,
         232,
-        218
+        194,
+        40
       ],
       "rugosidade": 0.8,
       "metal": 0.0
     },
     {
-      "nome": "Papel_Vermelho",
+      "nome": "Papel_Branco",
       "cor": [
-        178,
-        30,
-        28
+        236,
+        232,
+        218
       ],
       "rugosidade": 0.8,
       "metal": 0.0
@@ -141,11 +141,11 @@
       "metal": 0.0
     },
     {
-      "nome": "Tinta_Branca",
+      "nome": "Tinta_Preta",
       "cor": [
-        240,
-        238,
-        230
+        24,
+        24,
+        26
       ],
       "rugosidade": 0.6,
       "metal": 0.0

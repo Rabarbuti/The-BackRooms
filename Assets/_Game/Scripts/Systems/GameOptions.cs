@@ -20,12 +20,23 @@ namespace BackRooms
         /// <summary>Multiplicador da sensibilidade do mouse, de 0,25 a 3.</summary>
         public static float MouseScale { get; private set; } = 1f;
 
+        /// <summary>
+        /// Silêncio do menu: com a sessão fora do jogo (menu inicial, conectando, fim da fita) só a
+        /// música do menu se ouve. A fase atrás do menu é montada (<c>LevelBuilder.buildOnAwake</c>) e
+        /// os sons dela (zumbido dos pontos do objetivo, ar-condicionado, maré, inimigos) nascem
+        /// tocando; em vez de cada um saber do menu, o ouvinte fica mudo e a <c>MenuMusic</c> passa
+        /// por cima (<c>AudioSource.ignoreListenerVolume</c>, com o volume geral aplicado por ela).
+        /// Ligado e desligado pelo <c>ConnectionMenu</c>.
+        /// </summary>
+        public static bool MenuSilence { get; private set; }
+
         /// <summary>Perfil de qualidade (índice em QualitySettings.names).</summary>
         public static int Quality => QualitySettings.GetQualityLevel();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         public static void Load()
         {
+            MenuSilence = false;
             SetVolume(PlayerPrefs.GetFloat(VolumeKey, 1f), false);
             SetMouseScale(PlayerPrefs.GetFloat(MouseKey, 1f), false);
             int quality = PlayerPrefs.GetInt(QualityKey, -1);
@@ -35,9 +46,19 @@ namespace BackRooms
         public static void SetVolume(float volume, bool save = true)
         {
             Volume = Mathf.Clamp01(Mathf.Round(volume * 10f) / 10f);
-            AudioListener.volume = Volume;
+            ApplyListener();
             if (save) Save(VolumeKey, Volume);
         }
+
+        /// <summary>Liga ou desliga o silêncio do menu (<see cref="MenuSilence"/>).</summary>
+        public static void SetMenuSilence(bool silent)
+        {
+            if (MenuSilence == silent && AudioListener.volume == (silent ? 0f : Volume)) return;
+            MenuSilence = silent;
+            ApplyListener();
+        }
+
+        static void ApplyListener() => AudioListener.volume = MenuSilence ? 0f : Volume;
 
         public static void SetMouseScale(float scale, bool save = true)
         {

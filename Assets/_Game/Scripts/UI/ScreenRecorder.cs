@@ -20,7 +20,10 @@ namespace BackRooms.UI
     /// com o <see cref="AviWriter"/>, em outra thread. O som é o que sai para as caixas,
     /// apanhado pelo <see cref="RecorderAudioTap"/>.
     ///
-    /// Os vídeos vão para a pasta Vídeos do usuário, em "The BackRooms".
+    /// Os vídeos vão para a pasta Vídeos do usuário, em "The BackRooms" (no editor e na build:
+    /// <c>C:\Users\&lt;nome&gt;\Videos\The BackRooms</c>). AVI com imagem em Motion JPEG e som PCM: o
+    /// Windows abre sem instalar nada (Media Foundation, a base do Media Player e do Filmes e TV).
+    /// A galeria <see cref="RecordingsScreen"/> lista, abre e apaga os clipes dessa pasta.
     /// </summary>
     public sealed class ScreenRecorder : MonoBehaviour
     {
@@ -28,6 +31,14 @@ namespace BackRooms.UI
 
         /// <summary>Para os testes: grava nesta pasta em vez de na pasta Vídeos.</summary>
         public static string FolderOverride;
+
+        /// <summary>Pasta onde os clipes vão parar (e de onde a galeria os lê).</summary>
+        public static string Folder => !string.IsNullOrEmpty(FolderOverride) ? FolderOverride : DefaultFolder();
+
+        /// <summary>Começo do nome de todo clipe (a galeria só lista estes).</summary>
+        public const string FilePrefix = "BackRooms_";
+        public const string FileExtension = ".avi";
+        public const string StampFormat = "yyyy-MM-dd_HH-mm-ss";
 
         [Header("Vídeo")]
         public int width = 854;
@@ -39,6 +50,9 @@ namespace BackRooms.UI
         public float maxMinutes = 15f;
 
         public bool IsRecording => _writer != null;
+
+        /// <summary>Arquivo sendo gravado agora, ou vazio.</summary>
+        public string CurrentFile => _writer != null ? _writer.Path : "";
 
         /// <summary>Tempo da gravação em andamento, em segundos.</summary>
         public float RecordedSeconds => IsRecording ? Time.unscaledTime - _startedAt : 0f;
@@ -68,7 +82,9 @@ namespace BackRooms.UI
         {
             Instance = this;
             _onReadback = OnReadback;
-            _toggle = new InputAction("Gravar", InputActionType.Button, "<Keyboard>/f9");
+            // R no lugar do F9 (21/11/2026): na máquina do usuário o F9 sozinho não chegava ao jogo
+            // (só com Alt), tomado por algo de fora; o R não tem outro uso.
+            _toggle = new InputAction("Gravar", InputActionType.Button, "<Keyboard>/r");
         }
 
         void OnEnable() { _toggle.Enable(); }
@@ -112,9 +128,12 @@ namespace BackRooms.UI
 
             try
             {
-                string folder = !string.IsNullOrEmpty(FolderOverride) ? FolderOverride : DefaultFolder();
+                string folder = Folder;
                 Directory.CreateDirectory(folder);
-                string path = Path.Combine(folder, "BackRooms_" + DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss") + ".avi");
+                string stamp = DateTime.Now.ToString(StampFormat, System.Globalization.CultureInfo.InvariantCulture);
+                string path = Path.Combine(folder, FilePrefix + stamp + FileExtension);
+                // Dois clipes no mesmo segundo (F9 duas vezes depressa): não sobrescreve o primeiro.
+                for (int n = 2; File.Exists(path); n++) path = Path.Combine(folder, FilePrefix + stamp + "_" + n + FileExtension);
 
                 // Largura e altura pares: o JPEG de vídeo trabalha em blocos de dois pixels.
                 int w = Mathf.Max(64, width) & ~1;
@@ -134,6 +153,7 @@ namespace BackRooms.UI
                 _wantFrame = true;
                 _startedAt = Time.unscaledTime;
                 LastError = "";
+                Debug.Log("[BackRooms] Gravando em " + path);
                 return true;
             }
             catch (Exception e)

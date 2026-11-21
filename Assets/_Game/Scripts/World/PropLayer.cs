@@ -29,6 +29,15 @@ namespace BackRooms.World
     /// </summary>
     public sealed class PropLayer : MonoBehaviour
     {
+        // Textos pintados nas placas de papelão (a língua do jogo é o inglês; PixelFont: só A-Z,
+        // 0-9 e : . , / - = ( ), até 20 letras numa placa).
+        const string DoNotEnterText = "DO NOT ENTER";
+        const string DiningText = "DINING ROOM";
+        const string LivingText = "LIVING ROOM";
+        const string StockText = "STOCKROOM";
+        // Modelo da placa na base dos totens: a amarela de DISPLAY ONLY (o nome do modelo é antigo).
+        const string TotemSign = "PlacaLiquidacao";
+
         [Tooltip("Modelos disponíveis (os FBX de Art/Level1/Modelos), achados pelo nome. Modelo que faltar é pulado.")]
         public GameObject[] models;
 
@@ -55,7 +64,7 @@ namespace BackRooms.World
         [Header("Objetivo (level1-mostruario.md, seção 6)")]
         [Tooltip("Porta de saída trancada por um teclado; o código está em três etiquetas vermelhas.")]
         public bool exitCode;
-        [Tooltip("Material-base (HDRP/Lit branco) das etiquetas, do bilhete e do teclado: cada um recebe a própria textura.")]
+        [Tooltip("Material-base (HDRP/Lit branco) das etiquetas e do teclado: cada um recebe a própria textura.")]
         public Material labelMaterial;
         [Tooltip("Distância mínima entre as etiquetas, em células.")]
         public int tagSpacing = 6;
@@ -101,7 +110,7 @@ namespace BackRooms.World
         /// <summary>Placas penduradas com texto (zona e PROIBIDO ENTRAR).</summary>
         public int ZoneSigns { get; private set; }
 
-        /// <summary>Etiquetas vermelhas de LIQUIDAÇÃO postas (o objetivo pede 3).</summary>
+        /// <summary>Etiquetas vermelhas de CLEARANCE postas (o objetivo pede 3).</summary>
         public int Tags { get; private set; }
 
         /// <summary>Células das etiquetas, na ordem do dígito.</summary>
@@ -200,7 +209,7 @@ namespace BackRooms.World
                 for (int x = 0; x < _data.Width; x++)
                     PlaceCell(x, z);
 
-            // O objetivo: teclado na porta, etiquetas e bilhete.
+            // O objetivo: teclado na porta e etiquetas.
             Tags = 0;
             TagCells.Clear();
             if (exitCode && labelMaterial != null) PlaceObjective(level);
@@ -520,7 +529,7 @@ namespace BackRooms.World
                 _barricading = false;
             }
 
-            // PROIBIDO ENTRAR pendurada na passagem para a primeira vizinha aberta.
+            // DO NOT ENTER (PROIBIDO ENTRAR) pendurada na passagem para a primeira vizinha aberta.
             if (zoneSigns && labelMaterial != null)
                 for (int s = 0; s < 4; s++)
                 {
@@ -529,7 +538,7 @@ namespace BackRooms.World
                     if (_data.IsBarricade(nx, nz)) continue;
                     Vector3 middle = origin + new Vector3(Cell * 0.5f, 0f, Cell * 0.5f);
                     Vector3 toward = new Vector3(nx - x, 0f, nz - z);
-                    HangSign(middle + toward * (Cell * 0.5f), Mathf.Atan2(toward.x, toward.z) * Mathf.Rad2Deg, "PROIBIDO ENTRAR",
+                    HangSign(middle + toward * (Cell * 0.5f), Mathf.Atan2(toward.x, toward.z) * Mathf.Rad2Deg, DoNotEnterText,
                              new Color32(250, 246, 236, 255), new Color32(176, 28, 22, 255));
                     break;
                 }
@@ -575,7 +584,8 @@ namespace BackRooms.World
         }
 
         // O totem num canto da célula, virado para o meio dela: base preta, a estátua do Capitão
-        // em cima e a placa de OFERTA na frente. Um colisor só, da base à cabeça.
+        // em cima e a placa amarela de DISPLAY ONLY na frente (o modelo PlacaLiquidacao; vermelho
+        // com CLEARANCE é só das etiquetas do código). Um colisor só, da base à cabeça.
         bool PlaceTotem(Rect region, Vector2 anchor, Vector3 origin, System.Random rng)
         {
             if (totemModel == null || totemMaterials == null || totemMaterials.Length == 0) return false;
@@ -615,12 +625,12 @@ namespace BackRooms.World
             GameObject figure = Totem.CreateStatue(root.transform, totemModel, totemMaterials);
             if (figure != null) figure.transform.localPosition = new Vector3(0f, baseH, 0f);
 
-            // A placa de OFERTA encostada na frente da base.
-            GameObject sign = Get("PlacaOferta");
+            // A placa de DISPLAY ONLY encostada na frente da base.
+            GameObject sign = Get(TotemSign);
             if (sign != null)
             {
                 GameObject plate = Instantiate(sign, root.transform);
-                plate.name = "PlacaOferta";
+                plate.name = "PlacaTotem";
                 Bounds sb = BoundsOf(sign);
                 plate.transform.localPosition = new Vector3(0.18f, baseH - sb.min.y, baseD * 0.5f + 0.02f - sb.min.z);
                 plate.transform.localRotation = Quaternion.Euler(-8f, Jitter(rng, 10f), 0f);
@@ -652,7 +662,6 @@ namespace BackRooms.World
 
             Physics.SyncTransforms();
             PlaceTags(exitLock.Digits);
-            PlaceNote(exitLock.Digits);
             unchecked { _hash = _hash * 31 + exitLock.Code + 7919; }
         }
 
@@ -699,18 +708,6 @@ namespace BackRooms.World
             }
         }
 
-        // O bilhete na sala inicial, numa parede fechada dela.
-        void PlaceNote(int[] digits)
-        {
-            int x = _data.SpawnX, z = _data.SpawnZ;
-            for (int s = 0; s < 4; s++)
-            {
-                if (!Closed(x, z, s)) continue;
-                MountLabel("Bilhete", x, z, Sides[s], 1.4f, new Vector2(0.32f, 0.24f), ExitLock.NoteTexture(digits, _seed));
-                return;
-            }
-        }
-
         // Uma parede fechada da célula, sem placa de saída e sem móvel encostado na frente dela.
         bool FreeWall(int x, int z, out WallSide side)
         {
@@ -752,9 +749,8 @@ namespace BackRooms.World
 
         // ---------------------------------------------------------------- Placas e anomalias
 
-        // Placa de papelão pendurada do teto por dois fios, com o texto dos dois lados, acima da
-        // cabeça (a borda de baixo fica a ~2,7 m). Sem colisor, como as placas penduradas do Blender.
-        void HangSign(Vector3 at, float yaw, string text, Color32 ink, Color32 paper)
+        /// <summary>O desenho de uma placa de papelão (128 x 28 pontos): o texto centrado, grande se couber.</summary>
+        public static Texture2D SignTexture(string text, Color32 ink, Color32 paper)
         {
             const int w = 128, h = 28;
             var pixels = new Color32[w * h];
@@ -764,6 +760,24 @@ namespace BackRooms.World
             var texture = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, name = "Placa_" + text };
             texture.SetPixels32(pixels);
             texture.Apply(false);
+            return texture;
+        }
+
+        /// <summary>Os textos das placas de papelão, com as cores de cada uma (para as fotos de conferência).</summary>
+        public static (string text, Color32 ink, Color32 paper)[] SignTexts => new[]
+        {
+            (DoNotEnterText, new Color32(250, 246, 236, 255), new Color32(176, 28, 22, 255)),
+            (DiningText, new Color32(84, 52, 30, 255), new Color32(222, 206, 168, 255)),
+            (LivingText, new Color32(84, 52, 30, 255), new Color32(222, 206, 168, 255)),
+            (StockText, new Color32(84, 52, 30, 255), new Color32(222, 206, 168, 255)),
+        };
+
+        // Placa de papelão pendurada do teto por dois fios, com o texto dos dois lados, acima da
+        // cabeça (a borda de baixo fica a ~2,7 m). Sem colisor, como as placas penduradas do Blender.
+        void HangSign(Vector3 at, float yaw, string text, Color32 ink, Color32 paper)
+        {
+            Texture2D texture = SignTexture(text, ink, paper);
+            int w = texture.width, h = texture.height;
             var material = new Material(labelMaterial) { name = "Placa_" + text };
             material.SetTexture("_BaseColorMap", texture);
             material.SetColor("_BaseColor", Color.white);
@@ -1250,7 +1264,7 @@ namespace BackRooms.World
             // Placa da zona: uma por bloco de 2 x 2, pendurada no meio da primeira célula dele.
             if (zoneSigns && labelMaterial != null && x % 2 == 0 && z % 2 == 0 && !repeat)
             {
-                string zone = theme == Theme.Jantar ? "SALA DE JANTAR" : theme == Theme.Estar ? "SALA DE ESTAR" : theme == Theme.Estoque ? "ESTOQUE" : null;
+                string zone = theme == Theme.Jantar ? DiningText : theme == Theme.Estar ? LivingText : theme == Theme.Estoque ? StockText : null;
                 System.Random signRng = Rng(269, x, z);
                 if (zone != null && signRng.NextDouble() < 0.7)
                     HangSign(origin + new Vector3(Cell * 0.5f, 0f, Cell * 0.5f), signRng.Next(2) * 90f + Jitter(signRng, 8f), zone,
@@ -1574,7 +1588,7 @@ namespace BackRooms.World
                 case "@placa_encostada":
                 {
                     // Placa de trânsito apoiada na parede, inclinada para trás.
-                    string sign = Pick(rng, new[] { ("PlacaPare", 1f), ("PlacaStop", 1f), ("PlacaSetas", 1f), ("PlacaAnimal", 1f) });
+                    string sign = Pick(rng, new[] { ("PlacaStop", 1f), ("PlacaStop", 1f), ("PlacaSetas", 1f), ("PlacaAnimal", 1f) });
                     return Put(sign, strip, anchor, yaw + Jitter(rng, 6f), Quaternion.Euler(-14f, 0f, Jitter(rng, 5f)), origin, rng) != null;
                 }
                 case "@sofa_empilhado":
@@ -1743,13 +1757,13 @@ namespace BackRooms.World
                     ChairPile(region, anchor, origin, rng);
                     break;
                 case "@placa_poste":
-                    Put(Pick(rng, new[] { ("PlacaParePoste", 1f), ("PlacaStopPoste", 1f), ("PlacaSetasPoste", 1f), ("PlacaAnimalPoste", 1f),
+                    Put(Pick(rng, new[] { ("PlacaStopPoste", 1f), ("PlacaStopPoste", 1f), ("PlacaSetasPoste", 1f), ("PlacaAnimalPoste", 1f),
                                           ("PlacaCurvaDireitaPoste", 0.5f), ("PlacaCurvaEsquerdaPoste", 0.5f) }), region, Jit(anchor, rng),
                         facing + Jitter(rng, 60f), Quaternion.Euler(Jitter(rng, 6f), 0f, Jitter(rng, 6f)), origin, rng);
                     break;
                 case "@placa_no_chao":
                     // Caída de costas no chão.
-                    Put(Pick(rng, new[] { ("PlacaPare", 1f), ("PlacaStop", 1f), ("PlacaSetas", 1f), ("PlacaAnimal", 1f) }), region, Jit(anchor, rng),
+                    Put(Pick(rng, new[] { ("PlacaStop", 1f), ("PlacaStop", 1f), ("PlacaSetas", 1f), ("PlacaAnimal", 1f) }), region, Jit(anchor, rng),
                         Jitter(rng, 180f), Quaternion.Euler(-88f, 0f, 0f), origin, rng);
                     break;
                 case "@poltrona_marrom":

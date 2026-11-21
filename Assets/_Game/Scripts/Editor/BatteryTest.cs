@@ -11,7 +11,8 @@ namespace BackRooms.EditorTools
 {
     /// <summary>
     /// Teste em Play da lanterna com bateria e das pilhas no chão (<see cref="BatteryPickups"/>,
-    /// <c>P0.3</c>): a bateria não é infinita e cai com a lanterna acesa; há pilhas longe umas das
+    /// <c>P0.3</c>): a bateria não é infinita, dura 4 min com carga cheia (o valor que o jogador do
+    /// prefab tem de fato), cai com a lanterna acesa e o painel a mostra em porcentagem; há pilhas longe umas das
     /// outras; mirando uma, o aviso diz o que fazer; E pega, a pilha some e a lanterna volta cheia;
     /// a mesma pilha não se pega duas vezes.
     ///
@@ -111,9 +112,13 @@ namespace BackRooms.EditorTools
                     if (_pickups == null || _pickups.Count < 4) { Finish(false, $"{(_pickups == null ? 0 : _pickups.Count)} pilhas na fase (eram para ser 4 ou mais)"); return; }
                     Flashlight torch = _local.flashlight;
                     if (torch.infiniteBattery) { Finish(false, "a lanterna continua com bateria infinita"); return; }
+                    // O valor efetivo (o do prefab do jogador), não só o padrão do código.
+                    if (Mathf.Abs(torch.batterySeconds - Flashlight.DefaultBatterySeconds) > 0.5f)
+                    { Finish(false, $"a lanterna do jogador dura {torch.batterySeconds:F0} s (devia ser {Flashlight.DefaultBatterySeconds:F0}; recrie o Level 0)"); return; }
                     torch.SetOn(true);
                     _before = torch.Battery01;
-                    Next($"{_pickups.Count} pilhas no mapa");
+                    float minutes = torch.batterySeconds / 60f;
+                    Next($"{_pickups.Count} pilhas no mapa; carga cheia {minutes:F0} min, luz total na fase pegando todas: {(1 + _pickups.Count) * minutes:F0} min");
                     break;
                 }
 
@@ -123,11 +128,16 @@ namespace BackRooms.EditorTools
                     Flashlight torch = _local.flashlight;
                     float spent = _before - torch.Battery01;
                     if (spent <= 0f) { Finish(false, "com a lanterna acesa a bateria não caiu"); return; }
+                    // O painel mostra a porcentagem (arredondada para cima), não barras.
+                    string shown = BackRooms.UI.Camcorder.Instance != null ? BackRooms.UI.Camcorder.Instance.BatteryText : null;
+                    int expected = BackRooms.UI.Camcorder.BatteryPercent(torch.Battery01);
+                    if (shown != expected + "%" && shown != (expected + 1) + "%")
+                    { Finish(false, $"com {torch.Battery01:P1} de bateria o painel mostra \"{shown}\" (devia ser {expected}%)"); return; }
                     // Gasta mais da metade de uma vez (o teste não espera 5 min), para a recarga aparecer.
                     torch.Recharge(-torch.batterySeconds * 0.6f);
                     _before = torch.Battery01;
                     GoTo(0);
-                    Next($"acesa, a bateria caiu {spent * torch.batterySeconds:F1} s em 3 s");
+                    Next($"acesa, a bateria caiu {spent * torch.batterySeconds:F1} s em 3 s; o painel mostrou {shown}");
                     break;
                 }
 
@@ -146,6 +156,9 @@ namespace BackRooms.EditorTools
                     if (_pickups.LocalPicked != 1) { Finish(false, $"{_pickups.LocalPicked} pilhas contadas para o jogador"); return; }
                     if (torch.Battery01 < 0.99f) { Finish(false, $"pegou a pilha e a bateria ficou em {torch.Battery01:P0} (estava em {_before:P0})"); return; }
                     if (_pickups.transform.Find("Pilhas_0").gameObject.activeSelf) { Finish(false, "a pilha pega continuou no chão"); return; }
+                    if (_stageTicks < 4) break;
+                    string full = BackRooms.UI.Camcorder.Instance != null ? BackRooms.UI.Camcorder.Instance.BatteryText : null;
+                    if (full != "100%" && full != "99%") { Finish(false, $"recarregada, o painel mostra \"{full}\""); return; }
                     // Mira o lugar de novo: nada a pegar.
                     Aim(0);
                     Next($"pegou a pilha: sumiu e a bateria foi de {_before:P0} a {torch.Battery01:P0}");

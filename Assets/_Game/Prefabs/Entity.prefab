@@ -215,10 +215,13 @@ MonoBehaviour:
   investigateSpeed: 3.4
   chaseSpeed: 4.6
   acceleration: 9
+  chaseBurstSeconds: 7
+  chaseTiredSeconds: 5
+  chaseTiredFactor: 0.5
+  unseenSpeedFactor: 1.5
   turnSpeed: 420
   sightRange: 26
   sightHalfAngle: 65
-  closeSense: 3.5
   hearCells: 8
   tableSightRange: 6
   catchRadius: 1.25

@@ -11,7 +11,7 @@ namespace BackRooms.World
 {
     /// <summary>
     /// Pilhas da lanterna no chão (<c>P0.3</c> de mecanicas.md): a lanterna gasta bateria
-    /// (<see cref="Flashlight"/>, 10 min acesa) e as pilhas, poucas, ficam pelo mapa para quem chegar
+    /// (<see cref="Flashlight"/>, 4 min acesa) e as pilhas, poucas, ficam pelo mapa para quem chegar
     /// primeiro. Mirar e apertar E pega; a lanterna de quem pegou volta a ficar cheia.
     ///
     /// - Postas pela seed sem mudar o mapa: um <c>System.Random</c> próprio, depois de tudo, numa
@@ -20,7 +20,7 @@ namespace BackRooms.World
     ///   lá, marca como pega e manda a todos quais sumiram e quem pegou (e a quem entra depois, junto
     ///   com a seed). A carga vai para a lanterna de quem pegou, na máquina dele.
     /// </summary>
-    public sealed class BatteryPickups : MonoBehaviour
+    public sealed class BatteryPickups : MonoBehaviour, IAimSource
     {
         public static BatteryPickups Instance { get; private set; }
 
@@ -42,7 +42,6 @@ namespace BackRooms.World
 
         public Vector3 PickupPosition(int i) => _items[i].position;
 
-        static readonly RaycastHit[] Hits = new RaycastHit[16];
         static readonly WallSide[] Sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
 
         readonly List<Transform> _items = new List<Transform>();
@@ -58,8 +57,18 @@ namespace BackRooms.World
             _use.AddBinding("<Gamepad>/buttonWest");
         }
 
-        void OnEnable() => _use?.Enable();
-        void OnDisable() { _use?.Disable(); Prompt = null; }
+        void OnEnable()
+        {
+            _use?.Enable();
+            if (Application.isPlaying) InteractAim.Register(this);
+        }
+
+        void OnDisable()
+        {
+            _use?.Disable();
+            InteractAim.Unregister(this);
+            Prompt = null;
+        }
 
         void OnDestroy()
         {
@@ -171,11 +180,11 @@ namespace BackRooms.World
         {
             Prompt = null;
             PlayerNetwork local = PlayerNetwork.Local;
-            bool pressed = (_use != null && _use.WasPressedThisFrame()) || PressForTest;
+            bool pressed = (_use != null && _use.WasPressedThisFrame() && !BackRooms.UI.InputGate.Blocked) || PressForTest;
             PressForTest = false;
             if (local == null || !local.InGame || local.controller.IsReturning || local.controller.InFurniture) return;
 
-            int aimed = Aimed(local);
+            int aimed = InteractAim.Winner(this);
             if (aimed < 0) return;
             Prompt = "E - BATTERIES";
             if (!pressed || Time.time - _sentAt < 0.5f) return;
@@ -186,24 +195,22 @@ namespace BackRooms.World
             else HostPick(aimed, session != null ? NetworkManager.ServerClientId : 0UL, local.transform.position);
         }
 
-        int Aimed(PlayerNetwork local)
+        // A pilha mais perto do centro da mira (mira comum: InteractAim).
+        public bool AimCandidate(in InteractAim.View view, out int index, out float score)
         {
-            Camera camera = local.playerCamera;
-            if (camera == null) return -1;
-            Transform eye = camera.transform;
-            int count = Physics.RaycastNonAlloc(eye.position, eye.forward, Hits, reach, ~0, QueryTriggerInteraction.Ignore);
-            Transform self = local.transform.root;
-            float best = float.MaxValue;
-            Collider nearest = null;
-            for (int i = 0; i < count; i++)
+            index = -1;
+            score = float.PositiveInfinity;
+            PlayerController body = view.Local != null ? view.Local.controller : null;
+            if (body == null || body.IsReturning || body.InFurniture) return false;
+            for (int i = 0; i < _items.Count; i++)
             {
-                if (Hits[i].collider.transform.root == self || Hits[i].distance >= best) continue;
-                best = Hits[i].distance;
-                nearest = Hits[i].collider;
+                if ((_taken & (1UL << i)) != 0 || _items[i] == null || !_items[i].gameObject.activeSelf) continue;
+                float sc = InteractAim.Score(view, _items[i], _items[i].position + Vector3.up * 0.03f, reach);
+                if (sc >= score) continue;
+                score = sc;
+                index = i;
             }
-            if (nearest == null || nearest.transform.parent == null) return -1;
-            int index = _items.IndexOf(nearest.transform.parent);
-            return index >= 0 && (_taken & (1UL << index)) == 0 ? index : -1;
+            return index >= 0;
         }
 
         /// <summary>Host: alguém (<paramref name="who"/>, em <paramref name="at"/>) pediu a pilha.</summary>

@@ -287,7 +287,10 @@ def placa_de_teto(name, linha1, linha2, tam1, tam2):
         y_s = lado * (e / 2 + 0.0005)  # sombra vermelha, meio encaixada no cartão
         y_l = lado * (e / 2 + 0.0035)  # letras laranja, à frente da sombra
         for texto, z, tam in ((linha1, z1, tam1), (linha2, z2, tam2)):
-            planos.append(texto_placa(p, texto, (dx, y_s, z - 0.014), tam * 1.06, "Tinta_Vermelha", rot, lado))
+            # A sombra é a palavra um pouco maior; em palavra longa (CLEARANCE) os 6% viravam uma
+            # letra fantasma no fim. A sobra fica do tamanho da de uma palavra de 4 letras.
+            sombra = 1 + 0.06 * 4 / max(4, len(texto))
+            planos.append(texto_placa(p, texto, (dx, y_s, z - 0.014), tam * sombra, "Tinta_Vermelha", rot, lado))
             planos.append(texto_placa(p, texto, (0, y_l, z), tam, "Tinta_Laranja", rot, lado))
     tirar_tampas(p, planos)
     obj = p.to_object()
@@ -303,8 +306,10 @@ BUILDERS = [
     balcao_de_caixa,
     monitor_crt,
     mesa_simples,
-    lambda: placa_de_teto("PlacaPenduradaOferta", "TUDO EM", "OFERTA", 0.15, 0.22),
-    lambda: placa_de_teto("PlacaPenduradaLiquida", "LIQUIDA", "TUDO!", 0.17, 0.28),
+    lambda: placa_de_teto("PlacaPenduradaOferta", "BIG", "SALE", 0.17, 0.30),  # textos em inglês
+    # O nome ficou, mas a placa não diz mais CLEARANCE (21/11/2026): a palavra é só das três
+    # etiquetas vermelhas do código da porta do Level 1 (ExitLock).
+    lambda: placa_de_teto("PlacaPenduradaLiquida", "HALF", "PRICE", 0.17, 0.28),
 ]
 
 if __name__ == "__main__":

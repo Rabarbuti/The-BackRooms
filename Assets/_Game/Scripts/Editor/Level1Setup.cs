@@ -388,8 +388,6 @@ namespace BackRooms.EditorTools
             int count = 0;
             foreach (Transform item in root)
             {
-                // O bilhete do código fica na sala inicial de propósito (é um papel na parede).
-                if (item.name == "Bilhete") continue;
                 // Pela caixa do móvel (encolhida 10 cm), não pelo pé: tombado, o pé fica num canto.
                 var box = item.GetComponent<BoxCollider>();
                 Bounds b = box != null ? box.bounds : new Bounds(item.position, Vector3.zero);
@@ -629,6 +627,8 @@ namespace BackRooms.EditorTools
                     shots++;
                 }
 
+                shots += SignPhotos(root, rig, camera, target, readback, Path.Combine(folder, "level1_placas"));
+
                 Transform barricade = root.Find("Barricada");
                 if (barricade != null)
                 {
@@ -688,6 +688,91 @@ namespace BackRooms.EditorTools
             }
 
             return $"{shots} em {folder}";
+        }
+
+        // As placas lado a lado (21/11/2026): vermelho com CLEARANCE é só das três etiquetas do
+        // código; a placa da base do totem e as soltas pela loja são amarelas (DISPLAY ONLY); a
+        // branca de SALE (faixa e preço vermelhos) entra para comparar. A
+        // 2 m e a 6 m, com a filmadora, cada uma de frente; e uma imagem com as três juntas por
+        // distância (lado_a_lado_2m.png, lado_a_lado_6m.png). Escolhe, de cada tipo, a primeira
+        // com a visada livre na distância pedida.
+        static int SignPhotos(Transform root, GameObject rig, Camera camera, RenderTexture target, Texture2D readback, string folder)
+        {
+            Directory.CreateDirectory(folder);
+            foreach (string old in Directory.GetFiles(folder, "*.png")) File.Delete(old);
+
+            // (nome, objeto, frente): a frente é para onde a placa olha.
+            var kinds = new List<(string name, List<(Transform item, Vector3 front)> list)>
+            {
+                ("etiqueta", new List<(Transform, Vector3)>()),
+                ("totem", new List<(Transform, Vector3)>()),
+                ("placa_solta", new List<(Transform, Vector3)>()),
+                ("placa_sale", new List<(Transform, Vector3)>()),
+            };
+            foreach (Transform item in root)
+            {
+                if (item.name.StartsWith("Etiqueta_")) kinds[0].list.Add((item, -item.forward));
+                else if (item.GetComponent<Totem>() != null && item.Find("PlacaTotem") != null) kinds[1].list.Add((item.Find("PlacaTotem"), item.forward));
+                else if (item.name == "PlacaLiquidacao") kinds[2].list.Add((item, item.forward));
+                else if (item.name == "PlacaOferta") kinds[3].list.Add((item, item.forward));
+            }
+
+            int shots = 0;
+            foreach (float distance in new[] { 2f, 6f })
+            {
+                var row = new List<Color32[]>();
+                foreach (var kind in kinds)
+                {
+                    if (kind.list.Count == 0) continue;
+                    var pick = kind.list[0];
+                    foreach (var candidate in kind.list)
+                        if (ClearView(candidate.item, candidate.front, distance)) { pick = candidate; break; }
+
+                    Vector3 aim = Center(pick.item);
+                    Vector3 front = Flat(pick.front);
+                    Vector3 foot = aim + front * distance;
+                    rig.transform.SetPositionAndRotation(new Vector3(foot.x, root.position.y, foot.z), Quaternion.LookRotation(-front, Vector3.up));
+                    float pitch = Mathf.Atan2(camera.transform.position.y - aim.y, distance) * Mathf.Rad2Deg;
+                    camera.transform.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+                    Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, $"{kind.name}_{distance:0}m.png"));
+                    row.Add(readback.GetPixels32());
+                    shots++;
+                }
+
+                // As fotos da mesma distância numa imagem só, da esquerda para a direita.
+                int w = target.width, h = target.height;
+                var joined = new Texture2D(w * row.Count, h, TextureFormat.RGBA32, false);
+                for (int i = 0; i < row.Count; i++) joined.SetPixels32(i * w, 0, w, h, row[i]);
+                joined.Apply();
+                File.WriteAllBytes(Path.Combine(folder, $"lado_a_lado_{distance:0}m.png"), joined.EncodeToPNG());
+                UnityEngine.Object.DestroyImmediate(joined);
+            }
+            return shots;
+        }
+
+        static Vector3 Center(Transform item)
+        {
+            var renderers = item.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0) return item.position;
+            Bounds b = renderers[0].bounds;
+            foreach (Renderer r in renderers) b.Encapsulate(r.bounds);
+            return b.center;
+        }
+
+        // Da altura do olho, a "distance" metros na frente da placa, nada no meio nem em volta.
+        static bool ClearView(Transform item, Vector3 front, float distance)
+        {
+            Vector3 aim = Center(item);
+            Vector3 foot = aim + Flat(front) * distance;
+            Vector3 eye = new Vector3(foot.x, item.root.position.y + 1.65f, foot.z);
+            if (Physics.CheckSphere(eye, 0.3f, ~0, QueryTriggerInteraction.Ignore)) return false;
+            Vector3 to = aim - eye;
+            foreach (RaycastHit hit in Physics.RaycastAll(eye, to.normalized, to.magnitude, ~0, QueryTriggerInteraction.Ignore))
+            {
+                Transform owner = item.GetComponentInParent<Totem>() != null ? item.GetComponentInParent<Totem>().transform : item;
+                if (!hit.transform.IsChildOf(owner)) return false;
+            }
+            return true;
         }
     }
 }

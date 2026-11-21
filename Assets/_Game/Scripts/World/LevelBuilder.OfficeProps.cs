@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.HighDefinition;
@@ -63,10 +64,19 @@ namespace BackRooms.World
                         {
                             float mid = start + 0.6f + m * 1.2f;
                             OBox(office.lockerBody, back + along * mid + Vector3.up * 0.675f, Abs(along) * 1.18f + Abs(n) * 0.45f + Vector3.up * 1.35f);
+                            // Uma porta por módulo fica solta, numa dobradiça, para bater (LockerBangs).
+                            // A escolha é pela posição, sem sortear: não mexe no sorteio da fase.
+                            int looseCol = (x * 3 + z * 5 + m + (int)side) % 3 - 1;
+                            int looseRow = (x + z + m) % 2 == 0 ? 2 : 1;
                             for (int col = -1; col <= 1; col++)
                                 for (int row = 0; row < 3; row++)
                                 {
                                     Vector3 door = front + along * (mid + col * 0.39f) + Vector3.up * (0.275f + row * 0.43f) - n * 0.006f;
+                                    if (col == looseCol && row == looseRow)
+                                    {
+                                        LooseLockerDoor(door, along, n, x, z);
+                                        continue;
+                                    }
                                     OBox(office.lockerYellow, door, Abs(along) * 0.37f + Abs(n) * 0.012f + Vector3.up * 0.41f);
                                     OBox(office.darkMetal, door + along * 0.13f + Vector3.up * 0.1f - n * 0.008f, Abs(along) * 0.03f + Abs(n) * 0.006f + Vector3.up * 0.05f);
                                 }
@@ -76,6 +86,30 @@ namespace BackRooms.World
                                     Abs(along) * (modules * 1.2f) + Abs(n) * 0.45f + Vector3.up * 1.35f);
                     }
                 }
+        }
+
+        // Porta de armário solta: a dobradiça fica do lado oposto ao puxador; a folha e o puxador
+        // são filhos dela. Sem colisor próprio: fechada, está dentro do colisor do armário.
+        void LooseLockerDoor(Vector3 center, Vector3 along, Vector3 n, int x, int z)
+        {
+            if (_ok.Lockers == null) _ok.Lockers = CreateChild("PortasDeArmario").transform;
+
+            Vector3 hinge = center - along * 0.185f;
+            var root = new GameObject($"PortaDeArmario_{x}_{z}_{_ok.LockerDoors.Count}");
+            root.transform.SetParent(_ok.Lockers, false);
+            root.transform.localPosition = hinge;
+            Quaternion turn = Quaternion.LookRotation(-n, Vector3.up);
+            root.transform.localRotation = turn;
+            Quaternion back = Quaternion.Inverse(turn);
+
+            MeshRenderer leaf = CreateRenderer("Folha", _ok.LockerLeafMesh, office.lockerYellow, ShadowCastingMode.On, root.transform);
+            leaf.transform.localPosition = back * (center - hinge);
+            MeshRenderer handle = CreateRenderer("Puxador", _ok.LockerHandleMesh, office.darkMetal, ShadowCastingMode.Off, root.transform);
+            handle.transform.localPosition = back * (center + along * 0.13f + Vector3.up * 0.1f - n * 0.008f - hinge);
+
+            LockerDoor locker = root.AddComponent<LockerDoor>();
+            locker.Init(x, z, back * (center - hinge));
+            _ok.LockerDoors.Add(locker);
         }
 
         // Quadros elétricos, extintores e câmeras de segurança.
@@ -131,8 +165,15 @@ namespace BackRooms.World
 
         // ---------------------------------------------------------------- Salas
 
+        // Cadeiras de sentar e lousas das salas de aula (ClassroomSeats), em coordenadas da fase.
+        List<ClassroomSeats.Seat> _officeSeats;
+        List<Bounds> _officeBoards;
+
         void BuildOfficeRooms()
         {
+            _officeSeats = new List<ClassroomSeats.Seat>();
+            _officeBoards = new List<Bounds>();
+
             foreach (OfficeRoom room in Data.OfficeRooms)
             {
                 var rng = new System.Random(room.Variant);
@@ -145,6 +186,12 @@ namespace BackRooms.World
                     case OfficeCell.Lobby: LobbyProps(room, rng); break;
                 }
             }
+
+            // As carteiras e as lousas: sentar (mira + E) e o traço de marcador. Sem sorteio: não muda
+            // nada do que vem depois.
+            CreateChild("Carteiras").AddComponent<ClassroomSeats>().Init(_officeSeats, _officeBoards);
+            _officeSeats = null;
+            _officeBoards = null;
         }
 
         void RoomBounds(OfficeRoom room, out Vector3 min, out Vector3 max)
@@ -154,23 +201,26 @@ namespace BackRooms.World
             max = new Vector3((room.X0 + room.Width) * Cell - inset, 0f, (room.Z0 + room.Height) * Cell - inset);
         }
 
-        void Chair(Vector3 position, Quaternion rotation, bool collider)
+        /// <summary>Cadeira de escritório; devolve o colisor (nulo sem colisor).</summary>
+        Collider Chair(Vector3 position, Quaternion rotation, bool collider)
         {
             OTurned(office.blackPlastic, position + rotation * new Vector3(0f, 0.47f, 0f), new Vector3(0.48f, 0.07f, 0.46f), rotation, false);
             OTurned(office.blackPlastic, position + rotation * new Vector3(0f, 0.86f, -0.22f), new Vector3(0.46f, 0.5f, 0.04f), rotation, false);
             OTube(office.steel, position + Vector3.up * 0.08f, position + Vector3.up * 0.44f, 0.022f, 6);
             OTurned(office.darkMetal, position + Vector3.up * 0.05f, new Vector3(0.6f, 0.04f, 0.06f), rotation, false);
             OTurned(office.darkMetal, position + Vector3.up * 0.05f, new Vector3(0.06f, 0.04f, 0.6f), rotation, false);
-            if (collider) TurnedCollider(position + Vector3.up * 0.5f, new Vector3(0.55f, 1f, 0.55f), rotation);
+            return collider ? TurnedCollider(position + Vector3.up * 0.5f, new Vector3(0.55f, 1f, 0.55f), rotation) : null;
         }
 
-        void TurnedCollider(Vector3 center, Vector3 size, Quaternion rotation)
+        BoxCollider TurnedCollider(Vector3 center, Vector3 size, Quaternion rotation)
         {
             var go = new GameObject("Colisor");
             go.transform.SetParent(_ok.Colliders.transform, false);
             go.transform.localPosition = center;
             go.transform.localRotation = rotation;
-            go.AddComponent<BoxCollider>().size = size;
+            BoxCollider box = go.AddComponent<BoxCollider>();
+            box.size = size;
+            return box;
         }
 
         void Table(Vector3 center, Vector3 size, Material top)
@@ -227,7 +277,10 @@ namespace BackRooms.World
                         if (rng.NextDouble() < 0.12) continue;
                         float yaw = rng.NextDouble() < 0.15 ? (float)(rng.NextDouble() * 140.0 - 70.0) : (float)(rng.NextDouble() * 16.0 - 8.0);
                         Vector3 seat = p - face * (0.7f + (float)rng.NextDouble() * 0.15f) + side * k;
-                        Chair(seat, facing * Quaternion.Euler(0f, yaw, 0f), true);
+                        Quaternion turn = facing * Quaternion.Euler(0f, yaw, 0f);
+                        Collider chair = Chair(seat, turn, true);
+                        // Carteira: senta-se nela de frente para a lousa, mesmo na cadeira torta (ClassroomSeats).
+                        if (_officeSeats != null) _officeSeats.Add(new ClassroomSeats.Seat { Feet = seat, Yaw = facing.eulerAngles.y, Collider = chair });
                     }
                 }
             }
@@ -236,7 +289,12 @@ namespace BackRooms.World
             Vector3 wall = Point(0f, 0f);
             if (frontFree)
             {
-                OBox(office.whiteboard, wall - face * 0.02f + Vector3.up * 1.5f, Abs(side) * 3f + Abs(face) * 0.03f + Vector3.up * 1.2f);
+                // A lousa tem colisor próprio: a caneta risca na face dela, não na parede 3,5 cm atrás
+                // (sem ele o traço nascia atrás da lousa e ninguém via). O DrawingBoard engrossa o traço
+                // que cai nela (marcador).
+                Vector3 boardCenter = wall - face * 0.02f + Vector3.up * 1.5f, boardSize = Abs(side) * 3f + Abs(face) * 0.03f + Vector3.up * 1.2f;
+                OSolid(office.whiteboard, boardCenter, boardSize);
+                if (_officeBoards != null) _officeBoards.Add(new Bounds(boardCenter, boardSize));
                 OBox(office.frameWhite, wall - face * 0.06f + Vector3.up * 0.88f, Abs(side) * 3f + Abs(face) * 0.08f + Vector3.up * 0.03f);
             }
             if (frontFree && width >= 7f)
@@ -552,9 +610,11 @@ namespace BackRooms.World
                 OTube(office.steel, c - toLobby * (CabHalf - 0.06f) - lateral * 1.0f + rail, c - toLobby * (CabHalf - 0.06f) + lateral * 1.0f + rail, 0.02f, 8);
                 foreach (float s in new[] { -1f, 1f })
                     OTube(office.steel, c + lateral * (s * (CabHalf - 0.06f)) - toLobby * 1.0f + rail, c + lateral * (s * (CabHalf - 0.06f)) + toLobby * 0.8f + rail, 0.02f, 8);
-                Vector3 panel = c + toLobby * (CabHalf - 0.012f) + lateral * 0.9f + Vector3.up * 1.2f;
+                // Painel e botão de chamada perto da altura dos olhos (1,65 m): mira fácil (21/11/2026; eram 1,2 e 1,12 m).
+                Vector3 panel = c + toLobby * (CabHalf - 0.012f) + lateral * 0.9f + Vector3.up * 1.45f;
                 OBox(office.steel, panel, Abs(lateral) * 0.24f + Abs(toLobby) * 0.02f + Vector3.up * 0.6f);
-                for (int i = 0; i < 6; i++)
+                // Os dois de baixo (abrir e fechar) se apertam: saem depois da porta, como objetos.
+                for (int i = 0; i < 4; i++)
                     OBox(i == 2 ? office.buttonAmber : office.darkMetal, panel - toLobby * 0.012f + Vector3.up * (0.2f - i * 0.075f),
                          Abs(lateral) * 0.035f + Abs(toLobby) * 0.006f + Vector3.up * 0.035f);
 
@@ -582,7 +642,27 @@ namespace BackRooms.World
                 var doors = rig.AddComponent<ElevatorDoors>();
                 doors.Init(left, right, lateral * 0.55f, e.IsCab, e.IsCab ? null : light, e.IsCab ? null : spots, office.tubeOn, office.tubeOff);
                 _ok.Elevators.Add(doors);
+                _ok.ElevatorLobby.Add(transform.TransformDirection(toLobby));
+
+                // Botões: abrir e fechar no painel de dentro; chamar no espelho do saguão.
+                Vector3 inner = panel - toLobby * 0.018f;
+                ElevatorButton(doors, ElevatorButtonKind.Open, inner + Vector3.up * (0.2f - 4 * 0.075f), -toLobby, e);
+                ElevatorButton(doors, ElevatorButtonKind.Close, inner + Vector3.up * (0.2f - 5 * 0.075f), -toLobby, e);
+                Vector3 call = c + toLobby * (Cell * 0.5f + OfficeWallThickness * 0.5f + 0.021f) + lateral * 0.98f + Vector3.up * 1.4f;
+                ElevatorButton(doors, ElevatorButtonKind.Call, call, toLobby, e);
             }
+        }
+
+        // Botão que se aperta (mira + E): malha pequena com um colisor um pouco maior, para a mira.
+        void ElevatorButton(ElevatorDoors doors, ElevatorButtonKind kind, Vector3 position, Vector3 facing, OfficeElevator e)
+        {
+            MeshRenderer button = CreateRenderer($"Botao{kind}_{e.X}_{e.Z}", _ok.ButtonMesh, office.darkMetal, ShadowCastingMode.Off, _ok.Moving);
+            button.transform.localPosition = position;
+            button.transform.localRotation = Quaternion.LookRotation(facing, Vector3.up);
+            button.gameObject.AddComponent<BoxCollider>().size = new Vector3(0.07f, 0.07f, 0.03f);
+            var control = button.gameObject.AddComponent<ElevatorButton>();
+            control.Init(doors, kind, button, office.darkMetal, office.buttonAmber);
+            _ok.ElevatorButtons.Add(control);
         }
 
         Transform Leaf(Transform rig, Vector3 offset, Vector3 toLobby)
@@ -691,11 +771,11 @@ namespace BackRooms.World
             beam.AddQuad(AtPoint(StairWidth, vTop, -0.42f), AtPoint(StairWidth + 0.07f, vTop, -0.42f),
                          AtPoint(StairWidth + 0.07f, vBottom, yBottom - 0.42f), AtPoint(StairWidth, vBottom, yBottom - 0.42f), Vector3.down);
 
-            // Guarda-corpos: patamar de cima (do lado do vão e na linha do corredor), escada e patamar da saída.
-            // Na linha do corredor, só a célula da escada: nas outras o guarda-corpo é o da divisa.
+            // Guarda-corpos: patamar de cima (do lado do vão), escada e patamar da saída. Na linha do
+            // corredor o vão é fechado por parede, com a porta da escada (BuildStairDoor).
             float topCellEnd = Cell - T * 0.5f;
-            AtRailing(StairWidth + 0.05f, 0f, 0f, topCellEnd - 0.02f, 0f, 0f);
-            AtRailing(StairWidth + 0.04f, 0.02f, 0f, StairWidth + 0.04f, vTop, 0f);
+            BuildStairDoor();
+            AtRailing(StairWidth + 0.04f, T * 0.5f + 0.02f, 0f, StairWidth + 0.04f, vTop, 0f);
             AtRailing(StairWidth + 0.04f, vTop, 0f, StairWidth + 0.04f, vBottom, yBottom);
             AtRailing(3f, vBottom, yBottom, 3f, landingEnd, yBottom);
             AtRailing(0.02f, landingEnd, yBottom, 3f, landingEnd, yBottom);
@@ -720,7 +800,7 @@ namespace BackRooms.World
                 AtBox(office.wall, u, u + T, 0f, lenV, OfficeSlab, AtriumTop, false);
             }
             AtBox(office.concrete, 0f, lenU, lenV - T * 0.5f, lenV + T * 0.5f, AtriumBottom, 0f, false);
-            AtBox(office.concrete, 0f, lenU, -T, 0f, AtriumBottom, -0.35f, false);
+            AtBox(office.concrete, 0f, lenU, -T, 0f, AtriumBottom, 0f, false);
             AtBox(office.wall, 0f, lenU, -T, 0f, OfficeSlab, AtriumTop, false);
 
             // Fachada de vidro acima da laje, com uma faixa de concreto em cada andar.
@@ -773,6 +853,52 @@ namespace BackRooms.World
             OfficeExitRoute.Add(transform.TransformPoint(AtPoint(0.7f, vBottom + 0.25f, yBottom)));
             OfficeExitRoute.Add(transform.TransformPoint(AtPoint(1.15f, (vBottom + landingEnd) * 0.5f, yBottom)));
         }
+
+        // Porta da escada, vista do corredor (21/11/2026): o vão fica atrás de parede, e a entrada é uma
+        // porta igual às das salas (vão de 1 m, batente branco), aberta para dentro do patamar. Do
+        // lado do corredor, só a placa de saída rente à parede, em cima da porta (de longe, no
+        // corredor, quase não se vê), e uma plaquinha de escada ao lado. A porta fica sobre a escada
+        // (perto da parede da ponta), não no meio da divisa: no meio daria para o vão.
+        void BuildStairDoor()
+        {
+            const float T = OfficeWallThickness;
+            float c = StairDoorCenter, h = OfficeDoorHalf;
+            float u0 = -T, u1 = Cell; // a divisa inteira da célula da escada (meio da célula em u = Cell/2 - T/2)
+            float face = -T * 0.5f;
+
+            AtBox(office.wall, u0, c - h, -T * 0.5f, T * 0.5f, 0f, OfficeSlab, true);
+            AtBox(office.wall, c + h, u1, -T * 0.5f, T * 0.5f, 0f, OfficeSlab, true);
+            AtBox(office.wall, c - h, c + h, -T * 0.5f, T * 0.5f, OfficeDoorTop, OfficeSlab, true);
+            AtBox(office.baseboard, u0, c - h - 0.06f, face - 0.012f, face, 0f, 0.09f, false);
+            AtBox(office.baseboard, c + h + 0.06f, u1, face - 0.012f, face, 0f, 0.09f, false);
+
+            // Batente branco dos dois lados, como em DoorFrame.
+            float d = T * 0.5f + 0.02f;
+            AtBox(office.frameWhite, c - h - 0.06f, c - h, -d, d, 0f, OfficeDoorTop + 0.06f, false);
+            AtBox(office.frameWhite, c + h, c + h + 0.06f, -d, d, 0f, OfficeDoorTop + 0.06f, false);
+            AtBox(office.frameWhite, c - h - 0.06f, c + h + 0.06f, -d, d, OfficeDoorTop, OfficeDoorTop + 0.06f, false);
+
+            // Folha aberta a 90°, para dentro, presa no batente do lado do vão: fica entre o caminho
+            // da escada e o guarda-corpo do patamar.
+            float l0 = T * 0.5f + 0.015f, l1 = l0 + 0.95f;
+            AtBox(office.frameWhite, c + h - 0.045f, c + h - 0.005f, l0, l1, 0.01f, 2.07f, true);
+            AtBox(office.steel, c + h - 0.095f, c + h - 0.045f, l1 - 0.12f, l1 - 0.06f, 1.0f, 1.03f, false);
+
+            // Placa de saída rente à parede, em cima da porta (o quadro sem seta).
+            AtBox(office.blackPlastic, c - 0.23f, c + 0.23f, face - 0.025f, face, 2.21f, 2.39f, false);
+            Vector3 toWall = _atIn, right = Vector3.Cross(Vector3.up, toWall);
+            SignFace(OM(office.signGreen), AtPoint(c, face - 0.027f, 2.3f), -toWall, right, 0.42f, 0.15f, 3);
+
+            // Plaquinha de escada (degraus pretos num quadro branco), do lado de fora do batente.
+            float pu = c + h + 0.42f;
+            AtBox(office.frameWhite, pu - 0.11f, pu + 0.11f, face - 0.012f, face, 1.45f, 1.67f, false);
+            for (int k = 0; k < 4; k++)
+                AtBox(office.blackPlastic, pu - 0.08f + k * 0.04f, pu + 0.08f, face - 0.018f, face - 0.012f,
+                      1.48f + k * 0.04f, 1.52f + k * 0.04f, false);
+        }
+
+        /// <summary>Meio da porta da escada, a partir da parede da ponta (a escada tem <see cref="StairWidth"/>).</summary>
+        const float StairDoorCenter = 0.8f;
 
         // Porta corta-fogo na parede da ponta, no patamar de baixo, com a placa verde acesa.
         void BuildOfficeExit(float floor, float v)

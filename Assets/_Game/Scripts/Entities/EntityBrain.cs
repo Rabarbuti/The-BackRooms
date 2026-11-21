@@ -156,6 +156,81 @@ namespace BackRooms.Entities
         /// <summary>Falso no Capitão: ele não é "a entidade" que a filmadora e os testes procuram.</summary>
         protected virtual bool IsLevel0Entity => true;
 
+        /// <summary>
+        /// Host: a célula serve para ele agora? Fora dela não pisa (o caminho e a rede de segurança
+        /// do <see cref="LevelNav"/> a evitam) e não percebe nem pega quem está nela. A entidade e o
+        /// Capitão aceitam todas; o Zelador do Level 3 (<see cref="JanitorBrain"/>), só as escuras.
+        /// </summary>
+        protected virtual bool CellOpen(int x, int z) => true;
+
+        /// <summary>A navegação da fase atual (só no host; nula antes da fase existir).</summary>
+        protected LevelNav Nav => _nav;
+
+        // ---------------------------------------------------------------- Ganchos do Ascensorista
+        // O inimigo do elevador do Level 3 (AttendantBrain) é cego e chega de elevador. Os padrões
+        // abaixo deixam a entidade e o Capitão como eram.
+
+        /// <summary>
+        /// Host: verdadeiro neste quadro pula tudo (ouvir, decidir, andar, pegar): quem herda move o
+        /// corpo sozinho (o Ascensorista dentro da cabine, saindo ou voltando para ela).
+        /// </summary>
+        protected virtual bool Scripted(float now) => false;
+
+        /// <summary>Enxerga? Falso no Ascensorista (cego): nunca caça pela visão, só pelo barulho.</summary>
+        protected virtual bool HasSight => true;
+
+        /// <summary>Pega só quem está no campo de visão? Falso no Ascensorista: pega quem encosta nele.</summary>
+        protected virtual bool CatchNeedsFacing => true;
+
+        /// <summary>
+        /// As salinhas acesas do Escritório são abrigo dele? Falso no Ascensorista: para ele só a sala
+        /// inicial (a cabine) é abrigo (<see cref="LevelNav.OnlyStartRoomShelter"/>).
+        /// </summary>
+        protected virtual bool OfficeRoomsShelter => true;
+
+        /// <summary>
+        /// Host: quanto sobra de alcance do ouvido para o barulho deste jogador, em células (negativo =
+        /// não ouve). <paramref name="soundCells"/> é a distância do som pela grade (-1 = não chega).
+        /// </summary>
+        protected virtual float HearMargin(PlayerNetwork player, Vector3 at, float speed, int soundCells)
+        {
+            float loudness = Loudness(speed, player.Crouching);
+            // Plástico-bolha estala como corrida, mesmo agachado.
+            if (speed >= 0.4f && BubbleWrap.Under(at)) loudness = 1f;
+            // Armar um disjuntor, girar uma válvula, puxar um alarme: barulho de corrida, parado.
+            if (player.Working) loudness = 1f;
+            if (loudness <= 0f || soundCells < 0) return -1f;
+            return loudness * hearCells - soundCells;
+        }
+
+        /// <summary>Host: o que acontece com quem ele pega. O padrão: queda de sinal e volta ao início.</summary>
+        protected virtual void Catch(PlayerNetwork player) => player.GetCaughtRpc();
+
+        /// <summary>Chegou ao destino atual (só no host).</summary>
+        protected bool Arrived => _arrived;
+
+        /// <summary>Tem destino (só no host).</summary>
+        protected bool HasGoal => _hasGoal;
+
+        /// <summary>Host: vai até <paramref name="goal"/> no estado dado, por até <paramref name="seconds"/>.</summary>
+        protected void GoTo(Vector3 goal, EntityState state, float seconds)
+        {
+            SetGoal(goal);
+            SetState(state);
+            _stateUntil = Time.time + seconds;
+        }
+
+        /// <summary>Host: fica em <paramref name="state"/> sem destino (parado), por exemplo de volta à cabine.</summary>
+        protected void Halt(EntityState state)
+        {
+            _target = null;
+            _velocity = Vector3.zero;
+            _path.Clear();
+            _hasGoal = false;
+            _arrived = true;
+            SetState(state);
+        }
+
         public override void OnNetworkSpawn()
         {
             if (IsLevel0Entity) Instance = this;
@@ -195,6 +270,12 @@ namespace BackRooms.Entities
 
             float now = Time.time;
 
+            if (Scripted(now))
+            {
+                _velocity = Vector3.zero;
+                return;
+            }
+
             if (now >= _senseAt)
             {
                 _senseAt = now + SenseInterval;
@@ -224,7 +305,7 @@ namespace BackRooms.Entities
                 // Fase nova: o destino era da fase velha. Na primeira vez não: quem a pôs no
                 // mapa já mandou ir a algum lugar (Alert), e esquecer isso a deixava parada.
                 if (_nav != null) _hasGoal = false;
-                _nav = new LevelNav(level);
+                _nav = new LevelNav(level) { Filter = CellOpen, OnlyStartRoomShelter = !OfficeRoomsShelter };
                 _reach = _nav.NewMap();
                 _sound = _nav.NewMap();
                 _levelRoot = level.transform;
@@ -277,7 +358,8 @@ namespace BackRooms.Entities
 
                 // Debaixo da mesa e no cone dele: viu o jogador se enfiar ali (a mesa tapa a
                 // visada, então não se confere a linha de visão).
-                if (hiding == HideKind.Table && !hidden)
+                if (!HasSight) { }
+                else if (hiding == HideKind.Table && !hidden)
                 {
                     float distance = Flat(at - position).magnitude;
                     if (distance < seenDistance)
@@ -296,14 +378,7 @@ namespace BackRooms.Entities
                     }
                 }
 
-                float loudness = Loudness(track.Speed, player.Crouching);
-                // Plástico-bolha estala como corrida, mesmo agachado.
-                if (track.Speed >= 0.4f && BubbleWrap.Under(at)) loudness = 1f;
-                // Armar um disjuntor, girar uma válvula, puxar um alarme: barulho de corrida, parado.
-                if (player.Working) loudness = 1f;
-                if (loudness <= 0f || _sound[px, pz] < 0) continue;
-
-                float margin = loudness * hearCells - _sound[px, pz];
+                float margin = HearMargin(player, at, track.Speed, _sound[px, pz]);
                 if (margin < 0f) continue;
 
                 NoisesHeard++;
@@ -394,7 +469,7 @@ namespace BackRooms.Entities
         {
             x = z = -1;
             if (now < track.IgnoreUntil || at.y < -1f) return false;
-            return _nav.WorldToCell(at, out x, out z) && !_nav.Data.IsShelter(x, z);
+            return _nav.WorldToCell(at, out x, out z) && !_nav.IsRefuge(x, z) && CellOpen(x, z);
         }
 
         static readonly float[] WatchHeights = { 2.6f, 1.5f, 0.5f };
@@ -536,7 +611,7 @@ namespace BackRooms.Entities
                 foreach (PlayerNetwork player in PlayerNetwork.All)
                 {
                     if (player == null || !player.IsSpawned || !player.InGame) continue;
-                    if (!_nav.WorldToCell(player.transform.position, out int px, out int pz) || _nav.Data.IsShelter(px, pz)) continue;
+                    if (!_nav.WorldToCell(player.transform.position, out int px, out int pz) || _nav.IsRefuge(px, pz)) continue;
 
                     seenPlayers++;
                     if (UnityEngine.Random.Range(0, seenPlayers) == 0) lure = player;
@@ -761,14 +836,14 @@ namespace BackRooms.Entities
                 if (!Reachable(player, track, now, at, out _, out _)) continue;
                 if (Flat(at - position).magnitude > catchRadius) continue;
                 // Fora do campo de visão não pega: encostar nas costas dela não é morte.
-                if (!InCone(Flat(at - position))) continue;
+                if (CatchNeedsFacing && !InCone(Flat(at - position))) continue;
                 // Debaixo da mesa, o tampo tapa a visada: quem foi visto se enfiando ali é pego assim mesmo.
                 if (hiding != HideKind.Table &&
                     SightBlocked(position + Vector3.up * 1.4f, at + Vector3.up * (player.Crouching ? 0.7f : 1.2f))) continue;
 
                 Catches++;
                 track.IgnoreUntil = now + feedSeconds + mercySeconds;
-                player.GetCaughtRpc();
+                Catch(player);
 
                 _target = null;
                 _velocity = Vector3.zero;

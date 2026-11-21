@@ -37,6 +37,18 @@ namespace BackRooms.World
         /// <summary>Nome do material da cáustica (Level2Setup); os objetos com ele são animados aqui.</summary>
         public const string CausticsMaterialName = "Pool_Caustics";
 
+        // Malhas da maré que o LevelBuilder monta (e este componente anima, achando-as pelo nome).
+        public const string WetWallsName = "MarcaMolhada";
+        public const string WetFloorName = "PisoMolhado";
+        public const string TideLineName = "LinhaDaMare";
+        public const string TideCausticsName = "CausticasMare";
+
+        /// <summary>Altura da faixa que a maré pode molhar, acima da água parada (m).</summary>
+        public const float WetBandHeight = PoolTide.Amplitude + 0.05f;
+
+        // O seco fica 15 cm acima da água parada: a maré passa disso e ele molha.
+        static float DryFloorAbove => LevelData.DepthFloor(PoolDepth.Dry) - LevelData.WaterLevel;
+
         [Header("Ondulação")]
         [Tooltip("Velocidade da ondulação grande (mapa de normais), em repetições por segundo.")]
         public Vector2 rippleSpeed = new Vector2(0.016f, 0.012f);
@@ -49,6 +61,12 @@ namespace BackRooms.World
         public Vector2 causticDetailSpeed = new Vector2(-0.013f, -0.021f);
         [Tooltip("Quanto a cáustica cresce para quem está debaixo d'água.")]
         public float causticUnderwaterBoost = 1.8f;
+
+        [Header("Maré")]
+        [Tooltip("Quanto a marca molhada baixa por segundo depois que a água desce (m/s): a parede seca de cima para baixo.")]
+        public float dryRate = 0.02f;
+        [Tooltip("Com a maré andando no mais rápido, a ondulação rola esta vez mais depressa e o relevo cresce metade disto.")]
+        public float tideChop = 3f;
 
         [Header("Debaixo d'água")]
         [Tooltip("Distância em que a névoa de debaixo d'água fecha a visão, em metros.")]
@@ -111,6 +129,15 @@ namespace BackRooms.World
         /// <summary>Quanto o mapa já drenou, de 0 a 1: a cáustica some junto com a água.</summary>
         public float Drained01 { get; set; }
 
+        /// <summary>Quanto a superfície se agita, de 0 a 1 (a maré andando; <see cref="PoolTide"/>).</summary>
+        public float Agitation { get; set; }
+
+        /// <summary>
+        /// Até onde as paredes estão molhadas, em metros acima da água parada: sobe com a água e,
+        /// quando ela desce, baixa devagar (<see cref="dryRate"/>). As fotos podem pôr o valor.
+        /// </summary>
+        public float WetTop { get; set; }
+
         /// <summary>
         /// Ligado pelo jogador local enquanto a câmera dele está debaixo d'água. Acende a névoa
         /// e o filtro de cor só nesta máquina.
@@ -129,6 +156,7 @@ namespace BackRooms.World
         static readonly int BaseColorMapSt = Shader.PropertyToID("_BaseColorMap_ST");
         static readonly int DetailMapSt = Shader.PropertyToID("_DetailMap_ST");
         static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        static readonly int NormalScaleId = Shader.PropertyToID("_NormalScale");
 
         bool _prepared;
         float _offset;
@@ -141,6 +169,11 @@ namespace BackRooms.World
         Vector4 _causticSt, _causticDetailSt;
         Color _causticColor;
         MaterialPropertyBlock _block;
+        float _surfaceNormalScale = 1f;
+        float _rippleTime, _lastAnimate = float.NaN;
+        MeshRenderer _wetWalls, _wetFloor;
+        Color _wetColor;
+        readonly List<MeshRenderer> _tideCaustics = new List<MeshRenderer>();
 
         Volume _underwater, _night, _darkRoom;
         readonly List<Rect> _darkRects = new List<Rect>();
@@ -194,6 +227,7 @@ namespace BackRooms.World
                 Material m = _surface.sharedMaterial;
                 _surfaceSt = m.HasProperty(BaseColorMapSt) ? m.GetVector(BaseColorMapSt) : new Vector4(1f, 1f, 0f, 0f);
                 _surfaceDetailSt = m.HasProperty(DetailMapSt) ? m.GetVector(DetailMapSt) : new Vector4(1f, 1f, 0f, 0f);
+                _surfaceNormalScale = m.HasProperty(NormalScaleId) ? m.GetFloat(NormalScaleId) : 1f;
             }
 
             // A cáustica é montada pelo LevelBuilder no mesmo nível que a água.
@@ -201,7 +235,15 @@ namespace BackRooms.World
             foreach (MeshRenderer renderer in level.GetComponentsInChildren<MeshRenderer>(true))
             {
                 Material m = renderer.sharedMaterial;
+                if (renderer.name == WetWallsName) _wetWalls = renderer;
+                if (renderer.name == WetFloorName) _wetFloor = renderer;
                 if (m == null || !m.name.StartsWith(CausticsMaterialName)) continue;
+                // A cáustica do seco só acende com a maré por cima (AnimateTide).
+                if (renderer.name == TideCausticsName)
+                {
+                    _tideCaustics.Add(renderer);
+                    continue;
+                }
                 if (_caustics.Count == 0)
                 {
                     _causticSt = m.HasProperty(BaseColorMapSt) ? m.GetVector(BaseColorMapSt) : new Vector4(1f, 1f, 0f, 0f);
@@ -210,6 +252,8 @@ namespace BackRooms.World
                 }
                 _caustics.Add(renderer);
             }
+            Material wet = _wetWalls != null ? _wetWalls.sharedMaterial : _wetFloor != null ? _wetFloor.sharedMaterial : null;
+            _wetColor = wet != null && wet.HasProperty(BaseColorId) ? wet.GetColor(BaseColorId) : new Color(0f, 0f, 0f, 0.3f);
 
             // Salas escuras e túneis, em metros no mundo.
             var builder = GetComponentInParent<LevelBuilder>();
@@ -242,6 +286,8 @@ namespace BackRooms.World
             Camera viewer = Camera.main;
             if (_darkRoom != null && viewer != null) _darkRoom.weight = DarkRoomWeight(viewer.transform.position);
 
+            // A marca molhada acompanha a água subindo e, quando ela desce, seca devagar.
+            WetTop = Application.isPlaying ? Mathf.Max(_offset, WetTop - dryRate * Time.deltaTime) : Mathf.Max(_offset, WetTop);
             Animate(Application.isPlaying ? Time.time : Time.realtimeSinceStartup);
         }
 
@@ -252,6 +298,7 @@ namespace BackRooms.World
             if (_underwater != null) _underwater.weight = LocalUnderwater ? 1f : 0f;
             ApplyDaylight();
             if (_darkRoom != null) _darkRoom.weight = DarkRoomWeight(viewer);
+            WetTop = Mathf.Max(_offset, WetTop);
             Animate(Time.realtimeSinceStartup);
         }
 
@@ -355,13 +402,23 @@ namespace BackRooms.World
         {
             if (_block == null) return;
 
+            // A ondulação corre mais depressa (e com mais relevo) enquanto a maré anda.
+            float step = float.IsNaN(_lastAnimate) ? 0f : time - _lastAnimate;
+            if (step < 0f || step > 0.5f) step = 0f;
+            _lastAnimate = time;
+            float chop = Mathf.Clamp01(Agitation);
+            _rippleTime += step * (1f + tideChop * chop);
+
             if (_surface != null)
             {
                 _block.Clear();
-                _block.SetVector(BaseColorMapSt, Scroll(_surfaceSt, rippleSpeed, time));
-                _block.SetVector(DetailMapSt, Scroll(_surfaceDetailSt, detailSpeed, time));
+                _block.SetVector(BaseColorMapSt, Scroll(_surfaceSt, rippleSpeed, _rippleTime));
+                _block.SetVector(DetailMapSt, Scroll(_surfaceDetailSt, detailSpeed, _rippleTime));
+                _block.SetFloat(NormalScaleId, _surfaceNormalScale * (1f + 0.5f * tideChop * chop));
                 _surface.SetPropertyBlock(_block);
             }
+
+            AnimateTide(time);
 
             if (_caustics.Count == 0) return;
             // A cáustica é luz do dia que passou pela água: cai junto com ela no anoitecer.
@@ -378,6 +435,52 @@ namespace BackRooms.World
                     renderer.enabled = strength > 0.001f;
                     renderer.SetPropertyBlock(_block);
                 }
+        }
+
+        // A marca da maré: a parede molhada achatada até onde a água chegou (a malha está em Y
+        // relativo à água parada, de 0 a WetBandHeight), o seco escuro e brilhante enquanto molhado
+        // e a cáustica no seco só com água por cima dele.
+        void AnimateTide(float time)
+        {
+            float wet = Mathf.Clamp(WetTop, 0f, WetBandHeight);
+            if (_wetWalls != null)
+            {
+                bool show = wet > 0.01f;
+                _wetWalls.enabled = show;
+                if (show)
+                {
+                    Vector3 scale = _wetWalls.transform.localScale;
+                    scale.y = wet / WetBandHeight;
+                    _wetWalls.transform.localScale = scale;
+                }
+            }
+            if (_wetFloor != null)
+            {
+                float floorWet = Mathf.Clamp01((wet - DryFloorAbove) / 0.06f);
+                _wetFloor.enabled = floorWet > 0.001f;
+                Color c = _wetColor;
+                c.a *= floorWet;
+                _block.Clear();
+                _block.SetColor(BaseColorId, c);
+                _wetFloor.SetPropertyBlock(_block);
+            }
+            if (_tideCaustics.Count > 0)
+            {
+                float covered = Mathf.Clamp01((_offset - DryFloorAbove - 0.03f) / 0.2f);
+                float strength = CurrentDaylight.Sun * (LocalUnderwater ? causticUnderwaterBoost : 1f) * covered;
+                Color color = _causticColor * strength;
+                color.a = _causticColor.a;
+                _block.Clear();
+                _block.SetVector(BaseColorMapSt, Scroll(_causticSt, causticSpeed, time));
+                _block.SetVector(DetailMapSt, Scroll(_causticDetailSt, causticDetailSpeed, time));
+                _block.SetColor(BaseColorId, color);
+                foreach (MeshRenderer renderer in _tideCaustics)
+                    if (renderer != null)
+                    {
+                        renderer.enabled = strength > 0.001f;
+                        renderer.SetPropertyBlock(_block);
+                    }
+            }
         }
 
         static Vector4 Scroll(Vector4 st, Vector2 speed, float time)

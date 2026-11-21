@@ -17,6 +17,8 @@ namespace BackRooms.World
         public Material switchLampMaterial;
         [Tooltip("Pilhas da lanterna espalhadas pelo chão (P0.3), com sorteio próprio.")]
         public bool batteriesEnabled;
+        [Tooltip("Válvulas (Level 2): onde fica a segunda. AcrossWater = numa ilha ou na parede sobre a funda (só se chega nadando); WellBottom = no fundo de um poço que não é o covil (o passo seguinte, se ainda ficar fácil); Dry = as duas no seco, como até 21/11/2026.")]
+        public WaterValveSpot waterValve = WaterValveSpot.AcrossWater;
 
         void BuildObjective()
         {

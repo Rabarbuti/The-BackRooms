@@ -65,6 +65,11 @@ namespace BackRooms.Net
         [Tooltip("Giro da câmera do menu, em graus por segundo.")]
         public float menuSpin = 3f;
 
+        // Fase com vista própria para o menu (LevelBuilder.MenuView, o Escritório): a câmera olha ao
+        // longo de um corredor e balança devagar, em vez de girar (girando, via só parede).
+        Quaternion? _menuView;
+        const float MenuSway = 12f;
+
         public SessionPhase Phase { get; private set; } = SessionPhase.Menu;
         public string Status { get; private set; } = "";
         public string Address { get; private set; } = "";
@@ -176,7 +181,12 @@ namespace BackRooms.Net
         void Update()
         {
             if (Phase != SessionPhase.Playing && menuCamera != null && menuCamera.enabled)
-                menuCamera.transform.Rotate(0f, menuSpin * Time.deltaTime, 0f, Space.World);
+            {
+                if (_menuView.HasValue)
+                    menuCamera.transform.rotation = Quaternion.Euler(0f, Mathf.Sin(Time.unscaledTime * 0.15f) * MenuSway, 0f) * _menuView.Value;
+                else
+                    menuCamera.transform.Rotate(0f, menuSpin * Time.deltaTime, 0f, Space.World);
+            }
 
             if (_switchTo >= 0)
             {
@@ -279,7 +289,7 @@ namespace BackRooms.Net
 
             if (next < 0)
             {
-                EndSession("Fim da fita. " + cleared + " zerado.");
+                EndSession("End of tape. " + cleared + " cleared.");
                 LevelProgress.EndTape();
                 yield break;
             }
@@ -307,15 +317,15 @@ namespace BackRooms.Net
             LevelReady = false;
             _clearedThisSession = false;
             ClearDrawings();
-            SetPhase(SessionPhase.Connecting, "Abrindo a sessão...");
+            SetPhase(SessionPhase.Connecting, "Opening the session...");
 
             if (!_net.StartHost())
             {
-                Fail("Não foi possível hospedar. A porta " + port + " pode estar em uso.");
+                Fail("Could not host. Port " + port + " may be in use.");
                 return false;
             }
 
-            Address = "esta máquina";
+            Address = "this machine";
             ExitLock.PendingUnlock = false;
             SwitchObjective.Pending = default;
             BatteryPickups.PendingTaken = 0;
@@ -341,11 +351,11 @@ namespace BackRooms.Net
             _clearedThisSession = false;
             ClearDrawings();
             Address = address;
-            SetPhase(SessionPhase.Connecting, "Conectando a " + address + ":" + port + "...");
+            SetPhase(SessionPhase.Connecting, "Connecting to " + address + ":" + port + "...");
 
             if (!_net.StartClient())
             {
-                Fail("Endereço inválido: " + address);
+                Fail("Invalid address: " + address);
                 return false;
             }
 
@@ -590,7 +600,7 @@ namespace BackRooms.Net
             if (levelIndex != LevelIndex && LevelCatalog.IsValid(levelIndex))
             {
                 // A troca destrói esta sessão: não dá para fazer de dentro do tratamento da mensagem.
-                Status = "O host está no " + LevelCatalog.Get(levelIndex).Name + ". Trocando de fase...";
+                Status = "The host is on " + LevelCatalog.Get(levelIndex).Name + ". Switching level...";
                 _switchTo = levelIndex;
                 return;
             }
@@ -609,7 +619,7 @@ namespace BackRooms.Net
 
             string reason = _net != null ? _net.DisconnectReason : "";
             if (string.IsNullOrEmpty(reason))
-                reason = Phase == SessionPhase.Connecting ? "Não foi possível conectar a " + Address + "." : "A sessão foi encerrada.";
+                reason = Phase == SessionPhase.Connecting ? "Could not connect to " + Address + "." : "The session ended.";
 
             EndSession(reason);
         }
@@ -683,8 +693,17 @@ namespace BackRooms.Net
 
             if (menuCamera != null)
             {
-                Vector3 eye = level.ScenicPosition();
-                menuCamera.transform.position = new Vector3(eye.x, 1.65f, eye.z);
+                if (level.MenuView(out Vector3 viewEye, out Quaternion viewLook))
+                {
+                    menuCamera.transform.SetPositionAndRotation(viewEye, viewLook);
+                    _menuView = viewLook;
+                }
+                else
+                {
+                    Vector3 eye = level.ScenicPosition();
+                    menuCamera.transform.position = new Vector3(eye.x, 1.65f, eye.z);
+                    _menuView = null;
+                }
             }
 
             _building = null;

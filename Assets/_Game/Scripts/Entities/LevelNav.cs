@@ -24,6 +24,21 @@ namespace BackRooms.Entities
 
         public LevelData Data { get; }
 
+        /// <summary>
+        /// Restrição a mais de quem anda (nulo = nenhuma): só pisa onde devolve verdadeiro. O Zelador
+        /// do Level 3 só anda no escuro.
+        /// </summary>
+        public System.Func<int, int, bool> Filter;
+
+        /// <summary>
+        /// Só a sala inicial é abrigo (as salinhas acesas do Escritório não): o Ascensorista do
+        /// Level 3 entra nelas. Falso (o padrão) segue <see cref="LevelData.IsShelter"/>.
+        /// </summary>
+        public bool OnlyStartRoomShelter;
+
+        /// <summary>Abrigo para quem anda com esta navegação: não entra nem percebe quem está dentro.</summary>
+        public bool IsRefuge(int x, int z) => OnlyStartRoomShelter ? Data.InRoom(x, z) : Data.IsShelter(x, z);
+
         public LevelNav(LevelBuilder builder)
         {
             _builder = builder;
@@ -53,7 +68,7 @@ namespace BackRooms.Entities
         /// <summary>A entidade pode ficar nesta célula?</summary>
         public bool Standable(int x, int z)
         {
-            return !Data.Pit[x, z] && !Data.IsShelter(x, z) && !Data.IsBarricade(x, z);
+            return !Data.Pit[x, z] && !IsRefuge(x, z) && !Data.IsBarricade(x, z) && (Filter == null || Filter(x, z));
         }
 
         /// <summary>A entidade pode passar da célula (x, z) para a vizinha daquele lado?</summary>

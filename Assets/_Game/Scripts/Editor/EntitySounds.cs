@@ -59,6 +59,37 @@ namespace BackRooms.EditorTools
             Save(folder, "capitao_toc", CaptainAudio.CreateKnock());
             Save(folder, "capitao_arrasta", CaptainAudio.CreateDrag());
             Save(folder, "capitao_jingle", BackRooms.Audio.ShopMusic.CreateJingle());
+            // O Undertow (Level 2), refeito em 21/11/2026: os dois rugidos (ao ouvir, no bote e quando
+            // a maré sobe), o rosnado de aproximação (em laço), o gorgolejo de quem surge de um ralo e
+            // o puxão ao pegar.
+            Save(folder, "undertow_rugido_1", UndertowAudio.CreateRoar(5101));
+            Save(folder, "undertow_rugido_2", UndertowAudio.CreateRoar(5102));
+            Save(folder, "undertow_rosnado", UndertowAudio.CreateGrowl());
+            Save(folder, "undertow_gorgolejo", UndertowAudio.CreateGurgle());
+            Save(folder, "undertow_puxao", UndertowAudio.CreateGrab());
+            // O Zelador (Level 3), refeito em 21/11/2026: botas, chaves chacoalhando, o rodízio do
+            // balde guinchando, as rodas (laço), o esfregão em vaivém (laço), a água no balde, o
+            // balde batendo, o esfregão torcido, a voz (resmungo, pigarro), subir e afundar no chão.
+            for (int i = 0; i < 3; i++) Save(folder, "zelador_bota_" + i, JanitorAudio.CreateBoot(i));
+            for (int i = 1; i <= 4; i++) Save(folder, "zelador_chaves_" + i, JanitorAudio.CreateKeys(i));
+            for (int i = 0; i < 4; i++) Save(folder, "zelador_rodizio_" + i, JanitorAudio.CreateSqueak(i));
+            Save(folder, "zelador_rodas", JanitorAudio.CreateRoll());
+            Save(folder, "zelador_esfregao", JanitorAudio.CreateMop());
+            for (int i = 0; i < 3; i++) Save(folder, "zelador_balde_" + i, JanitorAudio.CreateSlosh(i));
+            for (int i = 0; i < 2; i++) Save(folder, "zelador_balde_bate_" + i, JanitorAudio.CreateBang(i));
+            Save(folder, "zelador_torce", JanitorAudio.CreateWring());
+            for (int i = 0; i < 3; i++) Save(folder, "zelador_voz_" + i, JanitorAudio.CreateGrumble(i));
+            Save(folder, "zelador_sobe", JanitorAudio.CreateRise());
+            Save(folder, "zelador_afunda", JanitorAudio.CreateSink());
+            Save(folder, "interruptor_estalo", LightSwitches.CreateClack());
+            Save(folder, "reator_falhando", BackRooms.World.OfficeSounds.Sputter);
+            // O Ascensorista (Level 3): bengala, arrasto, estalos da boca, respiração; e o plim e o ronco do elevador.
+            Save(folder, "ascensorista_bengala", AttendantAudio.Tap);
+            Save(folder, "ascensorista_arrasto", AttendantAudio.Scrape);
+            Save(folder, "ascensorista_estalos", AttendantAudio.Clicks);
+            Save(folder, "ascensorista_respiracao", AttendantAudio.Breath);
+            Save(folder, "elevador_plim", BackRooms.World.OfficeSounds.Chime);
+            Save(folder, "elevador_ronco", BackRooms.World.OfficeSounds.Rumble);
             Save(folder, "loja_musica", BackRooms.Audio.ShopMusic.CreateMuzak());
             for (int i = 0; i < 3; i++)
             {
@@ -78,6 +109,21 @@ namespace BackRooms.EditorTools
                 Save(folder, "debaixo_dagua_" + i, Footsteps.CreateClip(StepSurface.Underwater, i));
             }
             for (int i = 0; i < 2; i++) Save(folder, "espirro_entrada_" + i, Footsteps.CreateSplash(i));
+
+            // A maré das Piscinas (PoolTide): sirene e buzina do alarme, água correndo, glub e ralo.
+            Save(folder, "mare_sirene", BackRooms.World.PoolTide.CreateSiren());
+            Save(folder, "mare_buzina", BackRooms.World.PoolTide.CreateHorn());
+            Save(folder, "mare_correnteza", BackRooms.World.PoolTide.CreateRush());
+            Save(folder, "mare_glub", BackRooms.World.PoolTide.CreateGlub());
+            Save(folder, "ralo_gorgolejo", BackRooms.World.PoolTide.CreateGurgle());
+
+            // Escritório (Level 3): o ambiente em laço (OfficeAmbience), as portas de armário batendo
+            // (LockerBangs) e o clique dos botões do elevador (ElevatorControl).
+            Save(folder, "escritorio_ar", BackRooms.Audio.OfficeAmbience.CreateAir());
+            Save(folder, "escritorio_reator", BackRooms.Audio.OfficeAmbience.CreateBallast());
+            Save(folder, "escritorio_difusor", BackRooms.Audio.OfficeAmbience.CreateVent());
+            for (int i = 0; i < 3; i++) Save(folder, "armario_bate_" + i, BackRooms.World.LockerBangs.CreateBang(i));
+            Save(folder, "elevador_botao", BackRooms.World.ElevatorControl.CreateClick());
 
             Debug.Log("[BackRooms] Sons da entidade e dos passos salvos em " + folder);
             return folder;

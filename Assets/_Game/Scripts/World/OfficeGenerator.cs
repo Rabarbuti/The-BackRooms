@@ -24,7 +24,13 @@ namespace BackRooms.World
         public const int MinPathCells = 10;
         /// <summary>Distância mínima (em células, pela grade) entre o saguão e o vão da escada.</summary>
         public const int MinAtriumDistance = 6;
-        const int MaxExitSigns = 10;
+        /// <summary>A placa pendurada da última curva só entra se a curva fica a até tantas células da escada.</summary>
+        const int MaxExitSignCells = 3;
+        /// <summary>
+        /// A entrada da escada fica a pé (só corredor e saguão) a pelo menos esta parte do corredor
+        /// mais longe da cabine, medida também em passos (21/11/2026).
+        /// </summary>
+        public const float MinExitShare = 0.9f;
 
         static readonly WallSide[] Sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
 
@@ -359,24 +365,53 @@ namespace BackRooms.World
             return Math.Abs(cx - p.LobbyCx) + Math.Abs(cz - p.LobbyCz);
         }
 
-        // O vão da escada: 3 células ao longo do anel, a fundura inteira da faixa, o mais longe
-        // possível do saguão.
+        // O vão da escada: 3 células ao longo do anel, a fundura inteira da faixa. A entrada da
+        // escada (a célula de corredor na frente dela) fica o mais longe possível do saguão a pé, de
+        // preferência fora da vista do saguão e sem um corredor desembocando de frente para a porta
+        // (21/11/2026: antes era o mais longe em linha reta, e de alguns pontos via-se o vão).
         static bool PlaceAtrium(Plan p, Strip[] strips, List<Rect> reserved)
         {
             LevelData d = p.D;
             List<Rect> slots = StripSlots(p, strips, 3, reserved);
-            int best = -1;
-            foreach (Rect r in slots) best = Math.Max(best, LobbyDistance(p, r));
-            if (best < MinAtriumDistance) return false;
+            int[] walk = CorridorWalk(d);
 
-            var far = slots.FindAll(r => LobbyDistance(p, r) >= best - 1);
-            Rect atrium = far[p.Rng.Next(far.Count)];
+            var options = new List<(Rect r, OfficeAtrium info, int walk)>();
+            int best = -1;
+            foreach (Rect r in slots)
+            {
+                if (LobbyDistance(p, r) < MinAtriumDistance) continue;
+                foreach (bool first in new[] { true, false })
+                {
+                    OfficeAtrium info = AtriumAt(r, StripOf(strips, r), first);
+                    if (d.Office[info.HeadX, info.HeadZ] != OfficeCell.Corridor) continue;
+                    int dist = walk[info.HeadX + info.HeadZ * d.Width];
+                    if (dist < 0) continue;
+                    options.Add((r, info, dist));
+                    best = Math.Max(best, dist);
+                }
+            }
+            if (options.Count == 0) return false;
+
+            // O mais longe e escondido; senão um passo mais perto e escondido; senão o mais longe.
+            bool Hidden((Rect r, OfficeAtrium info, int walk) o) => !SeenFromLobby(d, o.info.HeadX, o.info.HeadZ) && !FacesCorridor(d, o.info);
+            var far = options.FindAll(o => o.walk == best && Hidden(o));
+            if (far.Count == 0) far = options.FindAll(o => o.walk >= best - 1 && Hidden(o));
+            if (far.Count == 0) far = options.FindAll(o => o.walk == best);
+            (Rect atrium, OfficeAtrium chosen, _) = far[p.Rng.Next(far.Count)];
             Strip s = StripOf(strips, atrium);
 
             AddRoom(p, OfficeCell.Atrium, atrium, s.Facade, false);
             reserved.Add(atrium);
+            d.Atrium = chosen;
+            for (int z = atrium.Z0; z <= atrium.Z1; z++)
+                for (int x = atrium.X0; x <= atrium.X1; x++)
+                    d.Pit[x, z] = true;
+            return true;
+        }
 
-            bool first = p.Rng.Next(2) == 0;
+        // A escada num retângulo da faixa: encosta na ponta oeste/sul (first) ou leste/norte.
+        static OfficeAtrium AtriumAt(Rect atrium, Strip s, bool first)
+        {
             var info = new OfficeAtrium
             {
                 X0 = atrium.X0,
@@ -402,13 +437,85 @@ namespace BackRooms.World
                 info.HeadZ = info.TopZ;
                 info.HeadX = s.Facade == WallSide.West ? info.TopX + 1 : info.TopX - 1;
             }
+            return info;
+        }
 
-            if (d.Office[info.HeadX, info.HeadZ] != OfficeCell.Corridor) return false;
-            d.Atrium = info;
-            for (int z = atrium.Z0; z <= atrium.Z1; z++)
-                for (int x = atrium.X0; x <= atrium.X1; x++)
-                    d.Pit[x, z] = true;
-            return true;
+        /// <summary>
+        /// Passos da cabine até cada célula andando só por saguão e corredor (-1 = não chega). Só
+        /// olha o tipo das células, então serve antes de as divisas existirem: corredor com corredor
+        /// e corredor com saguão são sempre abertos, e da cabine só se sai para o saguão.
+        /// </summary>
+        static int[] CorridorWalk(LevelData d)
+        {
+            int w = d.Width, h = d.Height;
+            var dist = new int[w * h];
+            for (int i = 0; i < dist.Length; i++) dist[i] = -1;
+            var queue = new Queue<int>();
+            dist[d.SpawnX + d.SpawnZ * w] = 0;
+            foreach (OfficeElevator e in d.Elevators)
+                if (e.IsCab && d.Neighbor(e.X, e.Z, e.Side, out int lx, out int lz) && d.Office[lx, lz] == OfficeCell.Lobby)
+                {
+                    dist[lx + lz * w] = 1;
+                    queue.Enqueue(lx + lz * w);
+                }
+
+            while (queue.Count > 0)
+            {
+                int c = queue.Dequeue();
+                int x = c % w, z = c / w;
+                foreach (WallSide side in Sides)
+                {
+                    if (!d.Neighbor(x, z, side, out int nx, out int nz)) continue;
+                    OfficeCell kind = d.Office[nx, nz];
+                    if (kind != OfficeCell.Corridor && kind != OfficeCell.Lobby) continue;
+                    int n = nx + nz * w;
+                    if (dist[n] >= 0) continue;
+                    dist[n] = dist[c] + 1;
+                    queue.Enqueue(n);
+                }
+            }
+            return dist;
+        }
+
+        /// <summary>
+        /// Verdadeiro se a célula se vê do saguão: está numa linha reta de saguão e corredor que
+        /// sai de uma célula do saguão ou de um corredor encostado nele.
+        /// </summary>
+        public static bool SeenFromLobby(LevelData d, int tx, int tz)
+        {
+            int w = d.Width, h = d.Height;
+            for (int z = 0; z < h; z++)
+                for (int x = 0; x < w; x++)
+                {
+                    OfficeCell kind = d.Office[x, z];
+                    bool start = kind == OfficeCell.Lobby;
+                    if (!start && kind == OfficeCell.Corridor)
+                        foreach (WallSide side in Sides)
+                            if (d.Neighbor(x, z, side, out int lx, out int lz) && d.Office[lx, lz] == OfficeCell.Lobby) start = true;
+                    if (!start) continue;
+                    if (x == tx && z == tz) return true;
+
+                    foreach (WallSide side in Sides)
+                    {
+                        int cx = x, cz = z;
+                        while (d.Neighbor(cx, cz, side, out int nx, out int nz))
+                        {
+                            OfficeCell next = d.Office[nx, nz];
+                            if (next != OfficeCell.Corridor && next != OfficeCell.Lobby) break;
+                            cx = nx;
+                            cz = nz;
+                            if (cx == tx && cz == tz) return true;
+                        }
+                    }
+                }
+            return false;
+        }
+
+        // Um corredor desemboca de frente para a entrada da escada (a porta seria vista de longe por ele).
+        static bool FacesCorridor(LevelData d, OfficeAtrium info)
+        {
+            return d.Neighbor(info.HeadX, info.HeadZ, LevelData.Opposite(info.Inward), out int nx, out int nz) &&
+                   d.Office[nx, nz] == OfficeCell.Corridor;
         }
 
         static void PlaceSpecial(Plan p, Strip[] strips, List<Rect> reserved, OfficeCell kind, int length, bool nearLobby)
@@ -525,9 +632,11 @@ namespace BackRooms.World
                     case OfficeCell.Lounge:
                         return OfficeEdge.Open;
                     case OfficeCell.Atrium:
+                        // O vão fica atrás de parede: do corredor só se vê a porta da escada (21/11/2026;
+                        // antes era guarda-corpo, e o vão aceso se via de longe).
                         return ox == d.Atrium.TopX && oz == d.Atrium.TopZ && cx == d.Atrium.HeadX && cz == d.Atrium.HeadZ
                             ? OfficeEdge.StairTop
-                            : OfficeEdge.Railing;
+                            : OfficeEdge.Wall;
                     case OfficeCell.Classroom:
                     case OfficeCell.Small:
                     {
@@ -814,26 +923,26 @@ namespace BackRooms.World
             d.SafePathCells = new List<int>(path);
         }
 
-        // Placas de saída de emergência penduradas no corredor ao longo do caminho: em cada curva
-        // e a cada 4 células nas retas. A seta aponta para a próxima célula.
+        // Placa de saída de emergência pendurada no corredor só na última curva do caminho antes da
+        // escada, e só se ela fica a até MaxExitSignCells células da entrada (21/11/2026: antes havia
+        // uma em cada curva e a cada 4 células desde a cabine, e bastava segui-las). A seta aponta
+        // para a próxima célula. A porta da escada tem a placa dela, na parede (LevelBuilder).
         static void PlaceExitSigns(LevelData d)
         {
             int w = d.Width;
             List<int> path = d.PathCells;
-            int sinceLast = 99;
-            for (int i = 1; i + 1 < path.Count && d.Decorations.Count < MaxExitSigns; i++)
+            for (int i = path.Count - 2; i >= 1 && i >= path.Count - 1 - MaxExitSignCells; i--)
             {
                 int x = path[i] % w, z = path[i] / w;
-                sinceLast++;
                 if (d.Office[x, z] != OfficeCell.Corridor) continue;
 
                 int px = path[i - 1] % w, pz = path[i - 1] / w;
                 int nx = path[i + 1] % w, nz = path[i + 1] / w;
                 bool turn = (nx - x) != (x - px) || (nz - z) != (z - pz);
-                if (!turn && sinceLast < 4) continue;
+                if (!turn) continue;
 
                 d.Decorations.Add(new Decoration { Kind = DecorationKind.Arrow, X = x, Z = z, DirX = nx - x, DirZ = nz - z, Side = WallSide.Floor });
-                sinceLast = 0;
+                return;
             }
         }
 
@@ -879,6 +988,15 @@ namespace BackRooms.World
                 if (room.Kind == OfficeCell.Lobby)
                     lobbyToAtrium = Math.Abs(room.X0 + 1 - (d.Atrium.X0 + d.Atrium.Width / 2)) + Math.Abs(room.Z0 - (d.Atrium.Z0 + d.Atrium.Height / 2));
             if (lobbyToAtrium < MinAtriumDistance) problems.Add($"vão da escada perto demais do saguão ({lobbyToAtrium})");
+
+            // A entrada da escada longe a pé (do lado oposto do andar, ou quase) e fora da vista do saguão.
+            int[] walk = Distances(d, d.SpawnX, d.SpawnZ, corridorsOnly: true);
+            int farthest = 0;
+            for (int i = 0; i < walk.Length; i++)
+                if (d.Office[i % w, i / w] == OfficeCell.Corridor) farthest = Math.Max(farthest, walk[i]);
+            int toStairs = walk[d.Atrium.HeadX + d.Atrium.HeadZ * w];
+            if (toStairs < MinExitShare * farthest) problems.Add($"escada perto demais da cabine a pé ({toStairs} passos; o corredor mais longe fica a {farthest})");
+            if (SeenFromLobby(d, d.Atrium.HeadX, d.Atrium.HeadZ)) problems.Add("a entrada da escada se vê do saguão");
 
             if (d.OfficeEdgeAt(d.SpawnX, d.SpawnZ, d.Elevators.Find(e => e.IsCab).Side) != OfficeEdge.CabDoor)
                 problems.Add("a cabine não tem porta para o saguão");

@@ -7,7 +7,8 @@ namespace BackRooms.World
     /// <summary>
     /// Totem do Capitão Ancoradouro (level1-mostruario.md, seção 5.4, regra 5): a estátua de fibra
     /// de vidro do pirata da loja, do tamanho dele e na mesma pose dura, numa base preta e com a
-    /// placa de OFERTA. De longe é igual ao Capitão; de perto, a base, a placa e o brilho de
+    /// placa amarela de DISPLAY ONLY (nunca vermelha: vermelho com CLEARANCE é só das etiquetas do
+    /// código da porta, <see cref="ExitLock"/>). De longe é igual ao Capitão; de perto, a base, a placa e o brilho de
     /// fibra entregam.
     ///
     /// A estátua é o próprio corpo do Capitão (<see cref="CaptainBody"/>, o modelo do Blender

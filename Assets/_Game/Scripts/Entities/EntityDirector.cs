@@ -139,6 +139,16 @@ namespace BackRooms.Entities
                 return false;
             }
 
+            // O Ascensorista nasce e já se esconde num poço (AttendantBrain.OnNetworkSpawn: Park):
+            // o lugar não importa. Sem isto, com os jogadores perto do saguão nenhuma célula do
+            // caminho servia (perto demais ou à vista) e ele nunca entrava no jogo.
+            if (entityPrefab.GetComponent<AttendantBrain>() != null)
+            {
+                LastRefusal = "";
+                SpawnAt(_nav.CellCenter(_doorX, _doorZ), Vector3.forward);
+                return true;
+            }
+
             if (!_nav.Path(_doorX, _doorZ, leadX, leadZ, _path))
             {
                 LastRefusal = "sem caminho da porta até o jogador";
