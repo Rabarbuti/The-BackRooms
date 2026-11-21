@@ -36,6 +36,22 @@ Em todas: bateria da lanterna e pilhas, sons da porta e tela de opções (Etapa 
 inteira e, da Etapa 5, o som ambiente do Escritório e a conferência de planta do Level 2 e do Level 3
 em dois editores.
 
+**Depois da rodada "jogando" (20–21/11/2026)**, o usuário jogou e pediu um inimigo próprio por fase
+nova, menu de pausa, o jogo em inglês e um Level 2 menos fácil. Tudo testado por máquina, nada jogado
+à mão depois:
+
+| Fase | Ameaça | Objetivo | Falta para a entrega |
+|---|---|---|---|
+| Level 0 | A entidade, buracos, apagão | Disjuntores | Jogar à mão |
+| Level 1 | O Capitão e o resto | Teclado e etiquetas (CLEARANCE) | Jogar à mão e ajustar números |
+| Level 2 | **The Undertow**, a maré de 1,3 m com alarme, o ralo | Válvulas: **uma do outro lado da água funda** | Jogar à mão (maré pesada demais? Undertow justo?) |
+| Level 3 | **The Janitor** (escuro, onda que persegue, interruptores) e **The Attendant** (cego, elevador) | Alarme de incêndio, que corta a energia | Jogar à mão; modelos do cenário |
+
+Em todas: menu de pausa com as tarefas e as teclas (Esc), cartazes de dicas, texto do jogador em
+inglês, menu inicial em silêncio (só a música). Feitos também: o som ambiente e os armários que batem
+do Escritório, os botões dos elevadores e a conferência de planta, objetivo, pilhas e maré do Level 2
+e do Level 3 em dois editores (`NetTests`).
+
 ---
 
 ## Como trabalhar
@@ -156,7 +172,7 @@ editores (o cliente vendo a água descer).
 
 ---
 
-## Etapa 4 — Alarme de incêndio e a entidade: o Level 3 (feita em 19/11/2026, menos os armários que batem e jogar à mão)
+## Etapa 4 — Alarme de incêndio e a entidade: o Level 3 (feita em 19/11/2026; armários em 20/11; a entidade trocada por dois inimigos próprios em 21/11; falta jogar à mão)
 
 Branch `escritorio-alarme`. Projeto: `level3-escritorio.md`, seções 3 e 6.
 
@@ -169,7 +185,11 @@ Branch `escritorio-alarme`. Projeto: `level3-escritorio.md`, seções 3 e 6.
    piso duro e, quando o alarme dispara, corre para o acionador que o disparou: a fuga até a escada é o
    clímax da fase.
 3. **Armários batem** (ideia 5 da seção 6): uma sequência de portas batendo num corredor longe, pelo
-   relógio da sessão; a entidade ouve o mesmo barulho e vai até lá. *Não feito.*
+   relógio da sessão; o inimigo ouve o mesmo barulho e vai até lá. *Feito em 20/11/2026* (`LockerBangs`,
+   pela via genérica `WorldNoise`).
+
+*Em 21/11/2026* a entidade do Level 0 saiu do Escritório: o Zelador (só no escuro; a onda de luzes o
+traz, os interruptores o tiram) e o Ascensorista (cego, chega de elevador). D6 abaixo.
 
 **Testes:** novo `Level3ObjectiveTest` (porta trancada; armar dispara o alarme; a porta abre; a
 entidade aparece e caça), `Level3Setup.BatchCheck`, `Level3PlayTest` (cumpre o objetivo antes de abrir),
@@ -190,10 +210,12 @@ Cada uma é uma branch curta própria, em qualquer ordem:
 - **Som e animação da porta de saída:** trancada (chacoalha), destravando (estalo), abrindo (a folha
   gira ao passar de fase).
 - **Som ambiente do Escritório:** ar-condicionado e reatores, sintetizados como o `FluorescentHum`.
+  *Feito em 20/11/2026* (`OfficeAmbience`).
 - **Tela de opções** no menu: volume geral e da música, sensibilidade do mouse, qualidade (os três
   perfis do HDRP), pasta da gravação. Guardadas em `PlayerPrefs`.
 - **Conferência de planta entre host e cliente** no Level 2 e no Level 3 (dois editores, como o
-  `Level1Setup` já faz para a mobília).
+  `Level1Setup` já faz para a mobília). *Feito em 20–21/11/2026* (`NetTests`: planta, objetivo, pilhas,
+  maré, quem entra depois e, no Level 3, o interruptor apertado pelo cliente).
 
 ---
 
@@ -203,7 +225,8 @@ Cada uma é uma branch curta própria, em qualquer ordem:
   cada fase, e volta ao menu. *Feito:* `LevelProgress.RecordTime`/`EndTape` e a tela no `ConnectionMenu`.
 - **Bilhete de ensino** em cada sala inicial (o que fazer nesta fase, sem texto em excesso), no molde
   do bilhete do Level 1: disjuntores, válvulas, alarme, e `P2.5` (marcar onde dá pé com a caneta).
-  *Feito:* `SwitchObjective.PinNote` (cinco linhas; nas Piscinas, "MARQUE ONDE DA PE").
+  *Feito:* `SwitchObjective.PinNote`. Em 21/11/2026 virou cartaz de dicas em inglês (TIPS; nas
+  Piscinas, "MARK THE SHALLOWS") e a instrução foi para o menu de pausa (Esc).
 - **Build para Windows** e uma partida inteira jogada nela, sozinho e em dois. *Feito o build*
   (`BuildTool.BatchWindows`, `Builds/Windows/TheBackRooms.exe`, ~40 min na primeira vez); falta jogar nela.
 - **Desempenho** medido nas quatro fases (`Level0Benchmark` e o equivalente das outras). *Feito
@@ -234,9 +257,10 @@ Cada uma traz uma recomendação. Quem decidir anota a resposta aqui e no docume
 |---|---|---|
 | D1 | Começar pelo Capitão ou pelo objetivo? | **Decidido (17/11/2026): Capitão.** Feito. |
 | D2 | O que acontece ao encarar o Capitão por 6 s, sem sanidade? | **Decidido (17/11/2026): só o chuvisco.** Feito. |
-| D3 | Na maré alta até o seco fica com água. Como sobra um refúgio? | **Decidido (19/11/2026), para revisão: sem refúgio novo por ora.** A recomendação era (a), patamares altos de +1,2 m com escada, mas ela muda o `PoolGenerator` e a planta de todas as seeds. Medido no código: na maré alta, de pé no raso, a água fica a 1,35 m dos pés e os olhos a 1,65 m, então ninguém se afoga em pé; o seco fica com 0,75 m (vadeia-se). O perigo da maré é ficar lento (o raso vira nado, a 45%) e o ralo na vazante; o refúgio é o seco e as escadas. Se jogando faltar abrigo, (a) volta. |
+| D3 | Na maré alta até o seco fica com água. Como sobra um refúgio? | **Decidido (19/11/2026), para revisão: sem refúgio novo por ora.** A recomendação era (a), patamares altos de +1,2 m com escada, mas ela muda o `PoolGenerator` e a planta de todas as seeds. **Números desde 21/11/2026** (maré de 1,3 m): na maré alta o raso fica com 1,72 m de água (de pé, a cabeça afunda: nada-se, no território do Undertow) e o seco com 1,12 m (vadeia-se sem nadar e nunca é território dele): o seco é o refúgio. Maré acima de ~1,45 m acabaria com ele. `Level2HighTideTest`: 113 de 113 largados de pé na maré alta chegam ao seco respirando. Se jogando faltar abrigo, (a) volta. |
 | D4 | Quais propostas de `mecanicas.md` entram? | `P0.3` (pilhas) na Etapa 5; `P2.5` como bilhete de ensino na Etapa 6. As outras ficam para depois da entrega. |
 | D5 | A entidade do Level 0 aparece também no Level 1? | **Não** (uma regra por fase). |
-| D6 | Inimigo do Level 3 (decisão 4 de `level3-escritorio.md`)? | **Decidido (19/11/2026), para revisão: a entidade do Level 0**, a opção que o doc lista e a mais barata; um inimigo próprio fica para depois da entrega. |
+| D6 | Inimigo do Level 3 (decisão 4 de `level3-escritorio.md`)? | **Decidido de novo (20/11/2026, pelo usuário, depois de jogar): dois inimigos próprios**, o Zelador (The Janitor, só no escuro) e o Ascensorista (The Attendant, cego, do elevador). A entidade do Level 0 saiu do Escritório. O Level 2 ganhou o seu, o Undertow. |
 | D7 | Objetivo do Level 3? | **Decidido (19/11/2026), para revisão: alarme de incêndio** destrava a porta corta-fogo (combina com a saída já decidida, a porta corta-fogo no patamar). |
-| D8 | Válvulas do Level 2 sem casas de máquinas? | **Decidido (19/11/2026), para revisão:** válvulas na parede de células secas, sem sala própria, e a saída continua a sala seca: as casas de máquinas e a porta no fundo do poço mudariam o hash de todas as seeds. |
+| D8 | Válvulas do Level 2 sem casas de máquinas? | **Decidido (19/11/2026), para revisão:** válvulas sem sala própria, e a saída continua a sala seca: as casas de máquinas e a porta no fundo do poço mudariam o hash de todas as seeds. **Desde 21/11/2026** a segunda válvula exige nadar (numa ilha ou na parede sobre a funda); a válvula no fundo de um poço (`WellBottom`) está pronta e desligada. |
+| D9 | O estrondo do objetivo cumprido nas Piscinas cai na água quando a última válvula armada é a da parede sobre a funda (seeds 31337, 90210, 2026) e chama o Undertow para quem ainda boia ali. Drama no fim ou injusto? | **Em aberto (21/11/2026):** ficou como está; decidir jogando. Nas seeds 90210 e 2026 essa válvula fica também perto de um ralo (4 e 6 m), que puxa na vazante. |

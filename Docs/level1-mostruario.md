@@ -5,7 +5,7 @@ Projeto da segunda fase. Escrito em 11/11/2026.
 **Já existe:** uma versão de teste jogável (`Scenes/Level1_Test.unity`, menu BackRooms > Montar
 Level 1 (teste)): a planta do Level 0 em 20 x 20 células, com pé-direito de 3,4 m, sem buracos nem nichos,
 mobiliada pela `PropLayer` com os 65 modelos do Blender, incluindo a sala dos sofás e placas
-de trânsito (PARE e STOP). No lugar das setas pintadas do Level 0, placas amarelas de curva
+de trânsito (STOP; a PARE saiu com a tradução). No lugar das setas pintadas do Level 0, placas amarelas de curva
 (losango com a seta dobrada) pregadas na parede apontam o caminho até a saída. A porta do Level 0
 leva até aqui. **O Capitão está na fase** (desde 17/11/2026, `CaptainBrain`): aparece quando alguém
 chega a 5 células da sala inicial, ouve, congela quando é visto e está iluminado, cansa quem o
@@ -18,6 +18,10 @@ com os lotes de 17/11/2026; o sorteio é um carro num beco sem saída), com plac
 nome da zona e anomalias longe do início (mesa no teto, móvel atravessando a parede, guarda-roupa
 de frente para a parede, batente solto). A mobília sai igual no host e no cliente (conferido em dois
 editores).
+**Texto do jogador em inglês** (21/11/2026): etiquetas vermelhas CLEARANCE, bilhete "DOCK: / 4 3 9 /
+SCRAMBLED", placas penduradas DO NOT ENTER, DINING ROOM, LIVING ROOM e STOCKROOM, placas de preço SALE e
+CLEARANCE (a da base do totem é "CLEARANCE / $49"), faixa do sorteio ENTER TO WIN!; no menu, a fase é
+"Level 1 — The Showroom". O projeto abaixo cita os textos em português, como foram pensados.
 **Falta:** jogar à mão e ajustar. A saída continua a porta corta-fogo com EXIT, não a porta da
 doca da seção 6 (decidido em 17/11/2026). O teto a 3,4 m não muda a iluminação das luminárias.
 

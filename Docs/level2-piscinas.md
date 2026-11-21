@@ -39,21 +39,34 @@ Level 2 (teste)) com as etapas 1 a 7 da seção 8.1:
 - **Caneta:** não risca debaixo d'água.
 - **Desempenho** (seed 1998, 1920 x 1080, Quadro T2000): mediana de 37 ms por quadro sem lanterna e
   40 ms com, contra ~106 ms da primeira versão; 45 luzes com sombra de uma face em cache.
-- **Maré, ralo e drenagem** (19/11/2026, `PoolTide`; seções 4.3, 5 e 6): a água sobe 0,9 m e desce a
-  cada 90 s pelo relógio da sessão (a primeira subida aos 90 s; "glub" 10 s antes); a lâmina cobre também
-  o seco, escondida sob o piso com a água baixa. Na **vazante** os ralos puxam quem nada no poço ou na
-  funda perto dele até a grade (afoga), com as lâmpadas de perto piscando. **Duas válvulas**
-  (`SwitchObjective`, rodas vermelhas na parede de células secas, a 8 células ou mais uma da outra):
-  abertas dentro de 5 s (sozinho, as duas, sem janela) drenam 2 m em 30 s, param a maré e destrancam a
-  saída. A planta não mudou (nenhuma regra nova no `PoolGenerator`).
+- **Maré, ralo e drenagem** (19/11/2026, refeitos em 21/11/2026; `PoolTide`; seções 4.3, 5 e 6): a
+  água sobe 1,3 m e desce a cada 90 s pelo relógio da sessão (primeira subida aos 30 s), com alarme
+  (sirene, lâmpadas vermelhas de parede `PoolAlarm`, buzina), ronco de água, aviso na filmadora, marca
+  molhada e linha da maré alta; a lâmina cobre também o seco, escondida sob o piso com a água baixa. Na
+  **vazante** os ralos puxam quem nada até 10 m além do poço até a grade (afoga), com as lâmpadas de
+  perto piscando. **Duas válvulas** (`SwitchObjective`): uma no seco, a pé, e outra que **só se alcança
+  atravessando água funda a nado** (numa ilha ou, sem ilha, na parede sobre a funda, girada à tona; roda
+  acima da maré alta; `LevelBuilder.waterValve` troca o sorteio; `WellBottom`, no fundo de um poço que
+  não é o covil, é o passo seguinte, pronto e desligado). Abertas dentro de 5 s (sozinho, as duas, sem
+  janela) drenam 2 m em 30 s, param a maré e destrancam a saída. A planta não mudou (nenhuma regra nova
+  no `PoolGenerator`).
+- **O inimigo, The Undertow** (21/11/2026, `UndertowBrain` e cia.; seção 5): um afogado de 3,4 m que dorme
+  no fundo do poço mais longe do início, caça pelo barulho na água, nunca sai dela, vem pelos canos para
+  outra piscina e, drenada a fase, arrasta-se pelo fundo. Modelo esculpido no Blender (`afogado.py`).
+- **Texto do jogador em inglês** (21/11/2026): marcações "2.0 M", "NO DIVING", "DEEP END"; filmadora
+  `WATER`, `AIR`, `HOLD SPACE`, `W - CLIMB`, `TIDE ...`; no menu, "Level 2 — The Poolrooms"; cartaz de
+  dicas na sala inicial (TIPS / MARK THE SHALLOWS / STAY OFF THE DRAINS / HOLD SPACE TO FLOAT / ESC:
+  TASKS).
 
-**Falta:** o ralo que acorda com barulho e os túneis submersos, as casas de máquinas como salas e a
-porta no fundo do grande poço, o som ambiente e as anomalias; do vocabulário de formas, corredor curvo em S, escada em caracol, mezanino, teto
+**Falta:** jogar à mão (a maré de 1,3 m e o Undertow foram ajustados só por teste); o ralo que acorda
+com barulho e os túneis submersos, as casas de máquinas como salas e a porta no fundo do grande poço,
+o som ambiente e as anomalias; do vocabulário de formas, corredor curvo em S, escada em caracol, mezanino, teto
 inclinado, tobogã e claraboia em sala de abóbada; os modelos do Blender (escadinha de metal, grade
 de ralo, válvula). No visual, a cáustica ilumina até o fundo do poço, que devia ser escuro (seções 4.1
 e 7), e a água funda de 2 m não parece mais funda que a de 1,2 m de antes: a cor vem da pastilha do
 fundo (medida na foto sem filmadora, #1A7B60 a #266E56, já mais escura que a referência #0A9872) e a
-cáustica não diminui com a profundidade; o que dá a fundura hoje é a escada longa e o corrimão. Não foi conferida a planta entre host e cliente (dois editores) nem jogada à mão.
+cáustica não diminui com a profundidade; o que dá a fundura hoje é a escada longa e o corrimão. A planta, o
+objetivo, as pilhas e a maré entre host e cliente estão conferidos em dois editores (`NetTests`).
 
 ---
 
@@ -407,14 +420,21 @@ principal, sem uso, então salas, água, escadas, colunas e lâmpadas de cada se
 ### 4.3 A maré
 
 O nível da água de cada região **sobe e desce sozinho**, junto em todas as máquinas, pelo relógio
-`GameSession.SessionSeconds` (a mesma regra do apagão). Ciclo de 90 s: 60 s parada, 15 s subindo
-até +0,9 m, 15 s descendo.
+`GameSession.SessionSeconds` (a mesma regra do apagão). Ciclo de 90 s (desde 21/11/2026): 35 s
+parada, 20 s subindo até +1,3 m, 15 s de maré alta e 20 s descendo (a vazante); a primeira subida aos
+30 s.
 
-- Na maré alta, o raso vira água de nadar (1,35 m acima dos pés) e a funda passa de 2,9 m: corredores rasos que eram passagem viram nado, e
-  quem estava num patamar baixo fica ilhado. O seco (+0,2 m) também fica com 0,75 m de água: se ele
-  continua sendo refúgio é a decisão 5 da seção 9.
-- **Aviso:** 10 s antes, os ralos borbulham e a água começa a puxar levemente para eles; o som
-  da sala muda (um "glub" grave e longe).
+- Na maré alta, o raso fica com 1,72 m de água: **de pé, a cabeça fica debaixo d'água**, então ou se
+  nada à tona (e o raso vira território do Undertow) ou se espera no seco. O seco (+0,2 m) fica com
+  1,12 m: vadeia-se sem nadar e continua refúgio (decisão 5 da seção 9). Não há arco baixo que fique
+  submerso: só acima de ~1,45 m de maré, quando o seco também viraria nado.
+- **Alarme:** 10 s antes e durante a subida, sirene na fase inteira e lâmpadas vermelhas de parede
+  piscando (uma ou duas por sala, `PoolAlarm`); no começo, a buzina de piscina de ondas e um glub;
+  enquanto a água anda, ronco de água correndo e superfície agitada; o painel da filmadora diz a fase
+  (`TIDE COMING`, `TIDE RISING`, `HIGH TIDE`, `TIDE FALLING`, `DRAIN PULLING`, `DRAINING`).
+- **Marcas:** a água deixa película molhada nas paredes e no seco, que seca em ~50 s, e há uma linha de
+  sujeira na altura da maré alta, visível desde o início.
+- Com mais de 0,5 m de água não se corre; no seco alagado anda-se a ~1/3 da corrida.
 - Substitui o **apagão** do Level 0 como o evento global da fase. O apagão continua existindo,
   mas aqui é o **anoitecer** (seção 7).
 
@@ -437,11 +457,31 @@ sabe o que tem atrás dela.
 - **Atalho:** quando o ralo dorme, os poços escondem **túneis submersos** que ligam regiões
   distantes — o caminho mais curto, e o mais arriscado.
 
-Fica em aberto um inimigo de verdade (decisão 2, seção 9).
+**O ralo hoje** (desde 19/11/2026) puxa só na **vazante**, até 10 m além do poço (desde 21/11/2026);
+o despertar por barulho ainda não existe.
+
+### 5.1 The Undertow (21/11/2026)
+
+A decisão 2 da seção 9 mudou: a fase ganhou um inimigo, o que "só aparece como sombra embaixo d'água e
+segue quem espirra". Regras em linguagem de jogador em `mecanicas.md`, seção 4. Em resumo:
+
+- Vive na água funda e no poço (`UndertowNav`; o raso entra na maré alta, com a coluna d'água acima de
+  1,3 m) e nunca sai dela; dorme no fundo do poço mais longe do início (o covil, sem sorteio).
+- Cego: o barulho na água (o mesmo que o jogador ouve: espirro, braçada, passos no raso) o chama, com
+  alcance de 24 m × a força do barulho; pelos canos, só barulho forte (espirro, corrida) e não caçando.
+- Pega quem nada na água dele (1,4 m; água mais de 1 m acima dos pés) e puxa para o fundo; quem sai da
+  água escapa (ele ronda a borda 8 s). Drenada a fase, arrasta-se pelo fundo a 0,9 m/s.
+- Números em campos do `UndertowBrain`: 2,3 m/s indo ao barulho, 3,3 caçando, 1,4 rondando; acordar
+  leva 2,2 s, com gemido. A rota de nado até a válvula da água foge do covil (a mais perto passa a 23 m).
 
 ---
 
 ## 6. Objetivo da fase
+
+**Como está hoje (21/11/2026):** duas válvulas, uma no seco e outra do outro lado da água funda (ver
+"Já existe"); drenada, a água desce 2 m em 30 s, rápida no começo; aberta no meio de uma maré, ela
+congela onde estava e desce dali, e o alarme cala. A saída é a sala seca. O que segue é o projeto
+original.
 
 **Esvaziar a piscina.** A saída é uma porta no **fundo do maior poço**, só alcançável sem água.
 Para drenar, o grupo precisa abrir as **válvulas de duas casas de máquinas** ao mesmo tempo
@@ -568,16 +608,17 @@ início). Até lá, a saída é a sala seca da seção 3.2.
 ## 9. Decisões em aberto
 
 1. **Nome.** "Level 2 — As Piscinas" (nossa ordem) ou "Level 37" como na wiki?
-2. **Inimigo de verdade?** A proposta é **nenhum** — o ralo e a maré bastam, e a calma é o que
+2. **Inimigo de verdade?** A proposta era **nenhum** — o ralo e a maré bastam, e a calma é o que
    assusta depois de dois níveis de monstro. Alternativa: algo que só aparece como sombra embaixo
-   d'água e segue quem espirra.
+   d'água e segue quem espirra. **Decidido em 20/11/2026 (pelo usuário, depois de jogar): a
+   alternativa**, o Undertow (seção 5.1).
 3. ~~HDRP Water ou água própria?~~ **Decidido em 12/11/2026: água própria** (`HDRP/Lit`
    transparente com refração, cáustica numa malha à parte). Dá a cor certa pelo fundo visto através
    dela e custa pouco: na seed 1998, tirar a refração poupa 3,3 ms por quadro e a cáustica, 2,4.
 4. **Voz abafada** só vale quando existir voz por proximidade (Vivox, etapa 5 do plano).
 5. **Decidido em 19/11/2026 (para revisão), ver D3 de `plano-de-acao.md`: sem refúgio novo por ora.**
-   Na maré alta, de pé no raso, a água fica a 1,35 m dos pés e os olhos a 1,65 m: ninguém se afoga em
-   pé, e o seco fica com 0,75 m (vadeia-se). A recomendação (a) mudaria a planta de todas as seeds.
+   Desde 21/11/2026 (maré de 1,3 m): na maré alta o raso fica com 1,72 m (de pé, a cabeça afunda) e o
+   seco com 1,12 m (vadeia-se): o refúgio é o seco. A recomendação (a) mudaria a planta de todas as seeds.
    O texto original da decisão: **A maré deixa um refúgio seco?** O seco fica a +0,2 m e a maré sobe 0,9 m: na maré alta ele fica
    com 0,7 m de água e deixa de ser refúgio. Saídas (da pesquisa de level design): (a) uma altura nova,
    "alto" a +1,2 m, para patamares-refúgio, só encostando em seco e com escada (regras novas no

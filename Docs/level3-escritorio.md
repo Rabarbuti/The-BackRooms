@@ -30,22 +30,40 @@ Level 3 (teste)), na lista de fases depois das Piscinas (a porta do Level 2 leva
   apagados e salas escuras; Volume próprio (`Settings/Level3_Volume.asset`): céu frio fraco, névoa
   cinza-azulada, cor dessaturada.
 - **Tensão:** a porta da cabine abre sozinha 3,5 s depois do início; a **onda de luzes**
-  (`OfficeLightWave`, no lugar do apagão) a cada 60 s, a partir dos 45 s; o **elevador que chega
-  sozinho** (`OfficeElevators`) a cada 85 s, a partir dos 75 s: luz da cabine vazia, plim, porta abre
-  e fecha. Sons sintetizados (`OfficeSounds`). Tudo pelo relógio da sessão e pela seed.
+  (`OfficeLightWave`, no lugar do apagão) que **persegue** (desde 21/11/2026): a cada ~40 s, a partir dos
+  25 s, o host escolhe o trecho de corredor onde está um jogador (`WavePlan` pela rede), as luminárias
+  piscam 2,5 s, apagam em cascata, ficam 16 s apagadas e voltam uma a uma; o **elevador** (`OfficeElevators`)
+  não chega mais vazio: todo plim é o Ascensorista (`VisitsByEnemy`). Sons sintetizados (`OfficeSounds`).
+- **Som ambiente** (20/11/2026, `OfficeAmbience`): ar-condicionado, difusores e reatores que calam onde a
+  onda apaga (a cena não tem mais o zumbido 2D). **Armários que batem** (`LockerBangs`, ideia 5 da seção
+  6): uma fileira de portas bate num corredor longe dos jogadores, vindo na direção deles, pelo relógio;
+  o barulho vai aos inimigos por `WorldNoise`. **Botões dos elevadores** (`ElevatorControl`): abrir e
+  fechar na cabine, chamar no saguão; o host decide; a porta reabre com alguém no vão.
 - **Passos de piso duro** (`LevelBuilder.HardFloorActive` → `Footsteps` usa os do azulejo seco).
-- **Ameaça e objetivo** (19/11/2026): a **entidade do Level 0** caça aqui também (decisão 4: a opção
-  "usa a entidade do Level 0"); a porta corta-fogo fica trancada até o **alarme de incêndio** disparar
+- **Objetivo** (19/11/2026): a porta corta-fogo fica trancada até o **alarme de incêndio** disparar
   (`SwitchObjective`, três acionadores vermelhos em paredes de corredor, longe uns dos outros: puxar
-  leva 2 s, dois dentro de 8 s disparam; sozinho, dois sem janela). Disparado, a sirene toca nos
-  acionadores, a porta destrava e a entidade corre para o último acionador.
+  leva 2 s, o segundo dentro de 8 s do primeiro; sozinho, dois sem janela). Disparado, a sirene toca
+  nos acionadores e a porta destrava; desde 21/11/2026 a sirene chama o Ascensorista e **a energia do
+  andar cai** (só as salinhas-abrigo ficam acesas, luzes de emergência a cada 3 células nas rotas até a
+  escada, interruptores sem energia).
+- **Dois inimigos próprios** (21/11/2026; a entidade do Level 0 saiu; decisão 4): **The Janitor** (o
+  Zelador, `JanitorBrain`: só existe no escuro, nasce na ponta do trecho que a onda apagou, some quando a
+  luz volta; interruptores de luz, `LightSwitches`, religam o trecho com estalo alto e recarregam 25 s) e
+  **The Attendant** (o Ascensorista, `AttendantBrain`: cego, chega de elevador, caça pelo barulho, ouve a
+  respiração de perto, entra em qualquer sala e leva quem pega para a cabine). Modelos esculpidos no
+  Blender (`zelador.py`, `ascensorista.py`). Regras em `mecanicas.md`, seção 5.
+- **Texto do jogador em inglês** (21/11/2026): avisos da filmadora (`E - LIGHTS ON`, `E - CALL
+  ELEVATOR`...), cartaz de dicas (TIPS / HIDE IN A SMALL ROOM / WITH THE LIGHT ON / CROUCH TO STAY QUIET /
+  ESC: TASKS), no menu "Level 3 — The Office".
 
-**Falta:** os modelos do Blender (as peças da seção 4 hoje são caixas e tubos em código); as ideias
-3, 4 e 5 da seção 6 (cadeiras viradas, telas que ligam, armários batendo); um inimigo próprio; som
-ambiente próprio (ar-condicionado); conferir a planta entre host e cliente (dois editores).
+**Falta:** jogar à mão (os números dos dois inimigos e da onda são de partida); os modelos do Blender
+do cenário (as peças da seção 4 hoje são caixas e tubos em código); as ideias 3 e 4 da seção 6
+(cadeiras viradas, telas que ligam). A planta, o objetivo e o interruptor entre host e cliente estão
+conferidos em dois editores (`NetTests`).
 
 **Decisões tomadas em 17/11/2026** (seção 9): viga da escada grafite; OSB mantido, mas dessaturado;
-saída pela porta corta-fogo no patamar da escada; por enquanto sem inimigo, como as Piscinas.
+saída pela porta corta-fogo no patamar da escada; por enquanto sem inimigo, como as Piscinas (depois:
+a entidade do Level 0 em 19/11/2026 e, desde 21/11/2026, o Zelador e o Ascensorista).
 
 ### O que os vídeos mostram
 
@@ -219,7 +237,8 @@ Intensidade relativa: 1,0 = corredor.
    vezes, em vez de estática, mostram em baixa resolução a imagem de uma câmera domo do corredor:
    o jogador se vê de costas, da sala onde acabou de estar.
 5. **Os armários batem.** Uma sequência de portas de armário batendo ao longo de um corredor, longe,
-   chegando mais perto. É só som, mas o inimigo da fase (quando existir) ouve o mesmo barulho.
+   chegando mais perto. É só som, mas o inimigo da fase (quando existir) ouve o mesmo barulho. *Feito em
+   20/11/2026* (`LockerBangs`); o Ascensorista vai até lá.
 
 ---
 
@@ -271,7 +290,8 @@ Intensidade relativa: 1,0 = corredor.
    que só chega num momento certo?
 4. **Inimigo:** a fase tem um próprio, usa a entidade do Level 0 ou começa sem nenhum (como as
    Piscinas)? **Decidido em 19/11/2026 (para revisão): a entidade do Level 0** (D6 de
-   `plano-de-acao.md`), com o alarme de incêndio como objetivo (D7).
+   `plano-de-acao.md`), com o alarme de incêndio como objetivo (D7). **Decidido de novo em 20/11/2026,
+   pelo usuário: dois inimigos próprios**, o Zelador e o Ascensorista.
 5. **Referências:** chegaram 13 fotos, não 14, e a ordem de envio não bate com a tabela do prompt
    (lá, 1, 2 e 5 são escadas; aqui a 1 é a área de estar). Este projeto cita as fotos pelo que
    mostram, não pelo número.
