@@ -941,3 +941,16 @@ MonoBehaviour:
   visorMaterial: {fileID: 2100000, guid: a3f07fa114c25aa4fa90018fdd5d423a, type: 2}
   gearMaterial: {fileID: 2100000, guid: ab81c550df63b414b9bb7a689c438e6e, type: 2}
   strideLength: 1.45
+  model: {fileID: 4900000, guid: 72161bcfe8d9b50408dcac6da2cc682a, type: 3}
+  modelMaterials:
+  - {fileID: 2100000, guid: b4e4e57888dbc8a4b8ebfd80c8d72823, type: 2}
+  bindArmSpread: 15
+  bindArmForward: 18
+  thighLength: 0.35
+  shinLength: 0.27
+  footHeight: 0.1
+  hipWidth: 0.14
+  torsoLength: 0.64
+  shoulderWidth: 0.24
+  upperArmLength: 0.27
+  forearmLength: 0.23

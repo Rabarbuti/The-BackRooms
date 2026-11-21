@@ -80,6 +80,8 @@ namespace BackRooms.EditorTools
                     if (filter.sharedMesh == null) continue;
                     // So a estrutura conta: rodape, porta e placa sao enfeites sem colisor, por projeto.
                     if (filter.name == "Rodapes" || filter.name == "Porta" || filter.name == "Placa") continue;
+                    // A alça do disjuntor da Tripo também (a caixa tem o colisor da própria malha).
+                    if (filter.name == "AlcaDoDisjuntor") continue;
                     // A fumaca dos buracos aparece mas nao e solida, tambem por projeto.
                     if (filter.GetComponentInParent<PitSmoke>() != null) continue;
                     // A água das Piscinas também: o jogador entra nela.

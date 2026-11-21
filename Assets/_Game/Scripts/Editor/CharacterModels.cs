@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using BackRooms.Entities;
+using BackRooms.Player;
 using UnityEditor;
 using UnityEngine.Rendering.HighDefinition;
 using UnityEngine;
@@ -36,6 +37,23 @@ namespace BackRooms.EditorTools
         {
             Dump("capitao", () => new GameObject("Capitao").AddComponent<CaptainBody>());
             Dump("entidade", () => new GameObject("Entidade").AddComponent<EntityBody>());
+            Dump("traje", () =>
+            {
+                var suit = new GameObject("Jogador").AddComponent<PlayerBody>();
+                ApplySuitMeasures(suit);
+                return suit;
+            });
+        }
+
+        /// <summary>
+        /// As medidas do traje da Tripo (Tools/Blender/personagens/traje_medidas.json, gravado pelo
+        /// traje.py): comprimentos dos ossos e a abertura dos braços na pose de encaixe, com os nomes
+        /// dos campos do <see cref="PlayerBody"/>. Sem o arquivo, ficam as da figura de código.
+        /// </summary>
+        public static void ApplySuitMeasures(PlayerBody body)
+        {
+            string path = Path.Combine(SkeletonFolder, "traje_medidas.json");
+            if (File.Exists(path)) JsonUtility.FromJsonOverwrite(File.ReadAllText(path), body);
         }
 
         /// <summary>Linha de comando: grava os esqueletos e fecha (0 = ok).</summary>
@@ -63,6 +81,7 @@ namespace BackRooms.EditorTools
                 body = make();
                 if (body is CaptainBody captain) captain.Build();
                 if (body is EntityBody entity) entity.Build();
+                if (body is PlayerBody player) player.BindPose();
 
                 Transform root = body.transform;
                 var json = new StringBuilder();
@@ -117,7 +136,7 @@ namespace BackRooms.EditorTools
         [MenuItem("BackRooms/Personagens/Atualizar modelos")]
         public static void UpdateModels()
         {
-            foreach (string name in new[] { "Capitao", "Entidade" }) Materials(name);
+            foreach (string name in new[] { "Capitao", "Entidade", "Traje" }) Materials(name);
             AssetDatabase.SaveAssets();
         }
 
@@ -136,6 +155,8 @@ namespace BackRooms.EditorTools
                 case "Madeira": return (0.2f, 0f);
                 case "Casco": return (0.72f, 0f);
                 case "Casca": return (0.12f, 0f);
+                // Traje de borracha do jogador: brilho de plástico molhado, como na foto da Tripo.
+                case "Traje": return (0.55f, 0f);
                 default: return (0.3f, 0f);
             }
         }

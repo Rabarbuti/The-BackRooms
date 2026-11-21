@@ -1,0 +1,16 @@
+{
+  "pivo": [
+    0.028,
+    -0.0516,
+    -0.1313
+  ],
+  "eixo": "x",
+  "alturaDaCaixa": 0.56,
+  "larguraDaCaixa": 0.5212,
+  "fundoDaCaixa": 0.1182,
+  "triangulos": {
+    "Caixa": 3259,
+    "Manivela": 6416
+  },
+  "origem": "emergency_exit_handle_3d_model_Clone1_Clone1.fbx"
+}

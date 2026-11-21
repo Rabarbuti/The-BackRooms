@@ -15,6 +15,14 @@ namespace BackRooms.World
         public Material switchBodyMaterial;
         [Tooltip("Lâmpada das peças do objetivo (sem luz; a cor vem de um MaterialPropertyBlock).")]
         public Material switchLampMaterial;
+        [Tooltip("Disjuntor da Tripo (ImportedModels.EnsureLever): a caixa, com o centro em Y = 0, o fundo em Z = 0 e a frente " +
+                 "para -Z. Vazio = a caixa de peças primitivas.")]
+        public Mesh switchBreakerBox;
+        [Tooltip("A alça do disjuntor da Tripo, com a origem no eixo de giro; girada 0° é desligada (pendurada).")]
+        public Mesh switchBreakerHandle;
+        public Material switchBreakerMaterial;
+        [Tooltip("Eixo de giro da alça, no espaço da caixa do modelo.")]
+        public Vector3 switchBreakerPivot;
         [Tooltip("Pilhas da lanterna espalhadas pelo chão (P0.3), com sorteio próprio.")]
         public bool batteriesEnabled;
 

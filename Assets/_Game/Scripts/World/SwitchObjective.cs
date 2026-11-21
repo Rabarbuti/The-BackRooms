@@ -111,6 +111,9 @@ namespace BackRooms.World
         {
             public Transform Root;
             public Transform Lever;
+            // Giro da alavanca em X (graus): desligada e armada.
+            public float LeverOff = -35f;
+            public float LeverOn = 35f;
             public Renderer Lamp;
             public AudioSource Hum;
             public AudioSource Voice;
@@ -121,6 +124,10 @@ namespace BackRooms.World
         }
 
         readonly List<Point> _points = new List<Point>();
+        // O disjuntor da Tripo (LevelBuilder.switchBreaker*); nulo = a caixa de peças primitivas.
+        Mesh _breakerBox, _breakerHandle;
+        Material _breakerMaterial;
+        Vector3 _breakerPivot;
         InputAction _use;
         MaterialPropertyBlock _block;
         AudioClip _humClip, _clickClip, _doneClip, _alarmClip;
@@ -167,6 +174,10 @@ namespace BackRooms.World
             Kind = kind;
             if (Application.isPlaying) Instance = this;
             LevelData data = level.Data;
+            _breakerBox = level.switchBreakerBox;
+            _breakerHandle = level.switchBreakerHandle;
+            _breakerMaterial = level.switchBreakerMaterial;
+            _breakerPivot = level.switchBreakerPivot;
             int count, spacing, fromStart;
             float height;
             switch (kind)
@@ -483,6 +494,12 @@ namespace BackRooms.World
                 }
                 default:
                 {
+                    if (_breakerBox != null && _breakerHandle != null && _breakerMaterial != null)
+                    {
+                        MountModeledBreaker(p, grey);
+                        break;
+                    }
+
                     // Caixa de disjuntor cinza, faixa amarela, a alavanca e a lâmpada em cima.
                     Box(root.transform, "Caixa", new Vector3(0f, 0f, 0.07f), new Vector3(0.44f, 0.6f, 0.14f), grey);
                     Box(root.transform, "Faixa", new Vector3(0f, 0.22f, 0.142f), new Vector3(0.36f, 0.06f, 0.004f), yellow);
@@ -512,6 +529,47 @@ namespace BackRooms.World
             SetLever(p, 0f);
             Paint(p, LampColor(p, 0.0, false));
             return p;
+        }
+
+        // O disjuntor da Tripo: caixa de ferro com alça de puxar. O modelo tem a frente para -Z e o
+        // ponto, para +Z: vai num filho girado meia volta. A caixa tem o colisor da própria malha; a
+        // alça (sem colisor, na lista do Level0ColliderCheck) gira em X de pendurada (desligado) a
+        // erguida (armado). O eletroduto e a lâmpada continuam peças primitivas.
+        void MountModeledBreaker(Point p, Material grey)
+        {
+            var model = new GameObject("Modelo").transform;
+            model.SetParent(p.Root, false);
+            model.localRotation = Quaternion.Euler(0f, 180f, 0f);
+
+            var shell = new GameObject("CaixaDoDisjuntor");
+            shell.transform.SetParent(model, false);
+            shell.AddComponent<MeshFilter>().sharedMesh = _breakerBox;
+            shell.AddComponent<MeshRenderer>().sharedMaterial = _breakerMaterial;
+            shell.AddComponent<MeshCollider>().sharedMesh = _breakerBox;
+
+            var pivot = new GameObject("EixoDaAlca").transform;
+            pivot.SetParent(model, false);
+            pivot.localPosition = _breakerPivot;
+            var handle = new GameObject("AlcaDoDisjuntor");
+            handle.transform.SetParent(pivot, false);
+            handle.AddComponent<MeshFilter>().sharedMesh = _breakerHandle;
+            handle.AddComponent<MeshRenderer>().sharedMaterial = _breakerMaterial;
+            p.Lever = pivot;
+            p.LeverOff = 0f;
+            p.LeverOn = 95f;
+
+            Bounds b = _breakerBox.bounds;
+            float top = b.max.y, front = -b.min.z;
+            Box(p.Root, "Conduite", new Vector3(0.12f, top + 0.65f, 0.04f), new Vector3(0.06f, 1.3f, 0.06f), grey);
+            // Na moldura, no canto de cima do lado oposto ao da alça.
+            p.Lamp = Box(p.Root, "Lampada", new Vector3(b.max.x - 0.05f, top - 0.045f, front + 0.012f),
+                         new Vector3(0.04f, 0.04f, 0.024f), null).GetComponent<Renderer>();
+        }
+
+        /// <summary>Para a prévia (fora do Play): põe a alavanca do ponto <paramref name="i"/> em t (0 desligado, 1 armado).</summary>
+        public void ShowLever(int i, float t)
+        {
+            if (i >= 0 && i < _points.Count) SetLever(_points[i], t);
         }
 
         static Transform Box(Transform parent, string name, Vector3 position, Vector3 size, Material material)
@@ -889,8 +947,9 @@ namespace BackRooms.World
         static void SetLever(Point p, float t)
         {
             if (p.Lever == null) return;
-            // Alavanca para cima (desligado) e para baixo (ligado); o puxador do alarme desce.
-            p.Lever.localRotation = Quaternion.Euler(Mathf.Lerp(-35f, 35f, t), 0f, 0f);
+            // Alavanca para cima (desligado) e para baixo (ligado); o puxador do alarme desce; a alça do
+            // disjuntor da Tripo sobe.
+            p.Lever.localRotation = Quaternion.Euler(Mathf.Lerp(p.LeverOff, p.LeverOn, t), 0f, 0f);
         }
 
         void Play(Point p, AudioClip clip, float volume)

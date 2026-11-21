@@ -63,7 +63,8 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   (passos sintetizados por superfície: carpete sem água na fase; nas Piscinas, azulejo seco, água
   rasa, nado à tona, debaixo d'água e um espirro ao cruzar a linha d'água depressa; dos outros
   jogadores, calculado aqui pela altura deles e a água local; `NoiseOf` dá o barulho de cada
-  superfície para um inimigo que ouça a água), `PlayerBody` (o traje que os outros veem) e
+  superfície para um inimigo que ouça a água), `PlayerBody` (o traje que os outros veem: o modelo da
+  Tripo vestido nas juntas, com as medidas dele; sem o modelo, a figura de código) e
   `ItemHand` (a mão em primeira pessoa).
 - `Scripts/Audio` — `ShopMusic` (música de loja do Level 1, que se cala antes do apagão, e o
   jingle do Capitão), `FluorescentHum` (zumbido das luminárias) e `MenuMusic` (música da tela
@@ -105,7 +106,9 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   `moveis_base.py` (biblioteca: peças, paleta, UV, exportação, conferência, foto rápida) e um
   script por lote em `lotes/` (`basicos`, `estofados`, `loja`, `detalhes`, `transito`). Os inimigos:
   `personagem_base.py` (escultura por SDF), `personagem_export.py` (do esculpido ao jogo) e
-  `personagens/` (`capitao.py`, `entidade.py`, `conferir_modelo.py`, `esqueleto_*.json`).
+  `personagens/` (`capitao.py`, `entidade.py`, `traje.py`, `conferir_modelo.py`, `esqueleto_*.json`,
+  `traje_medidas.json`). Os modelos da Tripo que não são móveis: `tripo/` (`alavanca.py`, o
+  disjuntor do Level 0; `traje_fonte.py`; ver `Docs/modelos-blender.md`, seção 10).
 - `Docs/` — `plano-coop.md` (estado atual e plano do jogo, arquitetura de rede; ler antes de
   mexer em rede ou em geração de fase), `historico.md` (registro cronológico de cada rodada),
   `level1-mostruario.md` (projeto do Level 1 e do Capitão), `level3-escritorio.md` (projeto do Level 3;
@@ -151,7 +154,13 @@ Level 1.
 
 Tudo em `Art/Personagens` é **gerado**: `<Nome>.bytes`, `_Cor.png` e `_Normal.png` pelos scripts de
 `Tools/Blender/personagens` com `--exportar`, e os materiais por `CharacterModels`. Os
-`esqueleto_*.json` de `Tools/Blender/personagens` são gravados pelo Unity (`CharacterModels`).
+`esqueleto_*.json` de `Tools/Blender/personagens` são gravados pelo Unity (`CharacterModels`); o
+`traje_medidas.json`, pelo `traje.py -- --medidas`.
+
+`Art/Fontes/Alavanca` (`Alavanca.glb` e `.json`, o disjuntor do Level 0) e `Art/Fontes/Traje`
+(`Traje.glb`) também são **gerados**, pelos scripts de `Tools/Blender/tripo` a partir da exportação
+da Tripo, que fica só na máquina de quem a fez (`Assets/TripoModels`, fora do Git). Para mudar,
+exporte de novo e rode o script; o `Level0Setup` assa o disjuntor em `Art/Level0` (`Alavanca_*`).
 
 A cena `Scenes/Level3_Test.unity` (O Escritório), os materiais e as texturas de `Art/Level3` (pintadas em
 código) e o perfil `Settings/Level3_Volume.asset` são **gerados** por `Level3Setup` (menu BackRooms >
@@ -258,6 +267,9 @@ velho. Mudança só de código não precisa. A cena do Level 1 não tem versão:
   como faz `DrawingBoard.SendAll`.
 
 ## Inimigos esculpidos
+
+O traje dos jogadores segue o mesmo caminho a partir do passo 1, mas a forma vem da Tripo e o
+esqueleto é que se ajusta a ela (`Docs/modelos-blender.md`, seção 10).
 
 Os dois inimigos são esculpidos por script no Blender (formas de distância com sinal: elipsoides,
 cápsulas, vincos cavados) e vestidos sobre as juntas que `EntityBody` e `CaptainBody` montam e

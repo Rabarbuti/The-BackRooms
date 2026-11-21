@@ -588,6 +588,30 @@ namespace BackRooms.EditorTools
             Vector3 near = builder.transform.TransformPoint(exitCenter + exitNormal * 1.5f + exitTangent * 0.9f);
             ShootPair(player, camera, torch, target, readback, folder, "saida_perto", near,
                       builder.transform.TransformPoint(exitCenter) - near);
+
+            ShootBreaker(builder, player, camera, torch, target, readback, folder);
+        }
+
+        // Um disjuntor do objetivo (SwitchObjective): de frente e de lado desligado, e de frente
+        // armado. Fora do Play o componente não roda: a foto mexe a alavanca à mão e desfaz.
+        static void ShootBreaker(LevelBuilder builder, Transform player, Camera camera, Light torch,
+                                 RenderTexture target, Texture2D readback, string folder)
+        {
+            SwitchObjective switches = builder.GetComponentInChildren<SwitchObjective>();
+            if (switches == null || switches.Count == 0) return;
+
+            Vector3 box = switches.PointPosition(0);
+            Vector3 outward = switches.PointFacing(0);
+            Vector3 side = Vector3.Cross(Vector3.up, outward);
+
+            ShootPair(player, camera, torch, target, readback, folder, "disjuntor", box + outward * 1.6f, -outward);
+            Vector3 near = box + outward * 0.9f + side * 0.9f;
+            ShootPair(player, camera, torch, target, readback, folder, "disjuntor_lado", near, box - near);
+
+            switches.ShowLever(0, 1f);
+            ShootPair(player, camera, torch, target, readback, folder, "disjuntor_armado", box + outward * 1.6f, -outward);
+            ShootPair(player, camera, torch, target, readback, folder, "disjuntor_armado_lado", near, box - near);
+            switches.ShowLever(0, 0f);
         }
 
         // Manchas que mudam o brilho (umidade na parede, carpete molhado) vistas de lado, onde
@@ -800,10 +824,8 @@ namespace BackRooms.EditorTools
 
             var figure = new GameObject("JogadorDaFoto");
             var body = figure.AddComponent<BackRooms.Player.PlayerBody>();
-            body.suitMaterial = source.suitMaterial;
-            body.rubberMaterial = source.rubberMaterial;
-            body.visorMaterial = source.visorMaterial;
-            body.gearMaterial = source.gearMaterial;
+            // Tudo do prefab: materiais e, se houver, o modelo do traje e as medidas dele.
+            EditorUtility.CopySerialized(source, body);
             body.Build();
 
             Vector3 look = (to - from).normalized;
@@ -822,6 +844,11 @@ namespace BackRooms.EditorTools
                 figure.transform.rotation = Quaternion.LookRotation(Quaternion.Euler(0f, -70f, 0f) * -look, Vector3.up);
                 body.Pose(0.15f, 1.2f, 1f, 15f, 0f, 1f, 1f);
                 ShootPair(player, camera, torch, target, readback, folder, "jogador_agachado", from, look);
+
+                // De perto (1,3 m), parado e de frente, para ver a textura e o visor.
+                figure.transform.rotation = Quaternion.LookRotation(Quaternion.Euler(0f, 20f, 0f) * -look, Vector3.up);
+                body.Pose(0.1f, 0f, 0f, 0f, 0f, 0f, 1f);
+                ShootPair(player, camera, torch, target, readback, folder, "jogador_perto", spot - look * 1.3f, look);
             }
             finally
             {
@@ -1016,6 +1043,11 @@ namespace BackRooms.EditorTools
 
         internal static void Shoot(Camera camera, RenderTexture target, Texture2D readback, string path)
         {
+            // Fora do Play a malha vestida (traje, entidade, Capitão) não se refaz sozinha com a pose
+            // nova: sem isto, toda foto sai na pose de encaixe.
+            foreach (SkinnedMeshRenderer skinned in UnityEngine.Object.FindObjectsByType<SkinnedMeshRenderer>(FindObjectsSortMode.None))
+                skinned.forceMatrixRecalculationPerRender = true;
+
             // Vários quadros para o antisserrilhamento temporal e a névoa estabilizarem.
             for (int i = 0; i < 16; i++) camera.Render();
 

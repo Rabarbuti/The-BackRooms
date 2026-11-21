@@ -10,6 +10,12 @@ namespace BackRooms.Player
     /// Também é animado em código: a passada sai do deslocamento do objeto, e o resto
     /// (agachar, inclinação da cabeça, item na mão, lanterna) chega por <see cref="SetState"/>,
     /// que o PlayerNetwork alimenta com o que veio pela rede. O dono não vê o próprio corpo.
+    ///
+    /// Com <see cref="model"/> (o traje da Tripo, ver Tools/Blender/personagens/traje.py), as
+    /// peças de código somem e o modelo é vestido nas mesmas juntas (<see cref="CharacterModel"/>),
+    /// na pose de encaixe (<see cref="BindPose"/>: tudo reto e os braços abertos
+    /// <see cref="bindArmSpread"/> graus e inclinados <see cref="bindArmForward"/> para a frente). As medidas da figura seguem as do modelo
+    /// (<see cref="thighLength"/> e as outras), postas pelo Level0Setup.
     /// </summary>
     public sealed class PlayerBody : MonoBehaviour
     {
@@ -23,9 +29,31 @@ namespace BackRooms.Player
         [Tooltip("Metros andados por ciclo completo de passada (dois passos).")]
         public float strideLength = 1.45f;
 
-        const float ThighLength = 0.44f;
-        const float ShinLength = 0.44f;
-        const float FootHeight = 0.06f;
+        [Header("Modelo (vazio = as peças feitas em código)")]
+        public TextAsset model;
+        [Tooltip("Materiais do modelo, um por parte (o nome termina com o nome da parte).")]
+        public Material[] modelMaterials;
+        [Tooltip("Na pose de encaixe do modelo, os braços abertos este tanto para os lados (graus).")]
+        public float bindArmSpread = 6f;
+        [Tooltip("Na pose de encaixe do modelo, os braços inclinados este tanto para a frente (graus).")]
+        public float bindArmForward;
+
+        [Header("Medidas (metros). O padrão é a figura de código; com modelo, as dele.")]
+        public float thighLength = 0.44f;
+        public float shinLength = 0.44f;
+        [Tooltip("Altura do tornozelo.")]
+        public float footHeight = 0.06f;
+        [Tooltip("Distância de cada quadril ao meio.")]
+        public float hipWidth = 0.105f;
+        [Tooltip("Da coluna (8 cm acima da bacia) aos ombros.")]
+        public float torsoLength = 0.44f;
+        [Tooltip("Distância de cada ombro ao meio.")]
+        public float shoulderWidth = 0.225f;
+        public float upperArmLength = 0.30f;
+        public float forearmLength = 0.27f;
+
+        /// <summary>Verdadeiro quando o corpo veste o modelo (sem as peças de código).</summary>
+        public bool Dressed { get; private set; }
 
         /// <summary>Verdadeiro se, pelo que chegou, este jogador está com um item na mão.</summary>
         public bool Holding => _holding;
@@ -182,7 +210,7 @@ namespace BackRooms.Player
             float legSwing = Mathf.Lerp(0f, 34f, run) * (1f - 0.5f * crouch) + Mathf.Clamp01(speed / 1.4f) * 10f * (1f - run);
 
             // A bacia fica na altura que deixa os pés no chão.
-            float hip = ThighLength * Mathf.Cos(thighBase * Mathf.Deg2Rad) + ShinLength * Mathf.Cos((kneeBase - thighBase) * Mathf.Deg2Rad) + FootHeight;
+            float hip = thighLength * Mathf.Cos(thighBase * Mathf.Deg2Rad) + shinLength * Mathf.Cos((kneeBase - thighBase) * Mathf.Deg2Rad) + footHeight;
             float bob = -Mathf.Abs(swing) * 0.035f * Mathf.Clamp01(speed / 2f);
             _pelvis.localPosition = new Vector3(0f, hip + bob, 0f);
             _rig.localRotation = Quaternion.Euler(0f, 0f, swing * 2f * run);
@@ -294,9 +322,9 @@ namespace BackRooms.Player
                 float side = i == 0 ? 1f : -1f;
                 string tag = i == 0 ? "D" : "E";
 
-                _thigh[i] = FigureKit.Joint(_pelvis, "Coxa_" + tag, new Vector3(side * 0.105f, 0f, 0f));
-                _shin[i] = FigureKit.Limb(_thigh[i], "Canela_" + tag, ThighLength, 0.098f, true, suit);
-                _foot[i] = FigureKit.Limb(_shin[i], "Pe_" + tag, ShinLength, 0.083f, true, suit);
+                _thigh[i] = FigureKit.Joint(_pelvis, "Coxa_" + tag, new Vector3(side * hipWidth, 0f, 0f));
+                _shin[i] = FigureKit.Limb(_thigh[i], "Canela_" + tag, thighLength, 0.098f, true, suit);
+                _foot[i] = FigureKit.Limb(_shin[i], "Pe_" + tag, shinLength, 0.083f, true, suit);
 
                 FigureKit.Ball(_foot[i], "Cano_Da_Bota_" + tag, new Vector3(0f, 0.10f, 0f), new Vector3(0.19f, 0.26f, 0.19f), rubber);
                 FigureKit.Ball(_foot[i], "Bota_" + tag, new Vector3(0f, -0.005f, 0.065f), new Vector3(0.135f, 0.11f, 0.30f), rubber);
@@ -304,7 +332,7 @@ namespace BackRooms.Player
 
             // Tronco.
             _spine = FigureKit.Joint(_pelvis, "Coluna", new Vector3(0f, 0.08f, 0f));
-            Transform shoulders = FigureKit.Limb(_spine, "Ombros", 0.44f, 0.165f, false, suit);
+            Transform shoulders = FigureKit.Limb(_spine, "Ombros", torsoLength, 0.165f, false, suit);
             FigureKit.Ball(_spine, "Peito", new Vector3(0f, 0.30f, 0.01f), new Vector3(0.44f, 0.40f, 0.31f), suit);
 
             // Cilindro de ar nas costas, com a válvula em cima.
@@ -334,9 +362,9 @@ namespace BackRooms.Player
                 string tag = i == 0 ? "D" : "E";
 
                 FigureKit.Ball(shoulders, "Ombro_Peca_" + tag, new Vector3(side * 0.205f, -0.03f, 0f), Vector3.one * 0.19f, suit);
-                _upperArm[i] = FigureKit.Joint(shoulders, "Braco_" + tag, new Vector3(side * 0.225f, -0.04f, 0f));
-                _forearm[i] = FigureKit.Limb(_upperArm[i], "Antebraco_" + tag, 0.30f, 0.073f, true, suit);
-                Transform hand = FigureKit.Limb(_forearm[i], "Mao_" + tag, 0.27f, 0.062f, true, suit);
+                _upperArm[i] = FigureKit.Joint(shoulders, "Braco_" + tag, new Vector3(side * shoulderWidth, -0.04f, 0f));
+                _forearm[i] = FigureKit.Limb(_upperArm[i], "Antebraco_" + tag, upperArmLength, 0.073f, true, suit);
+                Transform hand = FigureKit.Limb(_forearm[i], "Mao_" + tag, forearmLength, 0.062f, true, suit);
                 _hand[i] = hand;
 
                 FigureKit.Ball(hand, "Punho_" + tag, new Vector3(0f, 0.02f, 0f), new Vector3(0.14f, 0.07f, 0.14f), rubber);
@@ -363,7 +391,43 @@ namespace BackRooms.Player
                 }
             }
 
+            // Com modelo: só o esqueleto (e a caneta e a lanterna, que ficam na mão do modelo).
+            Dressed = model != null;
+            if (Dressed)
+            {
+                foreach (MeshRenderer piece in _rig.GetComponentsInChildren<MeshRenderer>(true))
+                    if (!piece.transform.IsChildOf(_grip[0]) && !piece.transform.IsChildOf(_grip[1])) piece.enabled = false;
+
+                BindPose();
+                CharacterModel.Attach(transform, model, modelMaterials);
+            }
+
             Pose(0f, 0f, 0f, 0f, 0f, 0f, 0f);
+        }
+
+        /// <summary>
+        /// A pose em que o modelo foi encaixado nas juntas: de pé, tudo reto, os braços abertos
+        /// <see cref="bindArmSpread"/> graus. Também é a pose em que o esqueleto vai para o
+        /// Blender (CharacterModels). Público para isso.
+        /// </summary>
+        public void BindPose()
+        {
+            if (!_built) Build();
+
+            _rig.localRotation = Quaternion.identity;
+            _pelvis.localPosition = new Vector3(0f, thighLength + shinLength + footHeight, 0f);
+            _spine.localRotation = Quaternion.identity;
+            _head.localRotation = Quaternion.identity;
+
+            for (int i = 0; i < 2; i++)
+            {
+                float side = i == 0 ? 1f : -1f;
+                _thigh[i].localRotation = Quaternion.identity;
+                _shin[i].localRotation = Quaternion.identity;
+                _foot[i].localRotation = Quaternion.identity;
+                _upperArm[i].localRotation = Quaternion.Euler(-bindArmForward, 0f, side * bindArmSpread);
+                _forearm[i].localRotation = Quaternion.identity;
+            }
         }
     }
 }
