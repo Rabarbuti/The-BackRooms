@@ -18,7 +18,7 @@ namespace BackRooms.Entities
     /// Quem decide é o host (<see cref="JanitorBrain.HostFlip"/>); o estado (hora de pronto de cada um)
     /// vai pela rede no cérebro do Zelador.
     /// </summary>
-    public sealed class LightSwitches : MonoBehaviour, ITaskSource
+    public sealed class LightSwitches : MonoBehaviour, ITaskSource, IAimSource
     {
         // Textos que o jogador lê (a língua do jogo é o inglês).
         const string FlipText = "E - LIGHTS ON";
@@ -30,7 +30,10 @@ namespace BackRooms.Entities
         const string TipKey = "TIP";
         const string TipText = "when the lights flicker, get out: he only walks in the dark";
 
-        const float MountHeight = 1.25f;
+        // O centro do espelho fica perto da altura dos olhos (1,65 m em pé): mira fácil, sem
+        // abaixar a vista. Onde a parede não deixa nessa altura, volta à altura antiga.
+        const float MountHeight = 1.42f;
+        const float OldMountHeight = 1.25f;
         static readonly Vector3 PlateSize = new Vector3(0.09f, 0.13f, 0.014f);
 
         public static LightSwitches Instance { get; private set; }
@@ -133,15 +136,21 @@ namespace BackRooms.Entities
                 }
 
                 bool sideFirst = rng.Next(2) == 0;
-                foreach (int i in order)
+                // Primeiro na altura nova, em todas as luminárias; sem lugar, na antiga (nenhum trecho
+                // perde o interruptor por causa da altura).
+                foreach (float height in new[] { MountHeight, OldMountHeight })
                 {
-                    if (lamps[i] == null) continue;
-                    Vector3 center = lamps[i].transform.position;
-                    center.y = root.position.y + MountHeight;
-                    Vector3 local = root.InverseTransformPoint(center);
-                    int cx = Mathf.FloorToInt(local.x / LevelBuilder.Cell), cz = Mathf.FloorToInt(local.z / LevelBuilder.Cell);
-                    if (TryMount(r, center, sideFirst ? across : -across, axis, root, level.Data, cx, cz, plate, dark) ||
-                        TryMount(r, center, sideFirst ? -across : across, axis, root, level.Data, cx, cz, plate, dark)) break;
+                    foreach (int i in order)
+                    {
+                        if (lamps[i] == null) continue;
+                        Vector3 center = lamps[i].transform.position;
+                        center.y = root.position.y + height;
+                        Vector3 local = root.InverseTransformPoint(center);
+                        int cx = Mathf.FloorToInt(local.x / LevelBuilder.Cell), cz = Mathf.FloorToInt(local.z / LevelBuilder.Cell);
+                        if (TryMount(r, center, sideFirst ? across : -across, axis, root, level.Data, cx, cz, plate, dark) ||
+                            TryMount(r, center, sideFirst ? -across : across, axis, root, level.Data, cx, cz, plate, dark)) break;
+                    }
+                    if (_byRun[r] != null) break;
                 }
             }
         }
@@ -281,13 +290,18 @@ namespace BackRooms.Entities
         {
             Instance = this;
             _use?.Enable();
-            if (Application.isPlaying) LevelTasks.Register(this);
+            if (Application.isPlaying)
+            {
+                LevelTasks.Register(this);
+                InteractAim.Register(this);
+            }
         }
 
         void OnDisable()
         {
             _use?.Disable();
             LevelTasks.Unregister(this);
+            InteractAim.Unregister(this);
             if (Instance == this)
             {
                 Instance = null;
@@ -315,7 +329,7 @@ namespace BackRooms.Entities
             }
 
             PlayerNetwork local = PlayerNetwork.Local;
-            Aimed = local != null && local.InGame ? Aim(local) : -1;
+            Aimed = local != null && local.InGame ? InteractAim.Winner(this) : -1;
             Prompt = Aimed >= 0 ? PromptFor(Aimed, brain, t, alarm) : null;
 
             bool pressed = PressForTest || (_use != null && _use.WasPressedThisFrame());
@@ -334,26 +348,21 @@ namespace BackRooms.Entities
             return FlipText;
         }
 
-        // O interruptor na mira do jogador, ignorando o próprio jogador (o padrão de PenTool.TryAim).
-        int Aim(PlayerNetwork local)
+        // O interruptor mais perto do centro da mira (mira comum: InteractAim).
+        public bool AimCandidate(in InteractAim.View view, out int index, out float score)
         {
-            Camera camera = local.playerCamera;
-            if (camera == null) return -1;
-            Transform eye = camera.transform;
-            int count = Physics.RaycastNonAlloc(eye.position, eye.forward, Hits, reach, ~0, QueryTriggerInteraction.Ignore);
-            Transform self = local.transform.root;
-            float best = float.MaxValue;
-            Collider nearest = null;
-            for (int i = 0; i < count; i++)
-            {
-                if (Hits[i].collider.transform.root == self || Hits[i].distance >= best) continue;
-                best = Hits[i].distance;
-                nearest = Hits[i].collider;
-            }
-            if (nearest == null) return -1;
+            index = -1;
+            score = float.PositiveInfinity;
             for (int r = 0; r < _byRun.Length; r++)
-                if (_byRun[r] != null && _byRun[r].Collider == nearest) return r;
-            return -1;
+            {
+                Switch s = _byRun[r];
+                if (s == null) continue;
+                float sc = InteractAim.Score(view, s.Root, s.Root.position, reach);
+                if (sc >= score) continue;
+                score = sc;
+                index = r;
+            }
+            return index >= 0;
         }
 
         /// <summary>Em todas as máquinas: o interruptor do trecho foi usado. Estalo alto e barulho no mundo.</summary>

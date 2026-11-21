@@ -119,13 +119,13 @@ namespace BackRooms.World
         public bool Interact()
         {
             // Trancada: a maçaneta chacoalha (o painel diz o que falta).
-            if (!LocalWaiting && LocalInReach && Locked && ExitLock.Prompt == null && SwitchObjective.Prompt == null && BatteryPickups.Prompt == null)
+            if (!LocalWaiting && LocalInReach && Locked && !InteractAim.Any && ExitLock.Prompt == null && SwitchObjective.Prompt == null && BatteryPickups.Prompt == null)
             {
                 Rattles++;
                 if (_audio != null && _rattle != null) _audio.PlayOneShot(_rattle, 0.9f);
             }
             if (LocalWaiting) LocalWaiting = false;
-            else if (LocalInReach && !Locked && ExitLock.Prompt == null && SwitchObjective.Prompt == null && BatteryPickups.Prompt == null) LocalWaiting = true;
+            else if (LocalInReach && !Locked && !InteractAim.Any && ExitLock.Prompt == null && SwitchObjective.Prompt == null && BatteryPickups.Prompt == null) LocalWaiting = true;
             return LocalWaiting;
         }
 

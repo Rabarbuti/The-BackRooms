@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BackRooms.Net;
+using BackRooms.Player;
 using BackRooms.UI;
 using Unity.Collections;
 using Unity.Netcode;
@@ -61,7 +62,7 @@ namespace BackRooms.World
     ///   <see cref="LevelExit"/>); a filmadora mostra <see cref="Prompt"/>, <see cref="LockedText"/> e
     ///   <see cref="Footer"/>.
     /// </summary>
-    public sealed class SwitchObjective : MonoBehaviour, ITaskSource
+    public sealed class SwitchObjective : MonoBehaviour, ITaskSource, IAimSource
     {
         // ---------------------------------------------------------------- Textos do menu de pausa
         // Tudo o que o jogador lê nas tarefas e nos cartazes (a língua do jogo é o inglês).
@@ -73,6 +74,8 @@ namespace BackRooms.World
         const string ValveWhereSwim = "{0} valves: one on dry ground, one only reached by swimming across deep water";
         const string ValveWhereWell = "{0} valves: one on dry ground, one at the bottom of a well (dive)";
         const string AlarmWhere = "{0} red fire alarm pulls on the walls";
+        const string AlarmWhereRooms = "Pull all {0} red fire alarms. Each one is inside a different room, out of sight from the door: step in and look around (they blink red and hum).";
+        const string AlarmWhereRoomsSeen = "Pull all {0} red fire alarms. Each one is inside a different room: step in and look around (they blink red and hum).";
         const string AnyOf = ", any {0} will do.";
         const string BothNeeded = ": you need both.";
         const string AllNeeded = ": you need all {0}.";
@@ -95,7 +98,9 @@ namespace BackRooms.World
         // Cartaz de dicas da sala inicial (PixelFont: só A-Z, 0-9 e : . , / - = ( ); até 21 letras, 5 linhas).
         static readonly string[] BreakerTips = { "TIPS", "FOLLOW THE HUM", "NEVER RUN NEAR IT", "THIS ROOM IS SAFE", "ESC: TASKS" };
         static readonly string[] ValveTips = { "TIPS", "MARK THE SHALLOWS", "STAY OFF THE DRAINS", "HOLD SPACE TO FLOAT", "ESC: TASKS" };
-        static readonly string[] AlarmTips = { "TIPS", "HIDE IN A SMALL ROOM", "WITH THE LIGHT ON", "CROUCH TO STAY QUIET", "ESC: TASKS" };
+        static readonly string[] AlarmTips = { "TIPS", "3 ALARMS, IN ROOMS", "HIDE IN A SMALL ROOM", "WITH THE LIGHT ON", "ESC: TASKS" };
+        // Sem três salas que sirvam, os alarmes voltam aos corredores e o cartaz é o antigo.
+        static readonly string[] AlarmTipsCorridor = { "TIPS", "HIDE IN A SMALL ROOM", "WITH THE LIGHT ON", "CROUCH TO STAY QUIET", "ESC: TASKS" };
 
         /// <summary>O objetivo da fase aberta; nulo onde a fase não tem (Level 1 usa o <see cref="ExitLock"/>).</summary>
         public static SwitchObjective Instance { get; private set; }
@@ -151,6 +156,20 @@ namespace BackRooms.World
         /// <summary>Altura do centro da peça acima do piso da célula, em metros.</summary>
         public float MountHeight { get; private set; } = 1.35f;
 
+        /// <summary>
+        /// Disjuntores e alarmes: o centro da peça sobe até perto dos olhos (1,65 m em pé), mais fácil
+        /// de mirar. A parede continua escolhida na altura antiga (o sorteio de lugar não muda); só sobe
+        /// se a parede segue lisa lá em cima (<see cref="Lift"/>).
+        /// </summary>
+        const float AimHeight = 1.45f;
+        /// <summary>A válvula do seco sobe de 1,1 m para esta altura (o cano desce até o chão).</summary>
+        const float DryValveHeight = 1.35f;
+
+        /// <summary>Os alarmes do Escritório ficaram todos dentro de salas (o texto das tarefas diz isso).</summary>
+        public bool AlarmsInRooms { get; private set; }
+        /// <summary>E nenhum deles se vê da porta nem pelo vidro (senão o texto não promete isso).</summary>
+        public bool AlarmsHidden { get; private set; }
+
         /// <summary>Quantas vezes o host armou um ponto (testes).</summary>
         public int Arms { get; private set; }
 
@@ -177,7 +196,6 @@ namespace BackRooms.World
         /// <summary>Onde ficou a segunda válvula (só nas Piscinas; Dry se ficaram as duas no seco).</summary>
         public WaterValveSpot WaterSpot { get; private set; } = WaterValveSpot.Dry;
 
-        static readonly RaycastHit[] Hits = new RaycastHit[16];
         static readonly WallSide[] Sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
         static readonly int UnlitColorId = Shader.PropertyToID("_UnlitColor");
 
@@ -227,11 +245,16 @@ namespace BackRooms.World
             _use.AddBinding("<Gamepad>/buttonWest");
         }
 
-        void OnEnable() => _use?.Enable();
+        void OnEnable()
+        {
+            _use?.Enable();
+            if (Application.isPlaying) InteractAim.Register(this);
+        }
 
         void OnDisable()
         {
             _use?.Disable();
+            InteractAim.Unregister(this);
             Prompt = null;
             LocalWorking = false;
         }
@@ -268,8 +291,9 @@ namespace BackRooms.World
                     HoldSeconds = 6f; WindowSeconds = 5f;
                     break;
                 case SwitchKind.FireAlarm:
+                    // Os três valem (RequiredFor); em grupo, a janela tem de dar para três salas longe.
                     count = 3; spacing = 6; fromStart = 4; height = 1.35f;
-                    HoldSeconds = 2f; WindowSeconds = 8f;
+                    HoldSeconds = 2f; WindowSeconds = 20f;
                     break;
                 default:
                     count = 4; spacing = 9; fromStart = 5; height = 1.35f;
@@ -289,8 +313,11 @@ namespace BackRooms.World
                 for (int i = 0; i < spots.Count; i++)
                 {
                     Spot s = spots[i];
+                    // A do seco sobe para perto dos olhos (a parede foi escolhida a 1,1 m, como antes).
+                    if (s.Kind == "seco") s.Point = Lift(s.Point, s.Normal, DryValveHeight - height);
                     Point p = Mount(i, s.X, s.Z, s.Point, s.Normal, bodyTemplate, lampTemplate);
                     p.Floor = level.CellCenter(s.X, s.Z).y;
+                    if (s.Kind == "seco") PipeToFloor(p);
                     p.InWater = s.InWater;
                     p.Swim = s.Swim;
                     p.Spot = s.Kind;
@@ -306,6 +333,36 @@ namespace BackRooms.World
                 }
                 FinishPlace(level, kind, count, bodyTemplate);
                 return;
+            }
+
+            // O Escritório: os alarmes dentro de salas, fora da vista da porta (ver ChooseAlarms). Se a
+            // planta não der três, volta aos corredores, como até 21/11/2026.
+            AlarmsInRooms = false;
+            AlarmsHidden = false;
+            if (kind == SwitchKind.FireAlarm && data.HasOffice)
+            {
+                List<Spot> alarms = ChooseAlarms(level, data, start, count, spacing, out bool allHidden);
+                if (alarms.Count >= count)
+                {
+                    BuildClips();
+                    var where = new List<string>();
+                    for (int i = 0; i < alarms.Count; i++)
+                    {
+                        Spot s = alarms[i];
+                        Point p = Mount(i, s.X, s.Z, s.Point, s.Normal, bodyTemplate, lampTemplate);
+                        p.Floor = level.CellCenter(s.X, s.Z).y;
+                        p.Spot = s.Kind;
+                        _points.Add(p);
+                        where.Add($"{s.Kind} ({s.X},{s.Z})");
+                    }
+                    AlarmsInRooms = true;
+                    AlarmsHidden = allHidden;
+                    if (Application.isPlaying || Application.isBatchMode)
+                        Debug.Log($"[BackRooms] Alarmes da seed {level.seed}" + (allHidden ? "" : " (algum à vista da porta)") + $": {string.Join("; ", where)}");
+                    FinishPlace(level, kind, count, bodyTemplate);
+                    return;
+                }
+                Debug.LogWarning($"[BackRooms] Alarmes: a seed {level.seed} não tem {count} salas que sirvam; ficam nos corredores.");
             }
 
             // Candidatas em ordem fixa (z, x, lado): célula boa, parede lisa e livre na frente.
@@ -348,7 +405,9 @@ namespace BackRooms.World
             BuildClips();
             for (int i = 0; i < chosen.Count; i++)
             {
-                Point p = Mount(i, chosen[i].x, chosen[i].z, chosen[i].point, chosen[i].normal, bodyTemplate, lampTemplate);
+                // Disjuntores (e alarmes de corredor) sobem para perto dos olhos; a parede é a mesma.
+                Vector3 at = Lift(chosen[i].point, chosen[i].normal, AimHeight - height);
+                Point p = Mount(i, chosen[i].x, chosen[i].z, at, chosen[i].normal, bodyTemplate, lampTemplate);
                 p.Floor = level.CellCenter(chosen[i].x, chosen[i].z).y;
                 _points.Add(p);
             }
@@ -360,7 +419,7 @@ namespace BackRooms.World
             if (_points.Count < count)
                 Debug.LogWarning($"[BackRooms] Objetivo ({kind}): só {_points.Count} de {count} pontos couberam na seed {level.seed}.");
 
-            Required = Mathf.Min(2, _points.Count);
+            Required = RequiredFor(1);
             if (Pending.ArmedAt != null) Apply(Pending);
             PinNote(level, bodyTemplate);
         }
@@ -375,7 +434,7 @@ namespace BackRooms.World
             switch (Kind)
             {
                 case SwitchKind.Valve: return ValveTips;
-                case SwitchKind.FireAlarm: return AlarmTips;
+                case SwitchKind.FireAlarm: return AlarmsInRooms ? AlarmTips : AlarmTipsCorridor;
                 default: return BreakerTips;
             }
         }
@@ -599,6 +658,208 @@ namespace BackRooms.World
         }
 
         static bool IsPlayer(Collider c) => c != null && c.GetComponentInParent<PlayerNetwork>() != null;
+
+        // ---------------------------------------------------------------- Montagem: altura da mira
+
+        // A peça sobe <paramref name="lift"/> metros na mesma parede se ela continua lisa lá em cima (o
+        // meio e o alto da peça); senão fica onde estava. Só geometria fixa (WallRay ignora jogadores).
+        static Vector3 Lift(Vector3 point, Vector3 normal, float lift)
+        {
+            if (lift <= 0.001f) return point;
+            Vector3 up = point + Vector3.up * lift;
+            foreach (float dy in new[] { 0f, 0.3f })
+            {
+                if (!WallRay(up + Vector3.up * dy + normal * 0.3f, -normal, 0.45f, out RaycastHit hit)) return point;
+                if (Mathf.Abs(hit.distance - 0.3f) > 0.03f || Vector3.Dot(hit.normal, normal) < 0.97f) return point;
+            }
+            return up;
+        }
+
+        // O cano da válvula do seco desce da peça até o chão (com a válvula mais alta, não fica no ar).
+        static void PipeToFloor(Point p)
+        {
+            Transform pipe = p.Root.Find("CanoParede");
+            if (pipe == null) return;
+            float below = p.Root.position.y - p.Floor;
+            if (below < 0.3f) return;
+            float bottom = -(below - 0.02f), top = -0.1f;
+            Vector3 local = pipe.localPosition;
+            pipe.localPosition = new Vector3(local.x, (bottom + top) * 0.5f, local.z);
+            Vector3 size = pipe.localScale;
+            pipe.localScale = new Vector3(size.x, top - bottom, size.z);
+        }
+
+        // ---------------------------------------------------------------- Montagem: os alarmes do Escritório
+
+        // Distância mínima, em passos de célula, da cabine de chegada e da boca da escada.
+        const int AlarmFromCab = 5;
+        const int AlarmFromStairs = 4;
+        // Altura dos olhos de quem olha da porta (e de dentro da sala).
+        const float AlarmEyeHeight = 1.6f;
+
+        /// <summary>
+        /// Os acionadores do Escritório (pedido de 21/11/2026: estavam à vista nos corredores): cada um
+        /// dentro de uma sala diferente (de aula, de reunião, pequena ou a cafeteria; nunca a área de
+        /// estar, aberta), numa parede lisa e livre que <b>não se vê de fora</b> (nem pela porta, nem
+        /// pelo vão aberto, nem pelo vidro fosco, onde a luz vermelha piscando apareceria), mas que se vê
+        /// do meio da própria célula (quem entra e olha em volta acha). Longe da cabine de chegada e da
+        /// escada e longe uns dos outros (passos andando, como os outros pontos).
+        ///
+        /// Faixas, da melhor para a pior, até achar três: escondida e longe; escondida e perto; à vista
+        /// da porta. Mesmo sorteio próprio e só geometria fixa: igual em todas as máquinas e o hash da
+        /// planta não muda.
+        /// </summary>
+        List<Spot> ChooseAlarms(LevelBuilder level, LevelData d, int[,] start, int count, int spacing, out bool allHidden)
+        {
+            allHidden = true;
+            var rng = new System.Random(level.seed ^ 0x46495245); // "FIRE"
+            int[,] stairs = Distances(d, Mathf.Clamp(d.Atrium.HeadX, 0, d.Width - 1), Mathf.Clamp(d.Atrium.HeadZ, 0, d.Height - 1));
+            Transform root = level.transform;
+
+            // Visibilidade calculada uma vez por sala: de onde se olha para dentro dela.
+            var views = new Dictionary<int, RoomViews>();
+            var tiers = new[] { new List<Spot>(), new List<Spot>(), new List<Spot>() };
+            var tierRoom = new[] { new List<int>(), new List<int>(), new List<int>() };
+
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                {
+                    int room = d.OfficeRoomOf[x, z];
+                    if (room < 0 || room >= d.OfficeRooms.Count) continue;
+                    OfficeCell kind = d.OfficeRooms[room].Kind;
+                    if (kind != OfficeCell.Classroom && kind != OfficeCell.Small && kind != OfficeCell.Cafe) continue;
+                    if (d.InRoom(x, z) || start[x, z] < 4) continue;
+                    bool far = start[x, z] >= AlarmFromCab && (stairs[x, z] < 0 || stairs[x, z] >= AlarmFromStairs);
+
+                    if (!views.TryGetValue(room, out RoomViews rv)) views[room] = rv = RoomViewsOf(level, d, room);
+
+                    for (int side = 0; side < 4; side++)
+                    {
+                        if (!FindFace(level, d, x, z, Sides[side], AimHeight, out Vector3 point, out Vector3 normal)) continue;
+                        Vector3 target = point + normal * 0.08f;
+                        // De dentro: o meio da célula, na altura dos olhos, vê a peça.
+                        Vector3 inside = level.CellCenter(x, z) + Vector3.up * AlarmEyeHeight;
+                        if (!Sees(inside, target, root, null)) continue;
+                        bool hidden = true;
+                        foreach (Vector3 from in rv.Outside)
+                            if (Sees(from, target, root, rv.Glass)) { hidden = false; break; }
+
+                        int tier = hidden ? (far ? 0 : 1) : 2;
+                        string name = kind == OfficeCell.Classroom ? "sala grande" : kind == OfficeCell.Small ? "sala pequena" : "cafeteria";
+                        tiers[tier].Add(new Spot { X = x, Z = z, Point = point, Normal = normal, Kind = name + (hidden ? "" : " (à vista)") });
+                        tierRoom[tier].Add(room);
+                    }
+                }
+
+            // Sorteio: das melhores faixas primeiro, uma sala por alarme, longe uns dos outros.
+            var chosen = new List<Spot>();
+            for (int gap = spacing; gap >= 2 && chosen.Count < count; gap--)
+            {
+                chosen.Clear();
+                var rooms = new List<int>();
+                var reach = new List<int[,]>();
+                for (int t = 0; t < tiers.Length && chosen.Count < count; t++)
+                {
+                    var pool = new List<int>();
+                    for (int i = 0; i < tiers[t].Count; i++) pool.Add(i);
+                    while (chosen.Count < count && pool.Count > 0)
+                    {
+                        int k = rng.Next(pool.Count);
+                        int pick = pool[k];
+                        pool.RemoveAt(k);
+                        Spot c = tiers[t][pick];
+                        if (rooms.Contains(tierRoom[t][pick])) continue;
+                        bool apart = true;
+                        foreach (int[,] other in reach)
+                            if (other[c.X, c.Z] >= 0 && other[c.X, c.Z] < gap) apart = false;
+                        if (!apart) continue;
+                        chosen.Add(c);
+                        rooms.Add(tierRoom[t][pick]);
+                        reach.Add(Distances(d, c.X, c.Z));
+                        if (t == 2) allHidden = false;
+                    }
+                }
+            }
+            return chosen;
+        }
+
+        // De onde se olha para dentro de uma sala sem entrar: pontos do lado de fora de cada vão
+        // (porta, porta de vidro, divisa aberta) e de cada vidro fosco, e os planos dos vidros (o raio
+        // atravessa o vidro: a luz vermelha piscando apareceria por ele).
+        sealed class RoomViews
+        {
+            public readonly List<Vector3> Outside = new List<Vector3>();
+            public readonly List<(Vector3 center, Vector3 across, Vector3 along)> Glass = new List<(Vector3, Vector3, Vector3)>();
+        }
+
+        static RoomViews RoomViewsOf(LevelBuilder level, LevelData d, int room)
+        {
+            var views = new RoomViews();
+            OfficeRoom r = d.OfficeRooms[room];
+            for (int z = r.Z0; z < r.Z0 + r.Height; z++)
+                for (int x = r.X0; x < r.X0 + r.Width; x++)
+                    foreach (WallSide side in Sides)
+                    {
+                        if (!d.Neighbor(x, z, side, out int nx, out int nz) || d.OfficeRoomOf[nx, nz] == room) continue;
+                        OfficeEdge edge = d.OfficeEdgeAt(x, z, side);
+                        bool glass = edge == OfficeEdge.Glass || edge == OfficeEdge.GlassDoor;
+                        if (!glass && edge != OfficeEdge.Door && edge != OfficeEdge.Open) continue;
+
+                        Vector3 outward = level.transform.TransformDirection(SideDirection(side));
+                        Vector3 along = Vector3.Cross(Vector3.up, outward).normalized;
+                        Vector3 edgeCenter = level.CellCenter(x, z) + outward * (LevelBuilder.Cell * 0.5f);
+                        if (glass) views.Glass.Add((edgeCenter, outward, along));
+                        float floor = level.CellCenter(nx, nz).y;
+                        foreach (float depth in new[] { 0.5f, 1.6f })
+                            foreach (float lateral in new[] { -1.4f, -0.7f, 0f, 0.7f, 1.4f })
+                            {
+                                Vector3 at = edgeCenter + outward * depth + along * lateral;
+                                views.Outside.Add(new Vector3(at.x, floor + AlarmEyeHeight, at.z));
+                            }
+                    }
+            return views;
+        }
+
+        static readonly RaycastHit[] SightHits = new RaycastHit[24];
+
+        // Visada de <paramref name="from"/> até <paramref name="to"/> pela geometria fixa da fase (o que
+        // se mexe ou some não conta, como nos interruptores); batida rente a um dos vidros não para.
+        static bool Sees(Vector3 from, Vector3 to, Transform root, List<(Vector3 center, Vector3 across, Vector3 along)> glass)
+        {
+            Vector3 line = to - from;
+            float distance = line.magnitude;
+            if (distance < 0.05f) return true;
+            int n = Physics.RaycastNonAlloc(from, line / distance, SightHits, distance - 0.02f, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < n; i++)
+            {
+                if (!FixedForSight(SightHits[i].collider, root)) continue;
+                bool throughGlass = false;
+                if (glass != null)
+                    foreach (var g in glass)
+                    {
+                        Vector3 off = SightHits[i].point - g.center;
+                        if (Mathf.Abs(Vector3.Dot(off, g.across)) < 0.15f && Mathf.Abs(Vector3.Dot(off, g.along)) <= LevelBuilder.Cell * 0.5f + 0.05f)
+                        {
+                            throughGlass = true;
+                            break;
+                        }
+                    }
+                if (!throughGlass) return false;
+            }
+            return true;
+        }
+
+        // Geometria fixa da fase: filho do nível, sem corpo rígido, fora do que se mexe ou some.
+        static bool FixedForSight(Collider c, Transform root)
+        {
+            if (c == null || c.attachedRigidbody != null || !c.transform.IsChildOf(root) || IsPlayer(c)) return false;
+            for (Transform t = c.transform; t != null && t != root; t = t.parent)
+            {
+                if (t.name == "Elevadores" || t.name == "Interruptores" || t.name.StartsWith("Pilhas")) return false;
+                if (t.GetComponent<LockerDoor>() != null || t.GetComponent<ElevatorDoors>() != null || t.GetComponent<BatteryPickups>() != null) return false;
+            }
+            return true;
+        }
 
         // ---------------------------------------------------------------- Montagem: as válvulas das Piscinas
 
@@ -1098,7 +1359,7 @@ namespace BackRooms.World
                 return;
             }
 
-            int aimed = Aimed(local);
+            int aimed = InteractAim.Winner(this);
             bool holding = (_use.IsPressed() && !InputGate.Blocked) || HoldForTest;
             if (aimed < 0)
             {
@@ -1153,27 +1414,25 @@ namespace BackRooms.World
             LocalWorking = working;
         }
 
-        int Aimed(PlayerNetwork local)
+        // O ponto mais perto do centro da mira (mira comum: InteractAim). O meio da peça: a roda da
+        // válvula fica 42 cm à frente da parede; as caixas, uns 6 cm.
+        public bool AimCandidate(in InteractAim.View view, out int index, out float score)
         {
-            Camera camera = local.playerCamera;
-            if (camera == null) return -1;
-            Transform eye = camera.transform;
-            int count = Physics.RaycastNonAlloc(eye.position, eye.forward, Hits, reach, ~0, QueryTriggerInteraction.Ignore);
-            Transform self = local.transform.root;
-            float best = float.MaxValue;
-            Collider nearest = null;
-            for (int i = 0; i < count; i++)
+            index = -1;
+            score = float.PositiveInfinity;
+            PlayerController body = view.Local != null ? view.Local.controller : null;
+            if (body == null || body.IsReturning || body.InFurniture) return false;
+            float depth = Kind == SwitchKind.Valve ? 0.42f : 0.06f;
+            for (int i = 0; i < _points.Count; i++)
             {
-                if (Hits[i].collider.transform.root == self || Hits[i].distance >= best) continue;
-                best = Hits[i].distance;
-                nearest = Hits[i].collider;
+                Transform root = _points[i].Root;
+                if (root == null) continue;
+                float sc = InteractAim.Score(view, root, root.position + root.forward * depth, reach);
+                if (sc >= score) continue;
+                score = sc;
+                index = i;
             }
-            if (nearest == null) return -1;
-            for (Transform t = nearest.transform; t != null && t != transform; t = t.parent)
-                if (t.parent == transform)
-                    for (int i = 0; i < _points.Count; i++)
-                        if (_points[i].Root == t) return i;
-            return -1;
+            return index >= 0;
         }
 
         void RequestArm(int index)
@@ -1227,7 +1486,7 @@ namespace BackRooms.World
             if (Complete) return;
             Complete = true;
             CompletedAt = Now;
-            Required = Mathf.Min(2, _points.Count);
+            Required = RequiredFor(1);
             GameSession.Instance?.BroadcastSwitchState();
         }
 
@@ -1310,8 +1569,11 @@ namespace BackRooms.World
             }
         }
 
-        /// <summary>Quantos pontos têm de valer juntos com <paramref name="players"/> jogadores: 2 com até dois, 3 com três ou quatro.</summary>
-        public int RequiredFor(int players) => Mathf.Min(_points.Count, players >= 3 ? 3 : 2);
+        /// <summary>
+        /// Quantos pontos têm de valer juntos com <paramref name="players"/> jogadores: 2 com até dois, 3
+        /// com três ou quatro. No Escritório (alarmes), todos, também sozinho (pedido de 21/11/2026).
+        /// </summary>
+        public int RequiredFor(int players) => Kind == SwitchKind.FireAlarm ? _points.Count : Mathf.Min(_points.Count, players >= 3 ? 3 : 2);
 
         // Quantos jogadores contam agora, visto desta máquina (o mesmo que o host usa ao armar).
         static int PlayersNow => PlayersForTest > 0 ? PlayersForTest : LevelTasks.PlayerCount;
@@ -1328,8 +1590,9 @@ namespace BackRooms.World
 
             // Como armar e o prazo: sozinho não há janela; em grupo, o segundo (ou todos) dentro dela.
             string valveWhere = WaterSpot == WaterValveSpot.AcrossWater ? ValveWhereSwim : WaterSpot == WaterValveSpot.WellBottom ? ValveWhereWell : ValveWhere;
-            string where = string.Format(Kind == SwitchKind.Valve ? valveWhere : Kind == SwitchKind.FireAlarm ? AlarmWhere : BreakerWhere, _points.Count)
-                         + (_points.Count > required ? string.Format(AnyOf, required) : required == 2 ? BothNeeded : string.Format(AllNeeded, required));
+            string where = Kind == SwitchKind.FireAlarm && AlarmsInRooms ? string.Format(AlarmsHidden ? AlarmWhereRooms : AlarmWhereRoomsSeen, _points.Count)
+                         : string.Format(Kind == SwitchKind.Valve ? valveWhere : Kind == SwitchKind.FireAlarm ? AlarmWhere : BreakerWhere, _points.Count)
+                           + (_points.Count > required ? string.Format(AnyOf, required) : required == 2 ? BothNeeded : string.Format(AllNeeded, required));
             string rule = players <= 1 ? SoloRule
                 : required <= 2 ? string.Format(PairRule, players, WindowSeconds.ToString("0"))
                 : string.Format(GroupRule, players, required, WindowSeconds.ToString("0"));

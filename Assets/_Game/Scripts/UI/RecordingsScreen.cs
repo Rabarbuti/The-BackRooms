@@ -24,7 +24,7 @@ namespace BackRooms.UI
         public const string ButtonText = "Recordings";
         const string TitleText = "RECORDINGS";
         const string FolderLabel = "Saved in ";
-        const string EmptyText = "No recordings yet.\nPress F9 while playing to start recording, and F9 again to stop.\nThe clip shows up here.";
+        const string EmptyText = "No recordings yet.\nPress R while playing to start recording, and again to stop.\nThe clip shows up here.";
         const string PlayText = "Play";
         const string DeleteText = "Delete";
         const string ConfirmText = "Delete this clip?";

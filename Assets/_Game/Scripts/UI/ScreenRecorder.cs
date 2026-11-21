@@ -82,7 +82,9 @@ namespace BackRooms.UI
         {
             Instance = this;
             _onReadback = OnReadback;
-            _toggle = new InputAction("Gravar", InputActionType.Button, "<Keyboard>/f9");
+            // R no lugar do F9 (21/11/2026): na máquina do usuário o F9 sozinho não chegava ao jogo
+            // (só com Alt), tomado por algo de fora; o R não tem outro uso.
+            _toggle = new InputAction("Gravar", InputActionType.Button, "<Keyboard>/r");
         }
 
         void OnEnable() { _toggle.Enable(); }

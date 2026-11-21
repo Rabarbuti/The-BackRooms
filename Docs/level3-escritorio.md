@@ -12,7 +12,9 @@ Level 3 (teste)), na lista de fases depois das Piscinas (a porta do Level 2 leva
   poço) no miolo; salas de aula e salas pequenas no resto do miolo e na faixa da fachada; cafeteria
   perto do saguão, área de estar e o vão da escada (3 células, longe do saguão) na faixa da fachada.
   Regras da seção 2.3 no `Validate` (tudo alcançável da cabine, toda sala com porta para o corredor,
-  caminho de 10 células ou mais, vão a 6 células ou mais do saguão); reprovou, sorteia de novo.
+  caminho de 10 células ou mais, vão a 6 células ou mais do saguão; desde 21/11/2026 a entrada da
+  escada fica no corredor mais longe a pé da cabine, ou quase, e fora da vista do saguão); reprovou,
+  sorteia de novo.
 - **Construção** (`LevelBuilder.Office.cs` e `LevelBuilder.OfficeProps.cs`): piso de porcelanato
   cinza (madeira nas salas de aula), teto técnico nos corredores (laje escura, duto galvanizado,
   eletrocalha, conduítes, cano vermelho), forro branco nas salas, ripas escuras no saguão, na
@@ -23,7 +25,9 @@ Level 3 (teste)), na lista de fases depois das Piscinas (a porta do Level 2 leva
   sofá curvo, pufes e plantas; cabines de inox com corrimão e painel; o vão da escada com degraus de
   granito (fita preta, ponteiras amarelas), viga grafite, guarda-corpos, lance de baixo fechado por
   grade, os outros andares como cascas, claraboia; a porta corta-fogo da saída no patamar, com a
-  placa verde; placas de saída penduradas ao longo do caminho (seta para frente ou para o lado).
+  placa verde. Desde 21/11/2026 o vão fica atrás de parede: do corredor só se vê uma porta igual às
+  das salas, com a placa de saída rente à parede em cima e uma plaquinha de escada ao lado; placa
+  pendurada (com seta) só na última curva do caminho, se fica a até 3 células da escada.
   Tudo em código, sem modelo do Blender ainda.
 - **Luz:** luminárias tubulares penduradas nos corredores (5200 K), embutidas nas salas (4300 K),
   pendentes no saguão (3600 K); spots com sombra em cache de uma face só; trechos de corredor

@@ -44,9 +44,13 @@ junto** (sanidade), **se separar** (objetivos), **falar** (coordenação) ou **f
   Nas fases 0, 2 e 3 é o mesmo componente (`SwitchObjective`, antes a proposta `PC.1`): *pontos
   distantes armados dentro de uma janela de tempo*. Mira + segurar E; enquanto segura, o jogador faz
   barulho de corrida (o inimigo ouve). Não é "ao mesmo tempo": o primeiro ponto armado abre a janela e
-  o segundo (com três ou quatro jogadores, os outros dois) tem de vir dentro dela: 10 s nos disjuntores,
-  5 s nas válvulas, 8 s nos alarmes. **Sozinho a janela some** (ponto armado fica armado). O painel diz
-  o que falta.
+  o segundo (com três ou quatro jogadores, os outros dois; no Escritório, sempre os três alarmes) tem de
+  vir dentro dela: 10 s nos disjuntores, 5 s nas válvulas, 20 s nos alarmes. **Sozinho a janela some**
+  (ponto armado fica armado). O painel diz o que falta.
+- **Mira tolerante** (desde 21/11/2026): todo interagível de mira + E vale se está a até uns 9° do centro
+  da tela (de perto, a 20 cm da mira), no alcance e sem parede no meio; com dois perto, ganha o mais perto
+  do centro. Interruptores, botões de elevador, disjuntores, alarmes, a válvula do seco e o teclado do
+  Level 1 ficam perto da altura dos olhos (1,35 a 1,45 m).
 - **Menu de pausa** (Esc, desde 21/11/2026): o jogo **não para** (a fita continua rodando); o jogador só
   deixa de comandar. Mostra as **tarefas** da fase ao vivo (`[X]` feita, `[  ]` a fazer, com uma linha
   de detalhe: onde ficam os pontos e a regra da janela para o número de jogadores de agora), as
@@ -333,6 +337,10 @@ Projeto completo em `level3-escritorio.md`.
 
 - O andar de um prédio vazio: anel de corredores de teto técnico, salas de aula, saguão de
   elevadores, cafeteria, área de estar e o vão da escada com a saída (a porta corta-fogo no patamar).
+- **A saída se procura** (desde 21/11/2026): a escada fica do lado oposto do andar ao elevador de
+  chegada, fora da vista do saguão, e o vão fica atrás de parede: do corredor só se vê uma porta como
+  as das salas, com a placa EXIT pequena rente à parede e uma plaquinha de escada. Placa pendurada só
+  na última curva antes da escada.
 - **A entidade do Level 0 saiu daqui** (21/11/2026). A fase tem dois inimigos próprios: **a luz salva
   de um (o Zelador); o silêncio salva do outro (o Ascensorista)**. A salinha acesa protege de um e não
   do outro.
@@ -350,7 +358,10 @@ Projeto completo em `level3-escritorio.md`.
     escuro e para na beira da luz. Pega quem está no escuro ao alcance (NO SIGNAL).
   - **A luz voltando sobre ele o faz afundar e sumir.** A lanterna não o detém: o facho o faz hesitar
     0,6 s (no máximo a cada 4 s).
-  - Pistas: molho de chaves tilintando, esfregão encharcado arrastando, gotas quando parado.
+  - Pistas (som refeito em 21/11/2026): parado, o esfregão molhado em vaivém e, de tempos em tempos, o
+    pano batendo no balde e torcido; rondando, botas de borracha pesadas, chaves chacoalhando baixo e o
+    rodízio do balde guinchando no ritmo da velocidade, às vezes um resmungo; vindo, o guincho acelera e
+    o balde bate. Arrancar ou parar chacoalha a água do balde.
   - Números: ronda a 1,4 m/s, caça a 4,4 por 5 s e cansa (2,4 por 4 s); jogador anda 2,8 e corre 5,0.
 - **Interruptores de luz:** um por trecho de corredor da onda (placa branca com alavanca e luzinha).
   Mira + E com o trecho piscando ou escuro **religa o trecho na hora** e o Zelador dali some. O estalo é
@@ -379,8 +390,10 @@ Projeto completo em `level3-escritorio.md`.
 - **Armários que batem:** de tempos em tempos, uma fileira de portas de armário bate num corredor longe
   de todos, vindo na direção do jogador mais perto. O Ascensorista ouve e vai até lá.
 - **Som ambiente:** ar-condicionado, difusores e o zumbido dos reatores, que cala onde as luzes apagam.
-- **Objetivo: o alarme de incêndio** (`SwitchObjective`, alarmes): três acionadores vermelhos nos
-  corredores; puxar leva 2 s e o segundo vale dentro de 8 s do primeiro. Disparado, a sirene toca e a
+- **Objetivo: o alarme de incêndio** (`SwitchObjective`, alarmes): três acionadores vermelhos, **cada um
+  dentro de uma sala** (de aula, de reunião, pequena ou a cafeteria), numa parede que não se vê da porta:
+  é preciso entrar e olhar em volta (piscam vermelho e zumbem). Longe da cabine e da escada. **Precisa
+  dos três** (desde 21/11/2026); puxar leva 2 s; sozinho ficam armados, em grupo os três dentro de 20 s. Disparado, a sirene toca e a
   porta corta-fogo destrava; a sirene chama o Ascensorista (se está fora do andar, chega em até 6 s) e
   **a energia do andar cai**: todas as luminárias apagam menos as das salinhas-abrigo, acendem luzes de
   emergência fracas a cada 3 células nas rotas até a escada (nunca mais de dois escuros seguidos) e os

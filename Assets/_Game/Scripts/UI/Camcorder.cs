@@ -56,7 +56,7 @@ namespace BackRooms.UI
         // Gravação de verdade (F9), no canto de cima, esquerda. Texto que o jogador lê: inglês.
         const string StandbyText = "STBY";
         const string RecText = "REC";
-        const string RecHint = "F9 - REC";
+        const string RecHint = "R - REC";
         const string SavedText = "SAVED";
         const string FailedText = "REC FAILED";
         // Quanto tempo o SAVED fica na tela depois de parar, em segundos.

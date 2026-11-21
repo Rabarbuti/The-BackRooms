@@ -67,10 +67,18 @@ namespace BackRooms.EditorTools
             Save(folder, "undertow_rosnado", UndertowAudio.CreateGrowl());
             Save(folder, "undertow_gorgolejo", UndertowAudio.CreateGurgle());
             Save(folder, "undertow_puxao", UndertowAudio.CreateGrab());
-            // O Zelador (Level 3): chaves, esfregão molhado, gota, subir e afundar no chão.
+            // O Zelador (Level 3), refeito em 21/11/2026: botas, chaves chacoalhando, o rodízio do
+            // balde guinchando, as rodas (laço), o esfregão em vaivém (laço), a água no balde, o
+            // balde batendo, o esfregão torcido, a voz (resmungo, pigarro), subir e afundar no chão.
+            for (int i = 0; i < 3; i++) Save(folder, "zelador_bota_" + i, JanitorAudio.CreateBoot(i));
             for (int i = 1; i <= 4; i++) Save(folder, "zelador_chaves_" + i, JanitorAudio.CreateKeys(i));
-            Save(folder, "zelador_esfregao", JanitorAudio.CreateDrag());
-            Save(folder, "zelador_gota", JanitorAudio.CreateDrip());
+            for (int i = 0; i < 4; i++) Save(folder, "zelador_rodizio_" + i, JanitorAudio.CreateSqueak(i));
+            Save(folder, "zelador_rodas", JanitorAudio.CreateRoll());
+            Save(folder, "zelador_esfregao", JanitorAudio.CreateMop());
+            for (int i = 0; i < 3; i++) Save(folder, "zelador_balde_" + i, JanitorAudio.CreateSlosh(i));
+            for (int i = 0; i < 2; i++) Save(folder, "zelador_balde_bate_" + i, JanitorAudio.CreateBang(i));
+            Save(folder, "zelador_torce", JanitorAudio.CreateWring());
+            for (int i = 0; i < 3; i++) Save(folder, "zelador_voz_" + i, JanitorAudio.CreateGrumble(i));
             Save(folder, "zelador_sobe", JanitorAudio.CreateRise());
             Save(folder, "zelador_afunda", JanitorAudio.CreateSink());
             Save(folder, "interruptor_estalo", LightSwitches.CreateClack());

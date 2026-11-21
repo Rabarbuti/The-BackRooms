@@ -28,8 +28,10 @@ namespace BackRooms.Entities
     /// Encaixe na fase (<see cref="Fit"/>, em todas as máquinas, a cada quadro): os braços abertos
     /// medem ~2,9 m de ponta a ponta e a braçada desce as mãos ~0,7 m; onde um braço bateria em
     /// parede, escada, coluna ou piso (um vão, o seco alagado de 1,12 m), ele se recolhe ao longo do
-    /// corpo, na hora (e solta devagar). A inclinação e a onda da cauda também cedem onde a ponta
-    /// bateria. O meio do corpo, a cabeça e a cauda reta quem guarda é o <see cref="UndertowBrain"/>.
+    /// corpo, na hora (e solta devagar); num vão de porta, cola-se ao flanco (espremido). A
+    /// inclinação e a onda da cauda também cedem onde a ponta bateria, e a ponta da cauda se curva
+    /// para o lado livre numa curva de corredor. O meio do corpo e a cabeça quem guarda é o
+    /// <see cref="UndertowBrain"/>.
     /// </summary>
     public sealed class UndertowBody : MonoBehaviour
     {
@@ -65,6 +67,10 @@ namespace BackRooms.Entities
         const float ShoulderWidth = 0.26f;
         /// <summary>Ângulo dos braços na pose de encaixe, para a frente e para fora.</summary>
         const float RestArmYaw = 65f, RestArmPitch = 10f;
+        /// <summary>Braço espremido (recolhido além de 1): quase reto para trás, colado ao flanco.</summary>
+        const float SqueezeArmYaw = 177f;
+        /// <summary>Curva de cada junta da cauda (graus) quando a ponta bateria numa parede (numa curva de corredor).</summary>
+        const float TailCurl = 18f;
 
         readonly HashSet<Transform> _live = new HashSet<Transform>();
         readonly Dictionary<Transform, Quaternion> _rest = new Dictionary<Transform, Quaternion>();
@@ -80,9 +86,11 @@ namespace BackRooms.Entities
         readonly float[] _armYaw = new float[2], _armPitch = new float[2], _armElbow = new float[2];
         readonly float[] _handX = new float[2], _handY = new float[2], _fingersX = new float[2];
         readonly float[] _tuck = new float[2];
+        // Para que lado a cauda se curvou da última vez (tenta o mesmo antes: não fica trocando).
+        float _curlSide = 1f;
         static readonly RaycastHit[] Hits = new RaycastHit[16];
 
-        /// <summary>Quanto cada braço está recolhido agora (0 aberto, 1 ao longo do corpo).</summary>
+        /// <summary>Quanto cada braço está recolhido agora (0 aberto, 1 ao longo do corpo, 2 colado ao flanco, espremido).</summary>
         public float Tuck(int arm) => _tuck[arm];
 
         UndertowBrain _brain;
@@ -237,18 +245,20 @@ namespace BackRooms.Entities
             }
         }
 
-        // O braço na pose pedida, recolhido pela fração dada: ao longo do corpo, para trás e um pouco
-        // para cima, cotovelo quase reto, dedos fechados.
+        // O braço na pose pedida, recolhido pela fração dada (0 a 1): ao longo do corpo, para trás e
+        // um pouco para cima, cotovelo quase reto, dedos fechados. De 1 a 2, espremido: colado ao
+        // flanco, reto para trás (a ponta dos dedos a ~0,33 m do meio), para passar num vão de porta.
         void PoseArm(int i, float tuck)
         {
             float side = i == 0 ? 1f : -1f;
-            float yaw = Mathf.Lerp(_armYaw[i], 168f, tuck);
-            float pitch = Mathf.Lerp(_armPitch[i], -4f, tuck);
-            float elbow = Mathf.Lerp(_armElbow[i], 4f, tuck);
+            float t = Mathf.Clamp01(tuck), squeeze = Mathf.Clamp01(tuck - 1f);
+            float yaw = Mathf.Lerp(Mathf.Lerp(_armYaw[i], 168f, t), SqueezeArmYaw, squeeze);
+            float pitch = Mathf.Lerp(Mathf.Lerp(_armPitch[i], -4f, t), -2f, squeeze);
+            float elbow = Mathf.Lerp(Mathf.Lerp(_armElbow[i], 4f, t), 0f, squeeze);
             _arm[i].localRotation = Quaternion.Euler(pitch, side * yaw, 0f);
             _forearm[i].localRotation = Quaternion.Euler(0f, -side * elbow, 0f);
-            Turn(_hand[i], Mathf.Lerp(_handX[i], 0f, tuck), _handY[i] * (1f - tuck), 0f);
-            Turn(_fingers[i], Mathf.Lerp(_fingersX[i], 20f, tuck), 0f, 0f);
+            Turn(_hand[i], Mathf.Lerp(_handX[i], 0f, t), _handY[i] * (1f - t), 0f);
+            Turn(_fingers[i], Mathf.Lerp(_fingersX[i], 20f, t), 0f, 0f);
         }
 
         // ---------------------------------------------------------------- Encaixe na fase
@@ -268,16 +278,36 @@ namespace BackRooms.Entities
             for (int k = 0; k < 2 && (Blocked(root, SpineHead(), 0f) || Blocked(root, SpineTail(), 0f)); k++)
                 _rig.localRotation = Quaternion.Slerp(Quaternion.identity, _rig.localRotation, k == 0 ? 0.5f : 0f);
 
-            // A cauda: sem a onda, reta atrás do corpo (e enrolada, dormindo, como estava).
+            // A cauda: sem a onda, reta atrás do corpo (e enrolada, dormindo, como estava). Se ainda
+            // bateria (virando no meio de uma célula de corredor, a ponta passa da parede), curva-se
+            // para o lado que cabe (o cérebro só guarda a cauda até 1,3 m atrás no corpo espremido).
             if (Blocked(root, SpineTail(), 0f))
-                for (int i = 0; i < _tail.Length; i++)
-                    if (_tail[i] != null) _tail[i].localRotation = _rest[_tail[i]] * Quaternion.Euler(0f, 22f * _sleep, 0f);
+            {
+                CurlTail(0f);
+                if (Blocked(root, SpineTail(), 0f))
+                {
+                    bool done = false;
+                    foreach (float k in new[] { 0.5f, 1f })
+                    {
+                        foreach (float sign in new[] { _curlSide, -_curlSide })
+                        {
+                            CurlTail(sign * k);
+                            if (Blocked(root, SpineTail(), 0f)) continue;
+                            _curlSide = sign;
+                            done = true;
+                            break;
+                        }
+                        if (done) break;
+                    }
+                    if (!done) CurlTail(0f);
+                }
+            }
 
             for (int i = 0; i < 2; i++)
             {
                 float relaxed = dt > 0f ? Mathf.Max(0f, _tuck[i] - dt * 0.8f) : 0f;
-                float chosen = 1f;
-                foreach (float t in new[] { relaxed, _tuck[i], Mathf.Max(_tuck[i], 0.5f), 0.8f })
+                float chosen = 2f;
+                foreach (float t in new[] { relaxed, _tuck[i], Mathf.Max(_tuck[i], 0.5f), 0.8f, 1f, 1.5f })
                 {
                     PoseArm(i, t);
                     if (Blocked(root, ArmChain(i), 0f)) continue;
@@ -287,6 +317,13 @@ namespace BackRooms.Entities
                 _tuck[i] = chosen;
                 PoseArm(i, chosen);
             }
+        }
+
+        // A cauda sem a onda: reta (0) ou curvada para um lado (-1 a 1), mais o enrolado de dormindo.
+        void CurlTail(float curl)
+        {
+            for (int i = 0; i < _tail.Length; i++)
+                if (_tail[i] != null) _tail[i].localRotation = _rest[_tail[i]] * Quaternion.Euler(0f, 22f * _sleep + TailCurl * curl, 0f);
         }
 
         Vector3[] SpineHead() => new[] { transform.position, _shoulders.position, _head.position, HeadTip() };

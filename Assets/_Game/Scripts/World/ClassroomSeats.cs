@@ -26,7 +26,7 @@ namespace BackRooms.World
     /// com as cadeiras e as lousas, em coordenadas da fase, sem sortear nada: não muda o hash da planta
     /// nem o resto da mobília.
     /// </summary>
-    public sealed class ClassroomSeats : MonoBehaviour, ITaskSource
+    public sealed class ClassroomSeats : MonoBehaviour, ITaskSource, IAimSource
     {
         // Textos que o jogador lê (a língua do jogo é o inglês).
         public const string SitText = "E - SIT";
@@ -121,12 +121,14 @@ namespace BackRooms.World
             Instance = this;
             _use?.Enable();
             LevelTasks.Register(this);
+            if (Application.isPlaying) InteractAim.Register(this);
         }
 
         void OnDisable()
         {
             _use?.Disable();
             LevelTasks.Unregister(this);
+            InteractAim.Unregister(this);
             if (Instance != this) return;
             Instance = null;
             Prompt = null;
@@ -253,7 +255,7 @@ namespace BackRooms.World
                 return;
             }
 
-            int seat = AimedSeat(local);
+            int seat = InteractAim.Winner(this);
             Aimed = seat;
             if (seat < 0) return;
 
@@ -270,6 +272,26 @@ namespace BackRooms.World
             _asked = seat;
             _askedAt = Time.unscaledTime;
             local.RequestSeatRpc((short)seat);
+        }
+
+        // A cadeira mais perto do centro da mira (mira comum: InteractAim): o raio acertando a cadeira
+        // ou o meio dela dentro do cone, com visada livre. Sentado, a tecla é de levantar (sem mira).
+        public bool AimCandidate(in InteractAim.View view, out int index, out float score)
+        {
+            index = -1;
+            score = float.PositiveInfinity;
+            PlayerController body = view.Local != null ? view.Local.controller : null;
+            if (body == null || body.IsReturning || body.InFurniture || body.IsSeated) return false;
+            for (int i = 0; i < _seats.Count; i++)
+            {
+                Collider c = _seats[i].Collider;
+                if (c == null) continue;
+                float sc = InteractAim.Score(view, c.transform, c.bounds.center, reach);
+                if (sc >= score) continue;
+                score = sc;
+                index = i;
+            }
+            return index >= 0;
         }
 
         /// <summary>A cadeira que o jogador mira de perto (-1 nenhuma). Ignora o próprio jogador (padrão do PenTool.TryAim).</summary>

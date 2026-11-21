@@ -501,6 +501,64 @@ namespace BackRooms.World
             }
         }
 
+        // ---------------------------------------------------------------- Vista do menu
+
+        /// <summary>
+        /// Vista do Escritório para a câmera do menu (só nesta fase; nas outras, falso e vale
+        /// <see cref="ScenicPosition"/> girando). O trecho reto de corredor mais comprido (com mais
+        /// luminárias acesas no empate), visto de uma ponta, na altura dos olhos e olhando ao longo
+        /// dele: o teto técnico, as luminárias frias e as portas das salas. Girando no meio de um
+        /// corredor de 4 m, a câmera passava quase todo o tempo de frente para uma parede cinza.
+        /// </summary>
+        public bool MenuView(out Vector3 eye, out Quaternion look)
+        {
+            eye = SpawnCenter;
+            look = Quaternion.identity;
+            if (Data == null || !Data.HasOffice) return false;
+
+            LevelData d = Data;
+            int bestX = -1, bestZ = -1, bestScore = -1;
+            WallSide bestSide = WallSide.East;
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                    foreach (WallSide s in new[] { WallSide.East, WallSide.West, WallSide.North, WallSide.South })
+                    {
+                        if (d.Office[x, z] != OfficeCell.Corridor) continue;
+                        // Só a partir da ponta do trecho: atrás da câmera, parede.
+                        if (d.Neighbor(x, z, LevelData.Opposite(s), out int bx, out int bz) && d.Office[bx, bz] == OfficeCell.Corridor &&
+                            d.OfficeEdgeAt(x, z, LevelData.Opposite(s)) == OfficeEdge.Open) continue;
+
+                        int length = 1, lit = Lit(x, z), cx = x, cz = z;
+                        while (d.OfficeEdgeAt(cx, cz, s) == OfficeEdge.Open && d.Neighbor(cx, cz, s, out int nx, out int nz) && d.Office[nx, nz] == OfficeCell.Corridor)
+                        {
+                            cx = nx;
+                            cz = nz;
+                            length++;
+                            lit += Lit(cx, cz);
+                        }
+                        int score = length * 4 + lit;
+                        if (score > bestScore)
+                        {
+                            bestScore = score;
+                            bestX = x;
+                            bestZ = z;
+                            bestSide = s;
+                        }
+                    }
+            if (bestX < 0) return false;
+
+            Vector3 dir = transform.TransformDirection(SideVector(bestSide));
+            eye = CellCenter(bestX, bestZ) - dir * 1.4f + Vector3.up * MenuEyeHeight;
+            look = Quaternion.LookRotation(dir, Vector3.up) * Quaternion.Euler(MenuViewPitch, 0f, 0f);
+            return true;
+
+            int Lit(int x, int z) => d.Lights[x, z] == LightState.On || d.Lights[x, z] == LightState.Flicker ? 1 : 0;
+        }
+
+        const float MenuEyeHeight = 1.65f;
+        /// <summary>Inclinação da câmera do menu no Escritório (negativo = para cima: mostra mais do teto técnico).</summary>
+        const float MenuViewPitch = -4f;
+
         // ---------------------------------------------------------------- Divisas
 
         void BuildOfficeEdges()

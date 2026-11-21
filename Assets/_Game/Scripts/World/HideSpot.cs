@@ -89,7 +89,7 @@ namespace BackRooms.World
     /// A tecla E dos esconderijos de móvel, para o jogador desta máquina, e as portas que abrem
     /// quando qualquer jogador entra ou sai. Um só por fase (a <see cref="PropLayer"/> cria).
     /// </summary>
-    public sealed class HideSpotInput : MonoBehaviour
+    public sealed class HideSpotInput : MonoBehaviour, IAimSource
     {
         [Tooltip("Até onde alcança, em metros.")]
         public float reach = 1.9f;
@@ -111,8 +111,18 @@ namespace BackRooms.World
             _use.AddBinding("<Gamepad>/buttonWest");
         }
 
-        void OnEnable() => _use.Enable();
-        void OnDisable() { _use.Disable(); Prompt = null; }
+        void OnEnable()
+        {
+            _use.Enable();
+            if (Application.isPlaying) InteractAim.Register(this);
+        }
+
+        void OnDisable()
+        {
+            _use.Disable();
+            InteractAim.Unregister(this);
+            Prompt = null;
+        }
         void OnDestroy() => _use.Dispose();
 
         void Update()
@@ -134,7 +144,8 @@ namespace BackRooms.World
                 return;
             }
 
-            HideSpot spot = Aimed(local);
+            // Só se ganhou a mira comum (InteractAim): um interagível pequeno no centro da tela vence o móvel.
+            HideSpot spot = InteractAim.Winner(this) >= 0 ? Aimed(local) : null;
             if (spot == null) return;
 
             if (spot.kind == HideKind.Table && !body.IsCrouching)
@@ -153,6 +164,18 @@ namespace BackRooms.World
 
             float yaw = spot.transform.eulerAngles.y;
             body.EnterFurniture(spot.kind, spot.InsideWorld, yaw, spot.eye, spot.ExitWorld);
+        }
+
+        // Esconderijo é móvel grande: vale o raio direto (como sempre), com a nota de acerto em cheio.
+        public bool AimCandidate(in InteractAim.View view, out int index, out float score)
+        {
+            index = -1;
+            score = float.PositiveInfinity;
+            PlayerController body = view.Local != null ? view.Local.controller : null;
+            if (body == null || body.IsReturning || body.InFurniture || Aimed(view.Local) == null) return false;
+            index = 0;
+            score = InteractAim.DirectScore;
+            return true;
         }
 
         /// <summary>O esconderijo que o jogador mira de perto, ou nulo.</summary>

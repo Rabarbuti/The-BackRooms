@@ -64,6 +64,11 @@ namespace BackRooms.Entities
     /// • O corpo inteiro (não só o meio) fica fora das paredes, escadas e colunas: cada passo e
     ///   cada giro é conferido (<see cref="Fits"/>); a altura segue o piso medido por raio sob o
     ///   corpo todo, e ele não avança para onde não cabe.
+    /// • Passa por todo vão que o <see cref="UndertowNav"/> dá como aberto (desde 21/11/2026, à
+    ///   noite): nada para onde aponta, nunca de lado; o caminho vai pelo eixo de cada passagem (meio
+    ///   da célula, meio do vão, meio da célula seguinte), ele vira só no meio das células, freando
+    ///   antes, e cruza baixo; no aperto, os braços se colam ao corpo (<see cref="SqueezeProbes"/>).
+    ///   Travado, recomeça pelo eixo; só depois de 4 travadas seguidas no mesmo lugar some pelo ralo.
     /// </summary>
     public sealed class UndertowBrain : NetworkBehaviour, INoiseListener
     {
@@ -222,9 +227,44 @@ namespace BackRooms.Entities
             new Vector4(0.58f, 0f, -0.8f, 0.06f), new Vector4(-0.58f, 0f, -0.8f, 0.06f),
         };
 
+        /// <summary>
+        /// O corpo espremido, conferido quando o de <see cref="BodyProbes"/> não cabe (um vão de
+        /// porta, uma coluna perto da divisa, uma curva num corredor): os braços colados aos flancos
+        /// (ombro, cotovelo, pulso e ponta dos dedos a até 0,38 m do meio; o <see cref="UndertowBody"/>
+        /// os cola de verdade onde não cabem recolhidos) e a cauda só até 1,3 m atrás (a ponta se curva
+        /// para o lado livre). Largura total 0,76 m: passa folgado no vão de porta (1,4 m), onde os
+        /// braços recolhidos (1,28 m) só passavam com 6 cm de cada lado.
+        /// </summary>
+        public static readonly Vector4[] SqueezeProbes =
+        {
+            new Vector4(0f, 0f, 1.45f, 0.09f), new Vector4(0f, 0f, 1.2f, 0.12f), new Vector4(0f, 0f, 0.85f, 0.15f),
+            new Vector4(0f, 0f, 0.45f, 0.16f), new Vector4(0f, 0f, 0f, 0.16f), new Vector4(0f, 0f, -0.4f, 0.14f),
+            new Vector4(0f, 0f, -0.8f, 0.11f), new Vector4(0f, 0f, -1.2f, 0.09f),
+            new Vector4(0.26f, 0f, 0.78f, 0.08f), new Vector4(-0.26f, 0f, 0.78f, 0.08f),
+            new Vector4(0.29f, 0f, 0.16f, 0.07f), new Vector4(-0.29f, 0f, 0.16f, 0.07f),
+            new Vector4(0.32f, 0f, -0.4f, 0.06f), new Vector4(-0.32f, 0f, -0.4f, 0.06f),
+            new Vector4(0.33f, 0f, -0.75f, 0.05f), new Vector4(-0.33f, 0f, -0.75f, 0.05f),
+        };
+
+        // O caminho: pontos no eixo de cada passagem (o meio da divisa) e no meio de cada célula.
+        // Entre dois pontos ele segue a linha (de _railFrom ao ponto), corrigindo o desvio de lado.
+        const float RailLook = 0.8f;
+        // Depois do último vão do caminho, um ponto no eixo, do outro lado: o corpo só vira quando
+        // as mãos e o fim do corpo saíram da parede.
+        const float WallGatePost = 1.6f, OpenGatePost = 1.2f;
+        // Travadas seguidas no mesmo lugar (de 2 em 2 s, cada uma com nova tentativa pelo eixo)
+        // antes de sumir pelo ralo: rede de segurança, não o normal numa porta.
+        const int StuckLimit = 4;
+        // Tipo de cada ponto do caminho: meio de célula (ou ponto solto), meio de divisa aberta
+        // (dentro da sala) ou meio de um vão na parede (porta, arco, arco largo).
+        const byte PointFree = 0, PointOpen = 1, PointWallGate = 2;
+
         readonly NetworkVariable<byte> _state = new NetworkVariable<byte>();
         readonly NetworkVariable<int> _roars = new NetworkVariable<int>();
         readonly List<Vector3> _path = new List<Vector3>();
+        readonly List<Vector3> _railFrom = new List<Vector3>();
+        readonly List<byte> _pointKind = new List<byte>();
+        readonly List<Vector3> _cellsOnPath = new List<Vector3>();
         readonly Dictionary<PlayerNetwork, float> _mercy = new Dictionary<PlayerNetwork, float>();
         readonly Dictionary<PlayerNetwork, float> _heard = new Dictionary<PlayerNetwork, float>();
         readonly Dictionary<Footsteps, Action<Vector3, float>> _ears = new Dictionary<Footsteps, Action<Vector3, float>>();
@@ -236,7 +276,12 @@ namespace BackRooms.Entities
         LevelBuilder _level;
         int[,] _reach;
 
-        Vector3 _goal, _destination, _lair, _velocity;
+        Vector3 _goal, _destination, _lair;
+        // Nada para onde o corpo aponta (como um peixe), nunca de lado: assim entra reto num vão.
+        float _speed;
+        // Travou: até esta hora o caminho recomeça pelo meio da célula, no eixo do vão.
+        float _realignUntil;
+        Vector3 _stuckPlace;
         bool _hasGoal, _arrived, _direct;
         int _pathIndex;
         bool _goalInside;
@@ -636,7 +681,7 @@ namespace BackRooms.Entities
         {
             _afterTravel = after;
             _afterTravelGoal = goal;
-            _velocity = Vector3.zero;
+            _speed = 0f;
             Roar();
             SetState(UndertowState.Waking);
             _stateUntil = now + wakeSeconds;
@@ -647,7 +692,7 @@ namespace BackRooms.Entities
             if (_nav.Flooded && !TideFalling()) { BeginProwl(now); return; }
             _target = null;
             _hasGoal = false;
-            _velocity = Vector3.zero;
+            _speed = 0f;
             SetState(UndertowState.Asleep);
             _roamAt = now + UnityEngine.Random.Range(roamMinSeconds, roamMaxSeconds);
         }
@@ -823,7 +868,7 @@ namespace BackRooms.Entities
             _travelHidden = false;
             _travelArrive = now + diveSeconds + pipeSeconds + Flat(to - transform.position).magnitude / Mathf.Max(0.1f, pipeSpeed);
             _stateUntil = now + diveSeconds;
-            _velocity = Vector3.zero;
+            _speed = 0f;
             _target = null;
             _hasGoal = false;
             Travels++;
@@ -857,7 +902,7 @@ namespace BackRooms.Entities
         {
             transform.SetPositionAndRotation(position, rotation);
             if (TryGetComponent(out NetworkTransform moved)) moved.Teleport(position, rotation, transform.localScale);
-            _velocity = Vector3.zero;
+            _speed = 0f;
             _path.Clear();
             _repathAt = 0f;
         }
@@ -904,7 +949,8 @@ namespace BackRooms.Entities
                         float y = RequiredY(p, r);
                         if (!Crawling && y > _nav.SurfaceY - 0.3f) continue;
                         Vector3 at = new Vector3(p.x, y + 0.02f, p.z);
-                        if (!Fits(at, r)) continue;
+                        // Descansando, o corpo inteiro (braços só recolhidos, cauda toda).
+                        if (!Fits(at, r, false)) continue;
                         best = d;
                         spot = at;
                         facing = r;
@@ -951,8 +997,14 @@ namespace BackRooms.Entities
             if (State == UndertowState.Travel && _travelHidden) return;
             Vector3 position = transform.position;
             Quaternion rotation = transform.rotation;
-            Vector3 desired = Vector3.zero;
+            Vector3 forward = Flat(rotation * Vector3.forward);
+            forward = forward.sqrMagnitude > 1e-6f ? forward.normalized : Vector3.forward;
+            Vector3 want = Vector3.zero;
+            float wantSpeed = 0f;
             Vector3 aim = position;
+            // Seguindo a linha do caminho: o desvio de lado (para voltar a ela, se travar).
+            bool onRail = false;
+            Vector3 offRail = Vector3.zero;
 
             if (Moving && _hasGoal)
             {
@@ -960,40 +1012,87 @@ namespace BackRooms.Entities
                 if (!_arrived)
                 {
                     bool last = _direct || _pathIndex >= _path.Count;
-                    Vector3 next = last ? _destination : _path[_pathIndex];
-                    aim = next;
-                    // Indo a um barulho, o último trecho leva a CABEÇA ao ponto (é dela que se pega);
-                    // sem ouvir de novo, para um pouco antes (escuta: quem ficou parado e quieto escapa).
-                    bool byHead = last && (State == UndertowState.Investigate || State == UndertowState.Hunt);
-                    bool fresh = now - _lastHeardTime <= huntMemory;
-                    float tolerance = byHead && !fresh ? stopShort : 0.35f;
-                    Vector3 to = Flat(next - (byHead ? Head : position));
-                    if (to.magnitude < tolerance)
+                    if (last)
                     {
-                        if (!_direct && _pathIndex < _path.Count)
+                        aim = _destination;
+                        // Indo a um barulho, o último trecho leva a CABEÇA ao ponto (é dela que se pega);
+                        // sem ouvir de novo, para um pouco antes (escuta: quem ficou parado e quieto escapa).
+                        bool byHead = State == UndertowState.Investigate || State == UndertowState.Hunt;
+                        bool fresh = now - _lastHeardTime <= huntMemory;
+                        float tolerance = byHead && !fresh ? stopShort : 0.35f;
+                        Vector3 to = Flat(_destination - (byHead ? Head : position));
+                        if (to.magnitude < tolerance) Arrive($"chegou (a {to.magnitude:F2} m do destino {_destination})");
+                        else
                         {
-                            _pathIndex++;
-                            Shortcut(position);
+                            want = to.normalized;
+                            wantSpeed = SpeedNow();
                         }
-                        else Arrive($"chegou (a {to.magnitude:F2} m do destino {next})");
                     }
-                    else desired = to.normalized * SpeedNow();
+                    else
+                    {
+                        // A linha do trecho: de _railFrom ao ponto. Persegue um ponto da linha um pouco
+                        // à frente (o desvio de lado some em ~1 m) e, antes de uma curva, freia para
+                        // virar no ponto: assim entra no próximo vão já no eixo dele.
+                        Vector3 target = _path[_pathIndex];
+                        Vector3 from = _railFrom[_pathIndex];
+                        Vector3 seg = Flat(target - from);
+                        float length = seg.magnitude;
+                        Vector3 dir = length > 0.01f ? seg / length : forward;
+                        float along = Vector3.Dot(Flat(position - from), dir);
+                        float remaining = length - along;
+                        float turn = TurnAfter(_pathIndex, dir);
+                        bool gateNext = _pathIndex + 1 < _path.Count && _pointKind[_pathIndex + 1] == PointWallGate;
+                        float tolerance = turn > 20f ? (gateNext ? 0.15f : 0.25f) : 0.35f;
+                        aim = target;
+                        // Indo a um barulho sem ouvir de novo, perto do fim do caminho (o último vão ou o
+                        // ponto depois dele): para com a cabeça a stopShort, como no último trecho. Sem
+                        // isso, ia até depois da porta e esbarrava em quem ficou parado e quieto ali.
+                        bool listening = (State == UndertowState.Investigate || State == UndertowState.Hunt)
+                                         && now - _lastHeardTime > huntMemory;
+                        if (listening && _pathIndex >= _path.Count - 2 && Flat(_destination - Head).magnitude < stopShort)
+                            Arrive($"parou antes do vão (a cabeça a {Flat(_destination - Head).magnitude:F2} m do destino {_destination})");
+                        else if (remaining < tolerance || Flat(target - position).magnitude < tolerance) Advance(position);
+                        else
+                        {
+                            onRail = true;
+                            offRail = Flat(position - from) - dir * along;
+                            float look = along + RailLook;
+                            Vector3 carrot = from + dir * Mathf.Clamp(look, 0f, length);
+                            // Passa do ponto para o seguinte sem curva (o meio do vão e o meio da
+                            // célula seguinte estão no mesmo eixo): continua na mesma linha.
+                            if (look > length && turn < 5f && _pathIndex + 1 < _path.Count)
+                                carrot = target + dir * Mathf.Min(look - length, Flat(_path[_pathIndex + 1] - target).magnitude);
+                            want = Flat(carrot - position);
+                            want = want.sqrMagnitude > 1e-6f ? want.normalized : dir;
+                            wantSpeed = SpeedNow();
+                            if (turn > 20f)
+                            {
+                                float corner = Mathf.Lerp(wantSpeed, 0.6f, Mathf.Clamp01(turn / 90f));
+                                wantSpeed = Mathf.Min(wantSpeed, Mathf.Sqrt(corner * corner + 4f * acceleration * Mathf.Max(0f, remaining)));
+                            }
+                        }
+                    }
                 }
             }
 
-            _velocity = Vector3.MoveTowards(_velocity, desired, acceleration * dt);
-
-            Vector3 facing = _velocity.sqrMagnitude > 0.04f ? _velocity
-                           : State == UndertowState.Hunt && _target != null ? Flat(_target.transform.position - position)
-                           : Vector3.zero;
-            facing.y = 0f;
-            Quaternion turned = facing.sqrMagnitude > 0.001f
-                ? Quaternion.RotateTowards(rotation, Quaternion.LookRotation(facing, Vector3.up), turnSpeed * dt)
+            // Vira para onde quer ir e nada para onde aponta, nunca de lado; muito torto, só vira
+            // (a ~70° de diferença, parado): é o que o deixa entrar reto num vão.
+            Vector3 face = want.sqrMagnitude > 0.001f ? want
+                         : State == UndertowState.Hunt && _target != null ? Flat(_target.transform.position - position)
+                         : Vector3.zero;
+            Quaternion turned = face.sqrMagnitude > 0.001f
+                ? Quaternion.RotateTowards(rotation, Quaternion.LookRotation(face, Vector3.up), turnSpeed * dt)
                 : rotation;
+            float align = want.sqrMagnitude > 0.001f ? Vector3.Dot(forward, want) : 1f;
+            float targetSpeed = wantSpeed * Mathf.Clamp01((align - 0.34f) / 0.66f);
+            _speed = Mathf.MoveTowards(_speed, targetSpeed, (targetSpeed > _speed ? acceleration : acceleration * 2f) * dt);
+            Vector3 heading = Flat(turned * Vector3.forward);
+            heading = heading.sqrMagnitude > 1e-6f ? heading.normalized : forward;
 
-            // O corpo inteiro tem de caber: primeiro o passo e o giro juntos; senão só o passo; só o
-            // giro; só a altura. Nada cabe: fica (e o CheckStuck acha outro rumo).
-            Vector3 step = position + _velocity * dt;
+            // O corpo tem de caber: primeiro o passo e o giro juntos; senão reto, sem virar (acaba de
+            // sair de um vão); só o giro; de lado, de volta à linha; só a altura (para cima ou para
+            // baixo). Nada cabe: fica (e o CheckStuck tenta de novo pelo eixo).
+            Vector3 step = position + heading * (_speed * dt);
             float need = RequiredY(step, turned);
             // Olhando à frente: para sair do poço (ou passar para um piso mais alto), sobe antes de
             // avançar; senão a cabeça bate na parede do poço e ele nunca sai do fundo.
@@ -1001,22 +1100,56 @@ namespace BackRooms.Entities
             Vector3 ahead = Flat(aim - position);
             if (Moving && ahead.sqrMagnitude > 0.01f)
             {
-                Vector3 forward = ahead.normalized;
-                rise = Mathf.Max(rise, RequiredY(position + forward * Mathf.Min(1.4f, ahead.magnitude), Quaternion.LookRotation(forward, Vector3.up)));
+                Vector3 toward = ahead.normalized;
+                rise = Mathf.Max(rise, RequiredY(position + toward * Mathf.Min(1.4f, ahead.magnitude), Quaternion.LookRotation(toward, Vector3.up)));
                 if (!Crawling) rise = Mathf.Min(rise, Mathf.Max(need, _nav.SurfaceY - 0.3f));
             }
-            float y = Mathf.MoveTowards(position.y, Mathf.Max(TargetHeight(aim, need), rise), verticalSpeed * dt);
+            // No caminho (de vão em vão), baixo: o lintel da porta entre duas águas fundas fica a 0,4 m
+            // e o arco nasce a 0,0; na maré alta, caçando, ele subia até 0,9 e batia a cabeça.
+            float height = TargetHeight(aim, need);
+            if (onRail) height = Mathf.Min(height, need + 0.3f);
+            float y = Mathf.MoveTowards(position.y, Mathf.Max(height, rise), verticalSpeed * dt);
             if (TryPose(new Vector3(step.x, y, step.z), turned)) return;
             Blocked++;
-            if (TryPose(new Vector3(step.x, y, step.z), rotation)) return;
-            if (TryPose(new Vector3(position.x, y, position.z), turned)) { _velocity *= 0.5f; return; }
-            _velocity = Vector3.zero;
+            Vector3 straight = position + forward * (_speed * dt);
+            if (_speed > 0.01f && TryPose(new Vector3(straight.x, y, straight.z), rotation)) return;
+            if (TryPose(new Vector3(position.x, y, position.z), turned)) { _speed *= 0.5f; return; }
+            if (onRail && offRail.sqrMagnitude > 0.0004f)
+            {
+                Vector3 back = position - offRail.normalized * Mathf.Min(offRail.magnitude, 0.5f * dt);
+                if (TryPose(new Vector3(back.x, y, back.z), rotation)) { _speed *= 0.5f; return; }
+            }
+            _speed = 0f;
+            // Quer voltar e não cabe virar (dentro de um vão): sai de ré, devagar.
+            if (align < 0f)
+            {
+                Vector3 reverse = position - forward * (0.5f * dt);
+                if (TryPose(new Vector3(reverse.x, y, reverse.z), rotation)) return;
+            }
+            if (TryPose(new Vector3(position.x, y, position.z), rotation)) return;
             float stay = Mathf.MoveTowards(position.y, Mathf.Max(RequiredY(position, rotation), position.y), verticalSpeed * dt);
             if (!TryPose(new Vector3(position.x, stay, position.z), rotation))
             {
                 // Já estava preso (a maré o deixou assim, ou um teste o pôs): sai para cima, que é água.
                 transform.position = new Vector3(position.x, Mathf.MoveTowards(position.y, need, verticalSpeed * dt), position.z);
             }
+        }
+
+        // Quanto o caminho vira (graus) no ponto i, vindo na direção dada: para o ponto seguinte ou,
+        // no último, para o destino.
+        float TurnAfter(int i, Vector3 dir)
+        {
+            Vector3 next = Flat((i + 1 < _path.Count ? _path[i + 1] : _destination) - _path[i]);
+            if (next.sqrMagnitude < 0.04f) return 0f;
+            return Vector3.Angle(dir, next);
+        }
+
+        // Chegou ao ponto do caminho: o seguinte (ou um atalho, onde a linha está livre).
+        void Advance(Vector3 position)
+        {
+            _pathIndex++;
+            _stuckRun = 0;
+            Shortcut(position);
         }
 
         bool TryPose(Vector3 position, Quaternion rotation)
@@ -1027,22 +1160,30 @@ namespace BackRooms.Entities
         }
 
         /// <summary>
-        /// O corpo inteiro cabe nesta pose? Nenhum ponto de <see cref="BodyProbes"/> encosta em
-        /// colisor da fase, e (nadando) há água para a cabeça: o piso sob o focinho fica abaixo da
-        /// superfície (é isso que o segura na água funda na maré baixa).
+        /// O corpo cabe nesta pose? Nenhum ponto de <see cref="BodyProbes"/> (ou, com
+        /// <paramref name="squeeze"/>, do corpo espremido, <see cref="SqueezeProbes"/>: vãos de porta,
+        /// colunas perto da divisa, curvas) encosta em colisor da fase, e (nadando) há água para a
+        /// cabeça: o piso sob o focinho fica abaixo da superfície (é isso que o segura na água funda
+        /// na maré baixa).
         /// </summary>
-        public bool Fits(Vector3 position, Quaternion rotation)
+        public bool Fits(Vector3 position, Quaternion rotation, bool squeeze = true)
         {
             if (_level == null) return true;
-            foreach (Vector4 probe in BodyProbes)
-            {
-                Vector3 p = position + rotation * new Vector3(probe.x, probe.y, probe.z);
-                if (Solid(p, probe.w)) return false;
-            }
             if (!Crawling)
             {
                 Vector3 snout = position + rotation * new Vector3(0f, 0f, BodyProbes[0].z);
                 if (FloorAt(snout) > _nav.SurfaceY - 0.25f) return false;
+            }
+            if (ProbesClear(BodyProbes, position, rotation)) return true;
+            return squeeze && ProbesClear(SqueezeProbes, position, rotation);
+        }
+
+        bool ProbesClear(Vector4[] probes, Vector3 position, Quaternion rotation)
+        {
+            foreach (Vector4 probe in probes)
+            {
+                Vector3 p = position + rotation * new Vector3(probe.x, probe.y, probe.z);
+                if (Solid(p, probe.w)) return false;
             }
             return true;
         }
@@ -1117,28 +1258,48 @@ namespace BackRooms.Entities
             }
         }
 
-        // Travado (andando sem sair do lugar): desiste do ponto; três vezes seguidas, some pelo ralo.
+        // Travado (andando sem sair do lugar, de 2 em 2 s). Caçando ou indo a um barulho, não desiste:
+        // recomeça pelo meio da célula, no eixo do vão, e tenta de novo. Só depois de StuckLimit
+        // travadas seguidas no mesmo lugar (a ~2 m) some pelo ralo: rede de segurança. Chegar a um
+        // ponto do caminho zera a conta.
         void CheckStuck(float now)
         {
             if (!Moving || !_hasGoal || _arrived) { _stuckCheckAt = now + 2f; _stuckFrom = transform.position; return; }
             if (now < _stuckCheckAt) return;
-            float moved = Flat(transform.position - _stuckFrom).magnitude;
-            _stuckFrom = transform.position;
+            Vector3 position = transform.position;
+            float moved = Flat(position - _stuckFrom).magnitude;
+            _stuckFrom = position;
             _stuckCheckAt = now + 2f;
-            if (moved > 0.3f) { if (moved > 1.5f) _stuckRun = 0; return; }
+            if (moved > 0.3f) return;
             Stucks++;
+            if (Flat(position - _stuckPlace).magnitude > 2f) _stuckRun = 0;
+            _stuckPlace = position;
             _stuckRun++;
-            Arrive("travado (o corpo não cabe no caminho)");
-            if (_stuckRun >= 3)
+            if (_stuckRun >= StuckLimit)
             {
                 _stuckRun = 0;
+                LastStop += $" | {now:F1}s travado {StuckLimit} vezes em {position}: some pelo ralo";
                 DiveAway(now);
+                return;
             }
+            if (State == UndertowState.Hunt || State == UndertowState.Investigate)
+            {
+                LastStop += $" | {now:F1}s travado em {position}: de novo pelo eixo";
+                _realignUntil = now + 2.5f;
+                _repathAt = 0f;
+                return;
+            }
+            Arrive("travado (o corpo não cabe no caminho)");
         }
 
         void Repath(Vector3 position, float now)
         {
             _repathAt = now + (State == UndertowState.Hunt ? 0.25f : 0.6f);
+            // Caçando ou indo a um barulho (a meta anda a cada 0,25 s), no meio de uma travessia não
+            // refaz o caminho: termina de passar pelo eixo do vão (refazendo, entrava sempre torto).
+            // Rondando ou voltando, refaz (a meta nova pode estar atrás: ele sai de ré).
+            bool chasing = State == UndertowState.Hunt || State == UndertowState.Investigate;
+            if (chasing && now >= _realignUntil && Crossing(position)) { _repathAt = now + 0.1f; return; }
             if (!_nav.WorldToCell(position, out int cx, out int cz) || !_nav.Territory[cx, cz]) { Arrive($"fora do território em {position}"); return; }
 
             _nav.Distances(cx, cz, _reach);
@@ -1160,39 +1321,137 @@ namespace BackRooms.Entities
             }
 
             _destination = _nav.ClampToCell(gx, gz, _goal, bodyRadius + 0.3f);
-            // O caminho passa pelo meio de cada célula e pelo meio de cada divisa aberta: o corpo
-            // atravessa vãos e arcos centrado, nunca cortando o canto de uma parede.
-            _nav.Path(cx, cz, gx, gz, _path);
-            Vector3 previous = _nav.CellCenter(cx, cz);
-            int n = _path.Count;
-            for (int i = 0; i < n; i++)
-            {
-                Vector3 c = _path[i];
-                _path.Add((previous + c) * 0.5f);
-                _path.Add(c);
-                previous = c;
-            }
-            _path.RemoveRange(0, n);
-            // Sem o meio da célula do alvo: dali em diante vale só a aproximação final (pela cabeça,
-            // parando antes quando não ouve mais). Com ele, o corpo passava pelo meio da célula, por
-            // cima de quem estava parado ali, e esbarrava.
-            if (_path.Count > 0) _path.RemoveAt(_path.Count - 1);
+            _nav.Path(cx, cz, gx, gz, _cellsOnPath);
+            BuildRail(cx, cz);
             _pathIndex = 0;
-            _direct = Clear(position, _destination);
-            if (!_direct) Shortcut(position);
+            bool realign = now < _realignUntil;
+            _direct = !realign && Clear(position, _destination);
+            if (!_direct)
+            {
+                Approach(position, cx, cz, realign);
+                Shortcut(position);
+            }
             if (Flat(_destination - position).magnitude < 0.35f) Arrive($"já no destino {_destination}");
         }
 
-        void Shortcut(Vector3 position)
+        /// <summary>
+        /// O caminho por pontos: para cada troca de célula, o meio da divisa (o eixo do vão) e o meio
+        /// da célula seguinte, os dois na linha que liga os meios das duas células. O corpo cruza
+        /// todo vão (porta, arco, arco largo, divisa entre colunas) reto e pelo meio, e só vira no
+        /// meio das células. Sem o meio da célula do alvo (dali vale a aproximação final, pela
+        /// cabeça; com ele, o corpo passava por cima de quem estava parado ali e esbarrava): no
+        /// lugar dele, um ponto no eixo logo depois do último vão, para não virar com o corpo dentro.
+        /// </summary>
+        void BuildRail(int cx, int cz)
         {
-            while (_pathIndex + 1 < _path.Count && Clear(position, _path[_pathIndex + 1])) _pathIndex++;
+            _path.Clear();
+            _railFrom.Clear();
+            _pointKind.Clear();
+            Vector3 previous = _nav.CellCenter(cx, cz);
+            int px = cx, pz = cz;
+            foreach (Vector3 c in _cellsOnPath)
+            {
+                _nav.WorldToCell(c, out int nx, out int nz);
+                byte kind = EdgeBetween(px, pz, nx, nz) == PoolEdge.Open ? PointOpen : PointWallGate;
+                AddPoint((previous + c) * 0.5f, previous, kind);
+                AddPoint(c, previous, PointFree);
+                previous = c;
+                px = nx;
+                pz = nz;
+            }
+            int n = _path.Count;
+            if (n < 2) return;
+            Vector3 gate = _path[n - 2];
+            Vector3 from = _railFrom[n - 2];
+            byte last = _pointKind[n - 2];
+            _path.RemoveAt(n - 1);
+            _railFrom.RemoveAt(n - 1);
+            _pointKind.RemoveAt(n - 1);
+            Vector3 axis = Flat(gate - from).normalized;
+            AddPoint(gate + axis * (last == PointWallGate ? WallGatePost : OpenGatePost), from, PointFree);
         }
 
-        // Linha reta livre para o corpo: no território com a largura dos braços recolhidos e sem
-        // parede nem coluna na altura em que nada.
+        void AddPoint(Vector3 point, Vector3 from, byte kind)
+        {
+            _path.Add(point);
+            _railFrom.Add(from);
+            _pointKind.Add(kind);
+        }
+
+        PoolEdge EdgeBetween(int ax, int az, int bx, int bz)
+        {
+            WallSide side = bx > ax ? WallSide.East : bx < ax ? WallSide.West : bz > az ? WallSide.North : WallSide.South;
+            return _nav.Data.EdgeSouth == null ? PoolEdge.Open : _nav.Data.EdgeAt(ax, az, side);
+        }
+
+        /// <summary>
+        /// Começando o caminho longe do eixo do primeiro vão (ou recomeçando depois de travar): vai
+        /// antes ao meio da célula em que está, em linha reta, e dali segue o eixo. Já perto da
+        /// parede (a cabeça dentro do vão), segue em frente.
+        /// </summary>
+        void Approach(Vector3 position, int cx, int cz, bool realign)
+        {
+            if (_path.Count == 0) return;
+            Vector3 center = _nav.CellCenter(cx, cz);
+            if (Flat(center - position).magnitude < 0.3f) return;
+            if (!realign)
+            {
+                if (_pointKind[0] == PointFree) return;
+                Vector3 from = _railFrom[0];
+                Vector3 dir = Flat(_path[0] - from);
+                float length = dir.magnitude;
+                if (length < 0.01f) return;
+                dir /= length;
+                float along = Vector3.Dot(Flat(position - from), dir);
+                float side = (Flat(position - from) - dir * along).magnitude;
+                if (side <= 0.35f || along > length - 0.8f) return;
+            }
+            else
+            {
+                // Travou: volta ao meio da célula só se cabe virado para ele (dentro de um vão não
+                // cabe, e ali o certo é seguir em frente pelo eixo).
+                Vector3 back = Flat(center - position);
+                if (Vector3.Dot(Flat(transform.forward), back) < 0f && !Fits(position, Quaternion.LookRotation(back, Vector3.up))) return;
+            }
+            _path.Insert(0, center);
+            _railFrom.Insert(0, position);
+            _pointKind.Insert(0, PointFree);
+        }
+
+        /// <summary>Entrando num vão de parede (já passou do meio da célula de antes) ou ainda saindo dele.</summary>
+        bool Crossing(Vector3 position)
+        {
+            if (_direct || _pathIndex >= _path.Count) return false;
+            int i = _pathIndex;
+            if (i > 0 && _pointKind[i - 1] == PointWallGate) return true;
+            if (_pointKind[i] != PointWallGate) return false;
+            Vector3 dir = Flat(_path[i] - _railFrom[i]);
+            return dir.sqrMagnitude > 1e-4f && Vector3.Dot(Flat(position - _railFrom[i]), dir.normalized) > 0.3f;
+        }
+
+        // Pula pontos do caminho onde a linha reta está livre, mas nunca o meio de um vão de parede
+        // nem direto para ele (o vão se cruza sempre pelo eixo), nem no meio de uma travessia.
+        void Shortcut(Vector3 position)
+        {
+            if (Crossing(position)) return;
+            bool skipped = false;
+            while (_pathIndex + 1 < _path.Count && _pointKind[_pathIndex] != PointWallGate
+                   && _pointKind[_pathIndex + 1] != PointWallGate && Clear(position, _path[_pathIndex + 1]))
+            {
+                _pathIndex++;
+                skipped = true;
+            }
+            // O atalho é a linha daqui até o ponto.
+            if (skipped) _railFrom[_pathIndex] = position;
+        }
+
+        // Linha reta livre para o corpo: no território com a largura dos braços recolhidos, sem
+        // cruzar vão de parede (porta, arco: esses só pelo eixo) e sem parede nem coluna na altura
+        // em que nada.
         bool Clear(Vector3 from, Vector3 to)
         {
             if (!_nav.StraightClear(from, to, 0.9f)) return false;
+            if (CrossesWallGate(from, to)) return false;
             Vector3 delta = Flat(to - from);
             float distance = delta.magnitude;
             if (distance < 0.05f) return true;
@@ -1200,6 +1459,22 @@ namespace BackRooms.Entities
             for (int i = 0; i < count; i++)
                 if (Hits[i].collider.transform.IsChildOf(_level.transform)) return false;
             return true;
+        }
+
+        bool CrossesWallGate(Vector3 from, Vector3 to)
+        {
+            Vector3 delta = Flat(to - from);
+            int steps = Mathf.Max(1, Mathf.CeilToInt(delta.magnitude / 0.25f));
+            if (!_nav.WorldToCell(from, out int lx, out int lz)) return true;
+            for (int i = 1; i <= steps; i++)
+            {
+                if (!_nav.WorldToCell(from + delta * ((float)i / steps), out int x, out int z)) return true;
+                if (x == lx && z == lz) continue;
+                if (Mathf.Abs(x - lx) + Mathf.Abs(z - lz) != 1 || EdgeBetween(lx, lz, x, z) != PoolEdge.Open) return true;
+                lx = x;
+                lz = z;
+            }
+            return false;
         }
 
         // ---------------------------------------------------------------- Captura
@@ -1246,7 +1521,7 @@ namespace BackRooms.Entities
                 _heard.Remove(player);
                 player.GetCaughtRpc();
                 _target = player;
-                _velocity = Vector3.zero;
+                _speed = 0f;
                 SetState(UndertowState.Feed);
                 _stateUntil = now + feedSeconds;
                 return;

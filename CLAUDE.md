@@ -167,7 +167,7 @@ de saída (ou solta, se já estava esperando os outros), mira + E pega pilhas, m
 disjuntor, gira uma válvula (a da água, boiando: Espaço e E juntos) ou puxa um alarme, mira + E num
 interruptor de luz religa o trecho escuro (Escritório), mira + E num botão de elevador abre, fecha ou
 chama, mira + E numa carteira das salas de aula do Escritório senta (E de novo, andar ou pular levanta), mira + E no teclado da porta do Level 1 abre o painel do código (números ou clique,
-Backspace apaga, Enter confirma, Esc ou E fecha), F9 grava a tela, Esc abre o menu de pausa (tarefas, teclas e opções; o jogo não para; fechar
+Backspace apaga, Enter confirma, Esc ou E fecha), R grava a tela, Esc abre o menu de pausa (tarefas, teclas e opções; o jogo não para; fechar
 prende o mouse de novo; Start no controle). No menu: H hospeda, J entra; a lista "Level" troca de nível
 (no editor todas ficam liberadas). Na água funda das
 Piscinas (piscinas, raias, canais e poços: não dá pé), segurar Espaço sobe e fica à tona; sem tecla,
@@ -241,6 +241,10 @@ velho. Mudança só de código não precisa. A cena do Level 1 não tem versão:
   recuando, a câmera sai de dentro dele e um `Physics.Raycast` comum o acerta. Use o padrão de
   `PenTool.TryAim` (`RaycastNonAlloc` descartando `transform.root` igual ao do jogador) em todo
   item novo: interagir, pegar, mirar.
+- **Interagível novo de mira + E entra na mira comum** (`InteractAim`, `World/InteractAim.cs`, desde
+  21/11/2026): implementa `IAimSource` (alvo mais perto do centro da tela num cone de 9°, com visada
+  livre, ou o raio direto) e age só se `InteractAim.Winner(this)` devolve o alvo. Mira própria em cada
+  classe fazia um E acionar duas coisas vizinhas; a porta de saída cede a vez (`InteractAim.Any`).
 - **Geração de fase é determinística.** O host envia só a seed e cada máquina monta o mesmo
   labirinto, então `LevelGenerator`, `LevelBuilder` e `PropLayer` usam apenas
   `System.Random(seed)`, nunca `UnityEngine.Random`, tempo, ordem de dicionário nem
@@ -340,6 +344,10 @@ velho. Mudança só de código não precisa. A cena do Level 1 não tem versão:
   (`UndertowBrain.Fits`, `BodyProbes`), a altura sai do piso medido por raio sob o corpo todo (degraus,
   capa, deque do poço redondo) e o `UndertowBody.Fit` recolhe os braços onde eles bateriam. Até 21/11/2026
   só o meio era conferido e ele atravessava parede e escada; o `UndertowTest` confere o corpo o tempo todo.
+  A conferência não pode recusar vão que o `UndertowNav` dá como aberto: os braços recolhidos (1,28 m)
+  não passavam no vão de porta (1,4 m) nem rente a coluna perto da divisa, e ele travava nas portas. Desde
+  21/11/2026 (à noite) ele nada para onde aponta, cruza cada vão pelo eixo, baixo, e no aperto se espreme
+  (`SqueezeProbes`, 0,76 m).
 - **Teste em dois editores compara as máquinas pela sonda (`NetProbe`)**: o host manda a hora da sessão
   e o estado, e o cliente compara no mesmo instante. Valor que cada máquina calcula pela própria hora
   (maré, apagão, onda) só prova algo junto com a conferência do relógio, e o relógio se mede pelo início
@@ -586,8 +594,10 @@ Sozinho na máquina, direto:
   (`OfficeGenerator.Validate` sem problemas, mesma seed = mesmo `Hash`, uma porta de saída, três
   elevadores, início na cabine, caminho até a escada e escada até a porta livres para uma cápsula do
   tamanho do jogador, chão sob cada ponto da escada); fotos em `Logs/Previews/level3_*.png` (cabine,
-  saguão, corredor nos dois sentidos, salas, cafeteria, área de estar, vão da escada, saída, placa).
-  Sai com 0 se passou, 3 se falhou.
+  saguão, corredor nos dois sentidos, salas, cafeteria, área de estar, porta da escada de perto e de
+  longe, vão da escada, saída, placa). Sai com 0 se passou, 3 se falhou.
+- `Level3MenuPhoto.BatchRun` — não é teste: o menu inicial com o Level 3 escolhido e a vista do
+  Escritório atrás dele (`LevelBuilder.MenuView`), em `Logs/Previews/office/menu_level3.png`.
 - `Level3PlayTest.BatchRun` — o Escritório em Play: nasce na cabine, a porta dela abre sozinha, anda o
   caminho e desce a escada até a porta da saída (passos de piso duro), espera a onda de luzes apagar um
   trecho e abre a porta: última fase, zera e acaba no menu. Restaura o progresso salvo; linha
@@ -732,7 +742,11 @@ tempo. O `LevelBuilder.objective` diz o tipo (`Breaker` no Level 0, posto sempre
   mudam o hash da planta. Parede lisa e livre achada por raio a partir do meio da célula; os raios
   ignoram jogadores (quem entra depois monta igual).
 - Não é "ao mesmo tempo": o primeiro ponto armado abre a janela e os outros (2 com até dois jogadores,
-  3 com três ou quatro: `RequiredFor`) têm de vir dentro dela; sozinho não há janela.
+  3 com três ou quatro: `RequiredFor`; no Level 3, os 3 alarmes sempre, também sozinho) têm de vir
+  dentro dela; sozinho não há janela.
+- No Level 3 os alarmes ficam dentro de salas, um por sala, fora da vista da porta e do vidro e longe da
+  cabine e da escada (`SwitchObjective.ChooseAlarms`; o log diz a sala de cada um); sem três salas que
+  sirvam, voltam aos corredores.
 - Nas Piscinas, a válvula 0 fica no seco (a pé) e a 1 só se alcança nadando (`WaterValveSpot`:
   `AcrossWater`, numa ilha ou na parede sobre a funda; `WellBottom`, no fundo de um poço, desligado;
   `LevelBuilder.waterValve`), por sorteio próprio fugindo da água do covil do Undertow (onde ele começa;

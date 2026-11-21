@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BackRooms.Net;
+using BackRooms.Player;
 using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
@@ -77,7 +78,7 @@ namespace BackRooms.World
     /// enquanto a porta não está fechada de todo, alguém no vão a faz reabrir. A trava
     /// <see cref="ElevatorDoors.HeldOpen"/> (o inimigo que chega de elevador) vence o botão de fechar.
     /// </summary>
-    public sealed class ElevatorControl : MonoBehaviour
+    public sealed class ElevatorControl : MonoBehaviour, IAimSource
     {
         // Textos que o jogador lê (a língua do jogo é o inglês).
         public const string OpenText = "E - OPEN DOOR";
@@ -118,7 +119,6 @@ namespace BackRooms.World
             public double From, Until;
         }
 
-        static readonly RaycastHit[] Hits = new RaycastHit[16];
 
         readonly List<ElevatorDoors> _doors = new List<ElevatorDoors>();
         readonly List<Vector3> _toLobby = new List<Vector3>();
@@ -158,11 +158,13 @@ namespace BackRooms.World
         {
             Instance = this;
             _use?.Enable();
+            if (Application.isPlaying) InteractAim.Register(this);
         }
 
         void OnDisable()
         {
             _use?.Disable();
+            InteractAim.Unregister(this);
             if (Instance == this) { Instance = null; Prompt = null; }
         }
 
@@ -243,7 +245,8 @@ namespace BackRooms.World
             PressForTest = false;
             if (local == null || !local.InGame || local.controller == null || local.controller.IsReturning || local.controller.InFurniture) return;
 
-            ElevatorButton aimed = Aimed(local);
+            int won = InteractAim.Winner(this);
+            ElevatorButton aimed = won >= 0 && won < _buttons.Count ? _buttons[won] : null;
             if (aimed == null) return;
             Prompt = PromptFor(aimed);
             if (!pressed || Time.time - _sentAt < 0.3f) return;
@@ -274,24 +277,23 @@ namespace BackRooms.World
             }
         }
 
-        ElevatorButton Aimed(PlayerNetwork local)
+        // O botão mais perto do centro da mira (mira comum: InteractAim).
+        public bool AimCandidate(in InteractAim.View view, out int index, out float score)
         {
-            Camera camera = local.playerCamera;
-            if (camera == null) return null;
-            Transform eye = camera.transform;
-            int count = Physics.RaycastNonAlloc(eye.position, eye.forward, Hits, reach, ~0, QueryTriggerInteraction.Ignore);
-            Transform self = local.transform.root;
-            float best = float.MaxValue;
-            Collider nearest = null;
-            for (int i = 0; i < count; i++)
+            index = -1;
+            score = float.PositiveInfinity;
+            PlayerController body = view.Local != null ? view.Local.controller : null;
+            if (body == null || body.IsReturning || body.InFurniture) return false;
+            for (int i = 0; i < _buttons.Count; i++)
             {
-                if (Hits[i].collider.transform.root == self || Hits[i].distance >= best) continue;
-                best = Hits[i].distance;
-                nearest = Hits[i].collider;
+                ElevatorButton button = _buttons[i];
+                if (button == null) continue;
+                float sc = InteractAim.Score(view, button.transform, button.transform.position, reach);
+                if (sc >= score) continue;
+                score = sc;
+                index = i;
             }
-            if (nearest == null) return null;
-            var button = nearest.GetComponent<ElevatorButton>();
-            return button != null && _buttons.Contains(button) ? button : null;
+            return index >= 0;
         }
 
         // ---------------------------------------------------------------- Host

@@ -65,6 +65,11 @@ namespace BackRooms.Net
         [Tooltip("Giro da câmera do menu, em graus por segundo.")]
         public float menuSpin = 3f;
 
+        // Fase com vista própria para o menu (LevelBuilder.MenuView, o Escritório): a câmera olha ao
+        // longo de um corredor e balança devagar, em vez de girar (girando, via só parede).
+        Quaternion? _menuView;
+        const float MenuSway = 12f;
+
         public SessionPhase Phase { get; private set; } = SessionPhase.Menu;
         public string Status { get; private set; } = "";
         public string Address { get; private set; } = "";
@@ -176,7 +181,12 @@ namespace BackRooms.Net
         void Update()
         {
             if (Phase != SessionPhase.Playing && menuCamera != null && menuCamera.enabled)
-                menuCamera.transform.Rotate(0f, menuSpin * Time.deltaTime, 0f, Space.World);
+            {
+                if (_menuView.HasValue)
+                    menuCamera.transform.rotation = Quaternion.Euler(0f, Mathf.Sin(Time.unscaledTime * 0.15f) * MenuSway, 0f) * _menuView.Value;
+                else
+                    menuCamera.transform.Rotate(0f, menuSpin * Time.deltaTime, 0f, Space.World);
+            }
 
             if (_switchTo >= 0)
             {
@@ -683,8 +693,17 @@ namespace BackRooms.Net
 
             if (menuCamera != null)
             {
-                Vector3 eye = level.ScenicPosition();
-                menuCamera.transform.position = new Vector3(eye.x, 1.65f, eye.z);
+                if (level.MenuView(out Vector3 viewEye, out Quaternion viewLook))
+                {
+                    menuCamera.transform.SetPositionAndRotation(viewEye, viewLook);
+                    _menuView = viewLook;
+                }
+                else
+                {
+                    Vector3 eye = level.ScenicPosition();
+                    menuCamera.transform.position = new Vector3(eye.x, 1.65f, eye.z);
+                    _menuView = null;
+                }
             }
 
             _building = null;

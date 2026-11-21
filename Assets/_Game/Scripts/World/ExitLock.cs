@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BackRooms.Net;
+using BackRooms.Player;
 using BackRooms.UI;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -22,7 +23,7 @@ namespace BackRooms.World
     /// seed, só para o visor responder na hora (vermelho ou aceito); quem destranca é o host.
     /// Trancada, a porta de saída não deixa esperar nela (<see cref="LevelExit"/>).
     /// </summary>
-    public sealed class ExitLock : MonoBehaviour, ITaskSource
+    public sealed class ExitLock : MonoBehaviour, ITaskSource, IAimSource
     {
         // Textos das tarefas do menu de pausa (a língua do jogo é o inglês).
         const string TagsTask = "Find the 3 red CLEARANCE tags (the door code)";
@@ -36,6 +37,9 @@ namespace BackRooms.World
         // O aviso da mira no painel da filmadora.
         const string KeypadPrompt = "E - KEYPAD";
         const string OpenPrompt = "OPEN";
+
+        // Altura do meio do teclado: perto da altura dos olhos (1,65 m em pé), fácil de mirar.
+        const float KeypadHeight = 1.42f;
         // Texto pintado na etiqueta (PixelFont: só A-Z, 0-9 e : . , / - = ( )): até 10 letras.
         const string TagWord = "CLEARANCE";
 
@@ -82,7 +86,6 @@ namespace BackRooms.World
 
         public float reach = 2f;
 
-        static readonly RaycastHit[] Hits = new RaycastHit[16];
         // O desenho da face (as teclas da parede são só enfeite: digita-se no painel da tela).
         static readonly string[] Keys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "X", "0", "OK" };
         const string ErrorStatus = "ERR", SentStatus = "OK", OpenStatus = "OPEN";
@@ -117,8 +120,18 @@ namespace BackRooms.World
             _use.AddBinding("<Gamepad>/buttonWest");
         }
 
-        void OnEnable() => _use.Enable();
-        void OnDisable() { _use.Disable(); Prompt = null; }
+        void OnEnable()
+        {
+            _use.Enable();
+            if (Application.isPlaying) InteractAim.Register(this);
+        }
+
+        void OnDisable()
+        {
+            _use.Disable();
+            InteractAim.Unregister(this);
+            Prompt = null;
+        }
 
         void OnDestroy()
         {
@@ -150,7 +163,7 @@ namespace BackRooms.World
         {
             var keypad = new GameObject("Teclado");
             keypad.transform.SetParent(exitRoot, false);
-            keypad.transform.localPosition = new Vector3(0.95f, 1.3f, -0.03f);
+            keypad.transform.localPosition = new Vector3(0.95f, KeypadHeight, -0.03f);
             _keypad = keypad.transform;
 
             // A caixa cinza-escura, com a face desenhada. O colisor dela é o que a mira procura.
@@ -208,7 +221,7 @@ namespace BackRooms.World
             bool pressed = (_use.WasPressedThisFrame() && !InputGate.Blocked) || PressForTest;
             PressForTest = false;
 
-            if (!AimedAtKeypad(local)) return;
+            if (InteractAim.Winner(this) < 0) return;
             if (Unlocked)
             {
                 Prompt = OpenPrompt;
@@ -223,22 +236,18 @@ namespace BackRooms.World
             }
         }
 
-        bool AimedAtKeypad(PlayerNetwork local)
+        // O teclado na mira (mira comum: InteractAim). Destrancada, ele não disputa a mira: o E
+        // fica para a porta, ao lado.
+        public bool AimCandidate(in InteractAim.View view, out int index, out float score)
         {
-            Camera camera = local.playerCamera;
-            if (camera == null) return false;
-            Transform eye = camera.transform;
-            int count = Physics.RaycastNonAlloc(eye.position, eye.forward, Hits, reach, ~0, QueryTriggerInteraction.Ignore);
-            Transform self = local.transform.root;
-            float best = float.MaxValue;
-            Collider nearest = null;
-            for (int i = 0; i < count; i++)
-            {
-                if (Hits[i].collider.transform.root == self || Hits[i].distance >= best) continue;
-                best = Hits[i].distance;
-                nearest = Hits[i].collider;
-            }
-            return nearest != null && nearest == _keypadCollider;
+            index = -1;
+            score = float.PositiveInfinity;
+            PlayerController body = view.Local != null ? view.Local.controller : null;
+            if (_keypad == null || Unlocked || CodePanel.IsOpen || body == null || body.IsReturning || body.InFurniture) return false;
+            score = InteractAim.Score(view, _keypad, _keypad.position, reach);
+            if (float.IsPositiveInfinity(score)) return false;
+            index = 0;
+            return true;
         }
 
         /// <summary>

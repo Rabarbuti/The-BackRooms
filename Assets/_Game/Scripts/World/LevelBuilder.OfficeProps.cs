@@ -610,7 +610,8 @@ namespace BackRooms.World
                 OTube(office.steel, c - toLobby * (CabHalf - 0.06f) - lateral * 1.0f + rail, c - toLobby * (CabHalf - 0.06f) + lateral * 1.0f + rail, 0.02f, 8);
                 foreach (float s in new[] { -1f, 1f })
                     OTube(office.steel, c + lateral * (s * (CabHalf - 0.06f)) - toLobby * 1.0f + rail, c + lateral * (s * (CabHalf - 0.06f)) + toLobby * 0.8f + rail, 0.02f, 8);
-                Vector3 panel = c + toLobby * (CabHalf - 0.012f) + lateral * 0.9f + Vector3.up * 1.2f;
+                // Painel e botão de chamada perto da altura dos olhos (1,65 m): mira fácil (21/11/2026; eram 1,2 e 1,12 m).
+                Vector3 panel = c + toLobby * (CabHalf - 0.012f) + lateral * 0.9f + Vector3.up * 1.45f;
                 OBox(office.steel, panel, Abs(lateral) * 0.24f + Abs(toLobby) * 0.02f + Vector3.up * 0.6f);
                 // Os dois de baixo (abrir e fechar) se apertam: saem depois da porta, como objetos.
                 for (int i = 0; i < 4; i++)
@@ -647,7 +648,7 @@ namespace BackRooms.World
                 Vector3 inner = panel - toLobby * 0.018f;
                 ElevatorButton(doors, ElevatorButtonKind.Open, inner + Vector3.up * (0.2f - 4 * 0.075f), -toLobby, e);
                 ElevatorButton(doors, ElevatorButtonKind.Close, inner + Vector3.up * (0.2f - 5 * 0.075f), -toLobby, e);
-                Vector3 call = c + toLobby * (Cell * 0.5f + OfficeWallThickness * 0.5f + 0.021f) + lateral * 0.98f + Vector3.up * 1.12f;
+                Vector3 call = c + toLobby * (Cell * 0.5f + OfficeWallThickness * 0.5f + 0.021f) + lateral * 0.98f + Vector3.up * 1.4f;
                 ElevatorButton(doors, ElevatorButtonKind.Call, call, toLobby, e);
             }
         }
@@ -770,11 +771,11 @@ namespace BackRooms.World
             beam.AddQuad(AtPoint(StairWidth, vTop, -0.42f), AtPoint(StairWidth + 0.07f, vTop, -0.42f),
                          AtPoint(StairWidth + 0.07f, vBottom, yBottom - 0.42f), AtPoint(StairWidth, vBottom, yBottom - 0.42f), Vector3.down);
 
-            // Guarda-corpos: patamar de cima (do lado do vão e na linha do corredor), escada e patamar da saída.
-            // Na linha do corredor, só a célula da escada: nas outras o guarda-corpo é o da divisa.
+            // Guarda-corpos: patamar de cima (do lado do vão), escada e patamar da saída. Na linha do
+            // corredor o vão é fechado por parede, com a porta da escada (BuildStairDoor).
             float topCellEnd = Cell - T * 0.5f;
-            AtRailing(StairWidth + 0.05f, 0f, 0f, topCellEnd - 0.02f, 0f, 0f);
-            AtRailing(StairWidth + 0.04f, 0.02f, 0f, StairWidth + 0.04f, vTop, 0f);
+            BuildStairDoor();
+            AtRailing(StairWidth + 0.04f, T * 0.5f + 0.02f, 0f, StairWidth + 0.04f, vTop, 0f);
             AtRailing(StairWidth + 0.04f, vTop, 0f, StairWidth + 0.04f, vBottom, yBottom);
             AtRailing(3f, vBottom, yBottom, 3f, landingEnd, yBottom);
             AtRailing(0.02f, landingEnd, yBottom, 3f, landingEnd, yBottom);
@@ -799,7 +800,7 @@ namespace BackRooms.World
                 AtBox(office.wall, u, u + T, 0f, lenV, OfficeSlab, AtriumTop, false);
             }
             AtBox(office.concrete, 0f, lenU, lenV - T * 0.5f, lenV + T * 0.5f, AtriumBottom, 0f, false);
-            AtBox(office.concrete, 0f, lenU, -T, 0f, AtriumBottom, -0.35f, false);
+            AtBox(office.concrete, 0f, lenU, -T, 0f, AtriumBottom, 0f, false);
             AtBox(office.wall, 0f, lenU, -T, 0f, OfficeSlab, AtriumTop, false);
 
             // Fachada de vidro acima da laje, com uma faixa de concreto em cada andar.
@@ -852,6 +853,52 @@ namespace BackRooms.World
             OfficeExitRoute.Add(transform.TransformPoint(AtPoint(0.7f, vBottom + 0.25f, yBottom)));
             OfficeExitRoute.Add(transform.TransformPoint(AtPoint(1.15f, (vBottom + landingEnd) * 0.5f, yBottom)));
         }
+
+        // Porta da escada, vista do corredor (21/11/2026): o vão fica atrás de parede, e a entrada é uma
+        // porta igual às das salas (vão de 1 m, batente branco), aberta para dentro do patamar. Do
+        // lado do corredor, só a placa de saída rente à parede, em cima da porta (de longe, no
+        // corredor, quase não se vê), e uma plaquinha de escada ao lado. A porta fica sobre a escada
+        // (perto da parede da ponta), não no meio da divisa: no meio daria para o vão.
+        void BuildStairDoor()
+        {
+            const float T = OfficeWallThickness;
+            float c = StairDoorCenter, h = OfficeDoorHalf;
+            float u0 = -T, u1 = Cell; // a divisa inteira da célula da escada (meio da célula em u = Cell/2 - T/2)
+            float face = -T * 0.5f;
+
+            AtBox(office.wall, u0, c - h, -T * 0.5f, T * 0.5f, 0f, OfficeSlab, true);
+            AtBox(office.wall, c + h, u1, -T * 0.5f, T * 0.5f, 0f, OfficeSlab, true);
+            AtBox(office.wall, c - h, c + h, -T * 0.5f, T * 0.5f, OfficeDoorTop, OfficeSlab, true);
+            AtBox(office.baseboard, u0, c - h - 0.06f, face - 0.012f, face, 0f, 0.09f, false);
+            AtBox(office.baseboard, c + h + 0.06f, u1, face - 0.012f, face, 0f, 0.09f, false);
+
+            // Batente branco dos dois lados, como em DoorFrame.
+            float d = T * 0.5f + 0.02f;
+            AtBox(office.frameWhite, c - h - 0.06f, c - h, -d, d, 0f, OfficeDoorTop + 0.06f, false);
+            AtBox(office.frameWhite, c + h, c + h + 0.06f, -d, d, 0f, OfficeDoorTop + 0.06f, false);
+            AtBox(office.frameWhite, c - h - 0.06f, c + h + 0.06f, -d, d, OfficeDoorTop, OfficeDoorTop + 0.06f, false);
+
+            // Folha aberta a 90°, para dentro, presa no batente do lado do vão: fica entre o caminho
+            // da escada e o guarda-corpo do patamar.
+            float l0 = T * 0.5f + 0.015f, l1 = l0 + 0.95f;
+            AtBox(office.frameWhite, c + h - 0.045f, c + h - 0.005f, l0, l1, 0.01f, 2.07f, true);
+            AtBox(office.steel, c + h - 0.095f, c + h - 0.045f, l1 - 0.12f, l1 - 0.06f, 1.0f, 1.03f, false);
+
+            // Placa de saída rente à parede, em cima da porta (o quadro sem seta).
+            AtBox(office.blackPlastic, c - 0.23f, c + 0.23f, face - 0.025f, face, 2.21f, 2.39f, false);
+            Vector3 toWall = _atIn, right = Vector3.Cross(Vector3.up, toWall);
+            SignFace(OM(office.signGreen), AtPoint(c, face - 0.027f, 2.3f), -toWall, right, 0.42f, 0.15f, 3);
+
+            // Plaquinha de escada (degraus pretos num quadro branco), do lado de fora do batente.
+            float pu = c + h + 0.42f;
+            AtBox(office.frameWhite, pu - 0.11f, pu + 0.11f, face - 0.012f, face, 1.45f, 1.67f, false);
+            for (int k = 0; k < 4; k++)
+                AtBox(office.blackPlastic, pu - 0.08f + k * 0.04f, pu + 0.08f, face - 0.018f, face - 0.012f,
+                      1.48f + k * 0.04f, 1.52f + k * 0.04f, false);
+        }
+
+        /// <summary>Meio da porta da escada, a partir da parede da ponta (a escada tem <see cref="StairWidth"/>).</summary>
+        const float StairDoorCenter = 0.8f;
 
         // Porta corta-fogo na parede da ponta, no patamar de baixo, com a placa verde acesa.
         void BuildOfficeExit(float floor, float v)

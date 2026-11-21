@@ -53,7 +53,7 @@ namespace BackRooms.UI
         };
         static readonly (string key, string action)[] EndKeys =
         {
-            ("F9", "record the screen (again: stop; clips in Recordings)"),
+            ("R", "record the screen (again: stop; clips in Recordings)"),
             ("Esc", "tasks / back to the game"),
         };
 
