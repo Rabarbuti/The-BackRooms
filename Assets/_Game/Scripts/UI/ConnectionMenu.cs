@@ -35,15 +35,17 @@ namespace BackRooms.UI
         const string TotalText = "Total";
         const string ClearedNotice = " CLEARED";
         const string UnlockedNotice = " unlocked in the menu";
+        // Por enquanto o jogo é só para um jogador (pedido de 21/11/2026): o menu não mostra o
+        // endereço nem "Join", e a tela não fala de hospedar. A rede continua inteira por baixo
+        // (os testes em dois editores entram direto pela GameSession); ligar isto traz tudo de volta.
+        const bool MultiplayerMenu = false;
+        const string PlayText = "Play        [H]";
         const string HostText = "Host  (or play alone)        [H]";
         const string AddressLabel = "Address of whoever is hosting";
         const string JoinText = "Join        [J]";
         const string LevelLabel = "Level";
         const string DevNote = "Developer mode: all levels unlocked.";
-        const string StateHere = "here";
         const string StateCleared = "cleared";
-        const string StateUnlocked = "unlocked";
-        const string StateLocked = "clear {0} first";
         const string ConnectedTo = "Connected to ";
         const string Hosting = "Hosting";
         const string PortText = "port ";
@@ -63,6 +65,7 @@ namespace BackRooms.UI
         Label _notice;
         Button[] _levelButtons;
         MenuKit.OptionsPanel _options;
+        RecordingsScreen _recordings;
         VisualElement _ending;
         Label _endingTimes;
 
@@ -82,6 +85,7 @@ namespace BackRooms.UI
             BuildHud(root);
 
             BuildEnding(root);
+            _recordings = new RecordingsScreen(root);
             EnsurePauseMenu();
 
             _localAddresses = FindLocalAddresses();
@@ -180,7 +184,7 @@ namespace BackRooms.UI
 
             BuildLevelList();
 
-            _panel.Add(MenuButton(HostText, () => session.Host()));
+            _panel.Add(MenuButton(MultiplayerMenu ? HostText : PlayText, () => session.Host()));
 
             var joinLabel = Text(AddressLabel, 14, Paper);
             joinLabel.style.marginTop = 22;
@@ -194,7 +198,21 @@ namespace BackRooms.UI
             _address.style.marginBottom = 8;
             _panel.Add(_address);
 
-            _panel.Add(MenuButton(JoinText, () => session.Join(_address.value)));
+            Button join = MenuButton(JoinText, () => session.Join(_address.value));
+            _panel.Add(join);
+            if (!MultiplayerMenu)
+            {
+                joinLabel.style.display = DisplayStyle.None;
+                _address.style.display = DisplayStyle.None;
+                join.style.display = DisplayStyle.None;
+            }
+
+            // As gravações da tela (F9): a galeria abre por cima do menu.
+            Button recordings = MenuButton(RecordingsScreen.ButtonText, () => _recordings.Show());
+            recordings.style.marginTop = 14;
+            recordings.style.height = 36;
+            recordings.style.fontSize = 16;
+            _panel.Add(recordings);
 
             BuildOptions();
 
@@ -212,6 +230,9 @@ namespace BackRooms.UI
         {
             if (_pause != null) Destroy(_pause.gameObject);
         }
+
+        /// <summary>A galeria das gravações do menu inicial (testes).</summary>
+        public RecordingsScreen Recordings => _recordings;
 
         // O menu de pausa vive num documento próprio (este se limpa inteiro ao ligar), com o mesmo
         // PanelSettings e desenhado por cima. Criado aqui para valer em toda cena que tem este menu.
@@ -271,13 +292,11 @@ namespace BackRooms.UI
             {
                 LevelInfo info = LevelCatalog.Levels[i];
                 bool unlocked = LevelProgress.IsUnlocked(i);
-                string state = i == current ? StateHere
-                    : LevelProgress.IsCleared(i) ? StateCleared
-                    : unlocked ? StateUnlocked
-                    : string.Format(StateLocked, LevelCatalog.Get(i - 1).Name);
-
+                // Só a fase zerada ganha etiqueta (pedido de 21/11/2026): a atual se vê pela cor do
+                // botão e a bloqueada, por estar apagada.
                 Button button = _levelButtons[i];
-                button.text = info.Name + " — " + info.Subtitle + "   [" + state + "]";
+                button.text = info.Name + " — " + info.Subtitle +
+                    (LevelProgress.IsCleared(i) ? "   [" + StateCleared + "]" : "");
                 button.SetEnabled(unlocked && i != current);
                 button.style.backgroundColor = i == current ? CurrentColor : unlocked ? ButtonColor : LockedColor;
                 // Desabilitado o Unity apaga o botão; a fase atual tem de continuar legível.
@@ -320,6 +339,7 @@ namespace BackRooms.UI
                 EndingShown = false;
             }
             bool playing = session.Phase == SessionPhase.Playing;
+            if (!inMenu && _recordings != null && _recordings.IsOpen) _recordings.Hide();
             // Fora do jogo só a música do menu se ouve: a fase montada atrás do menu fica muda.
             GameOptions.SetMenuSilence(!playing);
 
@@ -339,6 +359,7 @@ namespace BackRooms.UI
 
         string DescribeSession()
         {
+            if (!MultiplayerMenu && session.IsHosting && session.PlayerCount <= 1) return PauseHint;
             if (!session.IsHosting) return ConnectedTo + session.Address + "   •   " + PauseHint;
 
             int players = session.PlayerCount;
@@ -351,7 +372,21 @@ namespace BackRooms.UI
             Keyboard keyboard = Keyboard.current;
             if (keyboard == null) return;
 
+            // Com a galeria das gravações aberta, H e J não valem; Esc fecha a galeria.
+            if (_recordings != null && _recordings.IsOpen)
+            {
+                if (keyboard.escapeKey.wasPressedThisFrame) _recordings.Hide();
+                return;
+            }
+
             // Enquanto se digita o endereço, H e J são só letras.
+            if (!MultiplayerMenu)
+            {
+                if (keyboard.hKey.wasPressedThisFrame || keyboard.enterKey.wasPressedThisFrame ||
+                    keyboard.numpadEnterKey.wasPressedThisFrame) session.Host();
+                return;
+            }
+
             bool typing = _address.focusController != null &&
                           _address.focusController.focusedElement is VisualElement focused &&
                           (focused == _address || _address.Contains(focused));

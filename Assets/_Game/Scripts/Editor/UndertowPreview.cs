@@ -154,7 +154,14 @@ namespace BackRooms.EditorTools
 
             string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Logs", "Previews", "undertow"));
             Directory.CreateDirectory(folder);
-            foreach (string old in Directory.GetFiles(folder, "*.png")) File.Delete(old);
+            // -fotoTag X: as séries da braçada e da maré saem com o prefixo X_ (antes_, depois_), e a
+            // limpeza não apaga as de "antes" (para comparar com as de depois de mudar o modelo).
+            // -so bracada | mare: só aquela série.
+            string tag = TextArgument("-fotoTag", "");
+            string prefix = tag.Length > 0 ? tag + "_" : "";
+            string only = TextArgument("-so", "");
+            foreach (string old in Directory.GetFiles(folder, "*.png"))
+                if (!Path.GetFileName(old).StartsWith("antes_") || tag == "antes") File.Delete(old);
 
             // O corpo, sem rede: só o que se vê.
             var creature = new GameObject("Undertow_Previa");
@@ -201,12 +208,17 @@ namespace BackRooms.EditorTools
                     names.Add(file);
                 }
 
-                void Place(Vector3 at, Vector3 forward, float speed, float sleep, float hunt, float grab, float jaw, float phase)
+                void PlaceStroke(Vector3 at, Vector3 forward, float speed, float sleep, float hunt, float grab, float jaw, float phase, float stroke)
                 {
                     forward.y = 0f;
                     creature.transform.SetPositionAndRotation(at, Quaternion.LookRotation(forward.normalized, Vector3.up));
-                    body.Pose(phase, speed, sleep, hunt, grab, jaw, phase * 0.7f);
+                    body.Pose(phase, speed, sleep, hunt, grab, jaw, stroke);
+                    Physics.SyncTransforms();
+                    body.Fit(builder);
                 }
+
+                void Place(Vector3 at, Vector3 forward, float speed, float sleep, float hunt, float grab, float jaw, float phase)
+                    => PlaceStroke(at, forward, speed, sleep, hunt, grab, jaw, phase, phase * 0.7f);
 
                 // A célula funda com o deque seco ao lado: ela passando a meia água, o jogador no deque.
                 Vector3 pool = builder.CellCenter(px, pz);
@@ -214,6 +226,16 @@ namespace BackRooms.EditorTools
                 Vector3 along = Vector3.Cross(Vector3.up, toDeck);
                 Vector3 swimAt = new Vector3(pool.x, surface - 1.1f, pool.z);
                 Vector3 deckEye = new Vector3(pool.x, 0.2f + 1.65f, pool.z) + toDeck * (LevelBuilder.Cell * 0.5f + 0.6f);
+
+                if (only == "bracada" || only == "")
+                    StrokeSeries(PlaceStroke, Shot, pool, toDeck, along, surface, prefix);
+                if (only == "mare" || only == "")
+                    TideSeries(PlaceStroke, Shot, builder, d, water, prefix);
+                if (only != "")
+                {
+                    ok = true;
+                    return $"seed {seed}: {names.Count} fotos ({only}) em {folder}; modelo " + (body.model != null ? "do Blender" : "de código");
+                }
 
                 Place(swimAt, along, 1.8f, 0f, 0f, 0f, 0.15f, 0.3f);
                 Shot("cima_deque", deckEye, swimAt, false);
@@ -279,9 +301,101 @@ namespace BackRooms.EditorTools
                 UnityEngine.Object.DestroyImmediate(readback);
                 UnityEngine.Object.DestroyImmediate(rig);
                 UnityEngine.Object.DestroyImmediate(creature);
-                if (water != null) water.LocalUnderwater = false;
+                if (water != null) { water.LocalUnderwater = false; water.Offset = 0f; }
                 ShaderUtil.allowAsyncCompilation = asyncBefore;
             }
+        }
+
+        delegate void Poser(Vector3 at, Vector3 forward, float speed, float sleep, float hunt, float grab, float jaw, float phase, float stroke);
+        delegate void Shooter(string name, Vector3 eye, Vector3 look, bool underwater, bool lamp = false);
+
+        /// <summary>
+        /// A braçada em fases, para conferir os braços presos ao ombro: fora d'água no deque seco
+        /// (de cima e de lado, com lanterna) e de baixo, debaixo d'água, contra a superfície. Fases:
+        /// deslizando (braços para trás), quatro pontos da braçada de peito caçando e pegando.
+        /// </summary>
+        static void StrokeSeries(Poser place, Shooter shot, Vector3 pool, Vector3 toDeck, Vector3 along, float surface, string prefix)
+        {
+            Vector3 deck = new Vector3(pool.x, 0.2f + 0.45f, pool.z) + toDeck * (LevelBuilder.Cell * 0.5f + 1.8f);
+            Vector3 above = new Vector3(pool.x, surface - 0.7f, pool.z);
+            var phases = new (string name, float speed, float hunt, float grab, float stroke)[]
+            {
+                ("deslize", 1.8f, 0f, 0f, 0.1f),
+                ("f0", 3f, 1f, 0f, 0f), ("f25", 3f, 1f, 0f, 0.25f), ("f50", 3f, 1f, 0f, 0.5f), ("f75", 3f, 1f, 0f, 0.75f),
+                ("pegando", 0f, 0f, 1f, 0.1f),
+            };
+            foreach (var p in phases)
+            {
+                string n = prefix + "bracada_" + p.name;
+                place(deck, along, p.speed, 0f, p.hunt, p.grab, 0.5f, 0.3f, p.stroke);
+                shot(n + "_cima", deck + Vector3.up * 3.4f + along * 0.4f + toDeck * 0.3f, deck + along * 0.4f, false, true);
+                shot(n + "_lado", deck - toDeck * 3.2f + Vector3.up * 0.9f + along * 0.5f, deck + along * 0.5f, false, true);
+                place(above, along, p.speed, 0f, p.hunt, p.grab, 0.5f, 0.3f, p.stroke);
+                shot(n + "_baixo", new Vector3(pool.x, pool.y + 0.35f, pool.z) - along * 0.6f, above + along * 0.4f, true, true);
+            }
+        }
+
+        /// <summary>
+        /// Maré alta (água +1,3 m): ele caçando no raso (1,72 m de água) e no seco alagado (1,12 m),
+        /// como o jogador o vê de pé ali, de cima e debaixo d'água, para conferir que o corpo não
+        /// atravessa o chão.
+        /// </summary>
+        static void TideSeries(Poser place, Shooter shot, LevelBuilder builder, LevelData d, PoolWater water, string prefix)
+        {
+            if (water == null) return;
+            water.Offset = PoolTide.Amplitude;
+            float surface = water.SurfaceY;
+            foreach (PoolDepth depth in new[] { PoolDepth.Shallow, PoolDepth.Dry })
+            {
+                if (!FindOpenRun(d, depth, out int x, out int z, out WallSide side)) continue;
+                string n = prefix + "mare_" + (depth == PoolDepth.Dry ? "seco" : "raso");
+                Vector3 c = builder.CellCenter(x, z);
+                Vector3 along = Dir(side);
+                Vector3 across = Vector3.Cross(Vector3.up, along);
+                float y = Mathf.Clamp(c.y + 0.6f, c.y + 0.4f, surface - 0.45f);
+                Vector3 at = new Vector3(c.x, y, c.z);
+                place(at, along, 2.4f, 0f, 1f, 0f, 1f, 0.3f, 0.3f);
+                Vector3 eye = new Vector3(c.x, c.y + 1.65f, c.z) + along * 4.6f + across * 0.6f;
+                shot(n + "_cacando", eye, at + along * 1.2f, eye.y < surface, true);
+                shot(n + "_cima", at + Vector3.up * 2.6f - along * 0.2f + across * 0.4f, at, false, true);
+                // De lado, debaixo d'água, da célula de trás (aberta), meio de lado: a 1 m do piso.
+                Vector3 sideEye = new Vector3(c.x, c.y + 0.5f, c.z) - along * 3.8f + across * 1.4f;
+                shot(n + "_lado", sideEye, at + along * 0.2f, true, true);
+                place(at, along, 2.4f, 0f, 1f, 0f, 1f, 0.3f, 0.75f);
+                shot(n + "_lado_bracada", sideEye, at + along * 0.2f, true, true);
+            }
+            water.Offset = 0f;
+        }
+
+        // Uma célula daquela profundidade, fora da sala inicial, com a vizinha da frente e a de trás
+        // abertas e da mesma profundidade (para o corpo comprido caber na foto).
+        static bool FindOpenRun(LevelData d, PoolDepth depth, out int x, out int z, out WallSide side)
+        {
+            WallSide[] sides = { WallSide.North, WallSide.East, WallSide.South, WallSide.West };
+            for (z = 0; z < d.Height; z++)
+                for (x = 0; x < d.Width; x++)
+                {
+                    if (d.IsSolid(x, z) || d.Depth[x, z] != depth || d.InRoom(x, z)) continue;
+                    foreach (WallSide s in sides)
+                    {
+                        WallSide o = s == WallSide.North ? WallSide.South : s == WallSide.South ? WallSide.North : s == WallSide.East ? WallSide.West : WallSide.East;
+                        if (!d.IsOpen(x, z, s) || !d.Neighbor(x, z, s, out int ax, out int az) || d.Depth[ax, az] != depth) continue;
+                        if (!d.IsOpen(x, z, o) || !d.Neighbor(x, z, o, out int bx, out int bz) || d.Depth[bx, bz] != depth) continue;
+                        side = s;
+                        return true;
+                    }
+                }
+            x = z = -1;
+            side = WallSide.North;
+            return false;
+        }
+
+        static string TextArgument(string name, string fallback)
+        {
+            string[] args = Environment.GetCommandLineArgs();
+            for (int i = 0; i < args.Length - 1; i++)
+                if (args[i] == name) return args[i + 1];
+            return fallback;
         }
 
         static bool FindDeck(LevelData d, out int x, out int z, out WallSide side)

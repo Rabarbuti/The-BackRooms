@@ -12,25 +12,35 @@ using UnityEngine.InputSystem.LowLevel;
 namespace BackRooms.EditorTools
 {
     /// <summary>
-    /// Teste em Play das regras do Undertow, o inimigo da água funda das Piscinas (seed 1998 por
-    /// padrão, -seed N). Hospeda, põe o Undertow dormindo no covil e confere, em ordem, com o teclado
-    /// virtual:
+    /// Teste em Play das regras do Undertow, o inimigo da água das Piscinas (seed 1998 por padrão,
+    /// -seed N). Hospeda, põe o Undertow dormindo onde o diretor o põe e confere, em ordem, com o
+    /// teclado virtual (a mudança de água pelo relógio fica desligada até a etapa dela):
     ///
     /// 1. nadando submerso a duas células dele, ele não acorda;
-    /// 2. um espirro (cair na água) o acorda, com o gemido, e ele vem;
+    /// 2. um espirro (cair na água) o acorda, com o rugido, e ele vem;
     /// 3. nadando à tona longe (se a planta tiver água para isso), não acorda;
-    /// 4. quem nada até a borda e sobe escapa: ele ronda a borda e volta, sem pegar;
-    /// 5. quem fica boiando é pego e puxado para o fundo (NO SIGNAL, volta ao início);
-    /// 6. na maré alta, o raso vizinho vira território: ele entra lá e pega quem nada ali;
-    /// 7. por um espirro noutra água, vai pelos canos (some e surge lá, com aviso);
-    /// 8. drenada a fase, arrasta-se pelo fundo devagar e ainda pega quem fica parado ali.
-    /// O tempo todo: ele nunca está fora do território (fora dos canos).
+    /// 4. quem nada até a borda e sobe escapa: ele ronda a borda e vai descansar, sem pegar;
+    /// 5. quem nada à tona perto dele (barulho) é pego e puxado para o fundo (NO SIGNAL);
+    /// 6. na maré alta, o raso vira território: ele entra lá e pega quem nada ali;
+    /// 7. na maré alta o seco alagado também é dele: ruge, ronda sem barulho e pega quem anda ali;
+    /// 8. na maré alta, quem fica parado e quieto escapa: ele vem ao último passo, para perto, escuta
+    ///    e vai embora;
+    /// 9. na maré alta, a sala inicial é abrigo: ele vem à porta pelo barulho e não entra;
+    /// 10. a maré descendo, ele some pelos ralos e volta a uma água funda;
+    /// 11. por um espirro noutra água, vai pelos canos (some e surge lá, rugindo);
+    /// 12. na maré baixa, um barulho em cada água funda da planta o faz surgir nela;
+    /// 13. na maré baixa, sem barulho, muda de água pelo relógio (gorgolejo), longe do jogador;
+    /// 14. drenada a fase, arrasta-se pelo fundo devagar e pega quem anda ali.
+    /// O tempo todo: ele nunca fica fora do território (fora dos canos e do mergulho), nunca entra
+    /// na sala inicial, e nenhuma parte do corpo (cabeça, mãos, ponta da cauda) entra em colisor
+    /// fixo da fase (parede, escada, coluna, piso), com 4 cm de tolerância.
     ///
     /// Linha de comando: -executeMethod BackRooms.EditorTools.UndertowTest.BatchRun (0 passou, 3
     /// falhou); linha "[BackRooms] Teste do Undertow PASSOU/FALHOU". Menu: BackRooms > Testar
     /// Undertow (Level 2). Dois editores: <see cref="BatchHost"/> + <see cref="BatchJoin"/> (o
-    /// cliente pula na água; o host tem de ouvi-lo e pegá-lo; o cliente vê o Undertow perto de si
-    /// na captura, é puxado para o fundo e vê os estados mudarem).
+    /// cliente pula na água e nada; o host tem de ouvi-lo e pegá-lo; o cliente vê o Undertow perto
+    /// de si na captura, é puxado para o fundo, vê os estados mudarem e ouve o rugido; o corpo é
+    /// conferido contra a fase nas duas máquinas).
     /// </summary>
     public static class UndertowTest
     {
@@ -70,8 +80,14 @@ namespace BackRooms.EditorTools
         static int _counter, _catches, _captures;
         static float _y0, _dist0;
         static Vector3 _point;
-        static int _outside;
-        static string _outsideWhere;
+        static int _outside, _inRoom, _pierced, _bodyFrames;
+        static string _outsideWhere, _inRoomWhere, _piercedWhere;
+        static float _outsideSince = -1f, _closest, _mark2 = -1f, _roamNear;
+        static Vector2Int _dry, _dryFrom, _room;
+        static readonly List<Vector2Int> _regionCells = new List<Vector2Int>();
+        static readonly List<string> _regionNotes = new List<string>();
+        static readonly List<Vector2Int> _roamCells = new List<Vector2Int>();
+        static readonly List<string> _piercings = new List<string>();
         static readonly HashSet<UndertowState> SeenStates = new HashSet<UndertowState>();
         static readonly List<string> Trail = new List<string>();
 
@@ -161,12 +177,13 @@ namespace BackRooms.EditorTools
 
         static void TickSolo(GameSession session)
         {
-            if (_creature != null) WatchTerritory();
+            if (_creature != null) WatchBody();
 
             switch (_stage)
             {
                 case 0:
                     UndertowDirector.Paused = true;
+                    UndertowBrain.RoamPaused = true;
                     PoolTide.Paused = true;
                     session.fixedSeed = Seed;
                     session.Host(localOnly: true);
@@ -183,7 +200,8 @@ namespace BackRooms.EditorTools
                     if (InStage < 0.8f || _creature.Nav == null) break;
                     if (!Plan(out string why)) { Finish(false, why); return; }
                     Next($"covil {_lairCell} (região de {RegionSize()} células), submerso {_quiet}, espirro {_splash}, borda {_edge}→{_edgeSide}, raso {_shallow}" +
-                         (_hasFar ? $", longe {_far}" : ", sem célula longe") + (_hasOther ? $", outra água {_other}" : ", sem outra água"));
+                         (_hasFar ? $", longe {_far}" : ", sem célula longe") + (_hasOther ? $", outra água {_other}" : ", sem outra água") +
+                         $"; {_regionCells.Count} água(s) funda(s) separada(s)");
                     break;
 
                 case 3:
@@ -206,12 +224,12 @@ namespace BackRooms.EditorTools
                     break;
 
                 case 4:
-                    // 2. Um espirro a acorda (gemido) e ela vem.
+                    // 2. Um espirro o acorda, com o rugido, e ele vem.
                     if (_step == 0)
                     {
                         Press();
                         _counter = _steps.Splashes;
-                        _mark = Audio().Groans;
+                        _mark = Audio().Roars;
                         Teleport(Center(_splash) + Vector3.up * (Surface() + 2.4f - Center(_splash).y), 0f);
                         _step = 1;
                         break;
@@ -228,17 +246,19 @@ namespace BackRooms.EditorTools
                         else if (InStage > 4f) { Finish(false, "caiu na água e não espirrou"); return; }
                         break;
                     }
-                    Press(Key.Space);
+                    // Boiando e mexendo-se (sem barulho ele perderia a pista).
+                    Press(Key.Space, InStage % 2f < 1f ? Key.W : Key.S);
                     if (_step == 2)
                     {
-                        if (_creature.State == UndertowState.Asleep) { if (InStage > 1f) { Finish(false, $"o espirro a {_dist0:F1} m não a acordou (ignorados {_creature.NoisesIgnored})"); return; } break; }
-                        if (Audio().Groans <= (int)_mark) { Finish(false, "acordou sem o gemido"); return; }
+                        if (_creature.State == UndertowState.Asleep) { if (InStage > 1f) { Finish(false, $"o espirro a {_dist0:F1} m não o acordou (ignorados {_creature.NoisesIgnored})"); return; } break; }
+                        if (InStage < 0.3f) break;
+                        if (Audio().Roars <= (int)_mark) { Finish(false, "acordou sem o rugido"); return; }
                         _step = 3;
                         break;
                     }
-                    if (Flat(_creature.Head - _point).magnitude < _dist0 - 3f)
+                    if (Flat(_creature.Head - _point).magnitude < _dist0 - 3f || _controller.IsCaught)
                     {
-                        Next($"espirro a {_dist0:F1} m: acordou com o gemido e veio ({_creature.State})");
+                        Next($"espirro a {_dist0:F1} m: acordou rugindo (abafado: {Audio().LastRoarMuffled}) e veio ({_creature.State})");
                         Reset();
                         break;
                     }
@@ -248,7 +268,7 @@ namespace BackRooms.EditorTools
                 case 5:
                     // 3. À tona, longe: não acorda (só se a planta tem água para isso).
                     if (!_hasFar) { Next("sem célula a 4+ células do covil na mesma água: à tona longe não conferido"); break; }
-                    if (InStage < 1f) break;
+                    if (InStage < 1f || _controller.IsReturning) break;
                     if (_step == 0)
                     {
                         Teleport(new Vector3(Center(_far).x, Surface() - 1.4f, Center(_far).z), AwayFrom(_far, _lairCell));
@@ -274,7 +294,7 @@ namespace BackRooms.EditorTools
                         Teleport(new Vector3(c.x, Surface() - 1.4f, c.z), Yaw(Dir(_edgeSide)));
                         _catches = _creature.Catches;
                         _counter = _controller.Climbs;
-                        // Como quem pula na água: o barulho a acorda (com o gemido) e o jogador foge para a borda.
+                        // Como quem pula na água: o barulho o acorda e o jogador foge para a borda.
                         _creature.Hear(_local.transform.position, 1f, _local);
                         _stageStart = Now;
                         _step = 1;
@@ -301,7 +321,7 @@ namespace BackRooms.EditorTools
                         if (_creature.State == UndertowState.Asleep && !SeenStates.Contains(UndertowState.Circle)) { Finish(false, "ele não chegou a rondar a borda"); return; }
                         if (SeenStates.Contains(UndertowState.Circle) && (_creature.State == UndertowState.Return || _creature.State == UndertowState.Asleep))
                         {
-                            Next($"subiu na borda: ele rondou e voltou ({Now - _mark:F1} s depois), sem pegar");
+                            Next($"subiu na borda: ele rondou e foi descansar ({Now - _mark:F1} s depois), sem pegar");
                             Reset();
                             break;
                         }
@@ -310,12 +330,11 @@ namespace BackRooms.EditorTools
                     break;
 
                 case 7:
-                    // 5. Boiando parado: é pego e puxado para o fundo.
+                    // 5. Nadando perto dele (barulho): é pego e puxado para o fundo.
                     if (InStage < 1f) break;
                     if (_step == 0)
                     {
                         _catches = _creature.Catches;
-                        _captures = _controller.Captures;
                         Vector3 c = Center(_quiet);
                         Teleport(new Vector3(c.x, Surface() - 1.4f, c.z), 0f);
                         _creature.Hear(_local.transform.position, 1f, _local);
@@ -325,7 +344,7 @@ namespace BackRooms.EditorTools
                     }
                     if (_step == 1)
                     {
-                        Press(Key.Space);
+                        Press(Key.Space, InStage % 1.6f < 0.8f ? Key.W : Key.S);
                         if (_controller.IsCaught)
                         {
                             Press();
@@ -333,7 +352,7 @@ namespace BackRooms.EditorTools
                             _mark = Now;
                             _step = 2;
                         }
-                        else if (InStage > 16f) { Finish(false, $"boiando, não foi pego em 16 s ({Describe()}; jogador em {_local.transform.position})"); return; }
+                        else if (InStage > 16f) { Finish(false, $"nadando à tona perto dele, não foi pego em 16 s ({Describe()}; jogador em {_local.transform.position})"); return; }
                         break;
                     }
                     if (_step == 2)
@@ -344,7 +363,7 @@ namespace BackRooms.EditorTools
                         float room = _y0 - Floor(CellOf(_local.transform.position)).y;
                         if (fell < Mathf.Min(1f, room * 0.85f)) { Finish(false, $"pego, desceu só {fell:F2} m em 0,7 s de {room:F2} m até o fundo (não foi puxado para o fundo)"); return; }
                         if (_creature.Catches <= _catches) { Finish(false, "o jogador foi pego, mas não por ele"); return; }
-                        Notes.Add($"boiando: pego em {_mark - _stageStart:F1} s e puxado {fell:F2} m para baixo em 0,7 s (até o fundo: {room:F2} m)");
+                        Notes.Add($"nadando à tona: pego em {_mark - _stageStart:F1} s e puxado {fell:F2} m para baixo em 0,7 s (até o fundo: {room:F2} m)");
                         _step = 3;
                         break;
                     }
@@ -357,17 +376,16 @@ namespace BackRooms.EditorTools
                     break;
 
                 case 8:
-                    // 6. Maré alta: o raso vizinho vira território, ele entra e pega quem nada ali.
+                    // 6. Maré alta: o raso vira território, ele entra e pega quem nada ali.
                     if (_step == 0)
                     {
-                        PoolTide.Paused = false;
-                        PoolTide.ForceSeconds = PoolTide.FirstPeak + 1.0;
+                        SetTide(PoolTide.FirstPeak + 1.0);
                         _step = 1;
                         break;
                     }
                     if (_step == 1)
                     {
-                        if (PoolTide.Current == null || PoolTide.Current.Offset < PoolTide.Amplitude * 0.95f) { if (InStage > 5f) { Finish(false, "a maré não subiu com o relógio forçado"); return; } break; }
+                        if (!TideHigh()) { if (InStage > 6f) { Finish(false, "a maré não subiu com o relógio forçado"); return; } break; }
                         if (InStage < 1.5f) break;
                         if (!_creature.Nav.Territory[_shallow.x, _shallow.y]) { Finish(false, $"na maré alta o raso {_shallow} não virou território (coluna {_creature.Nav.Column(_shallow.x, _shallow.y):F2} m)"); return; }
                         _catches = _creature.Catches;
@@ -378,30 +396,142 @@ namespace BackRooms.EditorTools
                         _step = 2;
                         break;
                     }
-                    Press(Key.Space);
+                    Press(Key.Space, InStage % 1.6f < 0.8f ? Key.W : Key.S);
                     if (_creature.Catches > _catches)
                     {
                         Vector2Int at = CellOf(_creature.transform.position);
                         Press();
-                        PoolTide.ForceSeconds = -1.0;
-                        PoolTide.Paused = true;
-                        if (_level.Data.Depth[at.x, at.y] != PoolDepth.Shallow && Dist2(at, _shallow) > 1)
-                        { Finish(false, $"na maré alta pegou, mas de longe do raso ({at})"); return; }
-                        Next($"maré alta: entrou no raso {_shallow} (estava em {at} ao pegar) e pegou");
-                        Reset();
+                        Next($"maré alta: entrou no raso {_shallow} e pegou quem nadava ali (estava em {at}, {_level.Data.Depth[at.x, at.y]})");
                         break;
                     }
-                    if (InStage > 18f) { Finish(false, $"maré alta: não pegou quem nadava no raso em 18 s ({_creature.State}, cabeça a {Vector3.Distance(_creature.Head, _local.transform.position + Vector3.up * 0.9f):F1} m)"); return; }
+                    if (InStage > 20f) { Finish(false, $"maré alta: não pegou quem nadava no raso em 20 s ({Describe()})"); return; }
                     break;
 
                 case 9:
-                    // 7. Espirro noutra água: vai pelos canos.
+                    // 7. Maré alta: o seco alagado é dele; ele ruge e ronda; quem anda (barulho) no seco é pego.
+                    // (Espera o intervalo entre rugidos passar desde a etapa anterior.)
+                    if (_controller.IsReturning || InStage < 6f && _step == 0) break;
+                    if (_step == 0)
+                    {
+                        if (!_creature.Nav.Flooded) { Finish(false, "maré alta forçada, mas o seco não virou território"); return; }
+                        if (!PickDry(out _dry, out _dryFrom, 2, 3)) { Finish(false, "na maré alta não há célula seca (fora da sala inicial) a 2–3 células de outra"); return; }
+                        if (_creature.Nav.Territory[_level.Data.RoomX0, _level.Data.RoomZ0]) { Finish(false, "a sala inicial virou território"); return; }
+                        _catches = _creature.Catches;
+                        _mark = _creature.RoarCount;
+                        Teleport(Floor(_dry) + Vector3.up * 0.05f, 0f);
+                        _creature.SleepAt(Center(_dryFrom));
+                        _stageStart = Now;
+                        _step = 1;
+                        break;
+                    }
+                    if (_step == 1)
+                    {
+                        // Ainda não fez barulho: ele ronda (Prowl) com o rugido da maré.
+                        if (InStage < 1f) break;
+                        if (_creature.State == UndertowState.Asleep) { Finish(false, "na maré alta ele ficou parado, sem rondar"); return; }
+                        if (_creature.RoarCount <= (int)_mark) { Finish(false, "a maré alagou o seco e ele não rugiu"); return; }
+                        _stageStart = Now;
+                        _step = 2;
+                        break;
+                    }
+                    // Andando no seco alagado, de um lado para o outro: 0,55 de barulho (13 m).
+                    Press(InStage % 2f < 1f ? Key.W : Key.S);
+                    if (_creature.Catches > _catches)
+                    {
+                        Press();
+                        Vector2Int at = CellOf(_creature.transform.position);
+                        Next($"maré alta: andando no seco alagado {_dry}, foi pego em {InStage:F1} s (ele em {at}, {_level.Data.Depth[at.x, at.y]}; {_creature.Blocked} passo(s) recusado(s) pelo corpo)");
+                        break;
+                    }
+                    if (InStage > 30f) { Finish(false, $"maré alta: andando no seco alagado, não foi pego em 30 s ({Describe()})"); return; }
+                    break;
+
+                case 10:
+                    // 8. Maré alta: quem fica parado e quieto escapa. Ouve um passo, vem, para perto, escuta e vai embora.
+                    if (_controller.IsReturning || InStage < 1f) break;
+                    if (_step == 0)
+                    {
+                        if (!PickDry(out _dry, out _dryFrom, 2, 2)) { Finish(false, "sem seco a 2 células de outro"); return; }
+                        _catches = _creature.Catches;
+                        Teleport(Floor(_dry) + Vector3.up * 0.05f, 0f);
+                        _creature.SleepAt(Center(_dryFrom));
+                        _stageStart = Now;
+                        _step = 1;
+                        break;
+                    }
+                    if (_step == 1)
+                    {
+                        if (InStage < 0.6f) break;
+                        // O último passo (barulho de quem anda); depois, parado.
+                        _creature.Hear(_local.transform.position, 0.55f, _local);
+                        _closest = float.MaxValue;
+                        _stageStart = Now;
+                        _step = 2;
+                        break;
+                    }
+                    Press();
+                    _closest = Mathf.Min(_closest, Vector3.Distance(_creature.Head, _local.transform.position + Vector3.up * 0.9f));
+                    if (_creature.Catches > _catches || _controller.IsCaught) { Finish(false, $"parado e quieto no seco alagado, foi pego ({Describe()})"); return; }
+                    if (InStage > 16f)
+                    {
+                        if (_closest > 4.5f) { Finish(false, $"parado: ele nem chegou perto (a menos de {_closest:F1} m); o teste não provou nada ({Describe()})"); return; }
+                        Next($"maré alta, parado e quieto: ele veio a {_closest:F1} m, escutou e foi embora ({_creature.State}) sem pegar");
+                    }
+                    break;
+
+                case 11:
+                    // 9. Maré alta: a sala inicial é abrigo. Ele vem à porta pelo barulho e não entra.
+                    if (_controller.IsReturning || InStage < 1f) break;
+                    if (_step == 0)
+                    {
+                        if (!PickRoomDoor(out _room, out _dryFrom)) { Finish(false, "a sala inicial não tem porta para um seco"); return; }
+                        _catches = _creature.Catches;
+                        Teleport(Floor(_room) + Vector3.up * 0.05f, Yaw(Center(_dryFrom) - Center(_room)));
+                        _creature.SleepAt(Center(_dryFrom));
+                        _closest = float.MaxValue;
+                        _stageStart = Now;
+                        _step = 1;
+                        break;
+                    }
+                    Press(InStage % 2f < 1f ? Key.S : Key.W);
+                    _closest = Mathf.Min(_closest, Flat(_creature.Head - _local.transform.position).magnitude);
+                    if (_creature.Catches > _catches || _controller.IsCaught) { Finish(false, $"pegou quem estava na sala inicial ({Describe()})"); return; }
+                    if (InStage > 14f)
+                    {
+                        Press();
+                        Next($"maré alta, sala inicial: andando lá dentro, ele chegou a {_closest:F1} m e não entrou nem pegou");
+                    }
+                    break;
+
+                case 12:
+                    // 10. A maré desce: ele some pelos ralos e volta a uma água funda (nunca encalha).
+                    if (_step == 0)
+                    {
+                        SetTide(PoolTide.FirstEbb + 1.5);
+                        _counter = _creature.Travels;
+                        _step = 1;
+                        break;
+                    }
+                    if (InStage > 1f && (_creature.State == UndertowState.Emerge || _creature.State == UndertowState.Asleep))
+                    {
+                        Vector2Int at = CellOf(_creature.transform.position);
+                        if (!_creature.Nav.IsDeep(at.x, at.y)) break;
+                        Next($"maré descendo: sumiu pelo ralo ({_creature.Travels - _counter} viagem(ns)) e foi parar na água funda {at}");
+                        StopTide();
+                        Reset();
+                        break;
+                    }
+                    if (InStage > 20f) { Finish(false, $"maré descendo: não voltou à água funda em 20 s ({Describe()})"); return; }
+                    break;
+
+                case 13:
+                    // 11. Espirro noutra água: vai pelos canos, surge lá com o rugido.
                     if (!_hasOther) { Next("só uma água nesta planta: os canos não conferidos"); break; }
                     if (InStage < 1.5f || _controller.IsReturning) break;
                     if (_step == 0)
                     {
                         _counter = _creature.Travels;
-                        _mark = Audio().Groans;
+                        _mark = Audio().Roars;
                         Teleport(Center(_other) + Vector3.up * (Surface() + 2.4f - Center(_other).y), 0f);
                         _stageStart = Now;
                         _step = 1;
@@ -420,8 +550,8 @@ namespace BackRooms.EditorTools
                         {
                             int regionOther = _creature.Nav.Region[_other.x, _other.y];
                             if (_creature.Nav.RegionAt(_creature.transform.position) != regionOther) { Finish(false, "saiu do cano noutra água que não a do espirro"); return; }
-                            if (Audio().Groans <= (int)_mark) { Finish(false, "surgiu do cano sem o gemido"); return; }
-                            Next($"espirro noutra água: sumiu no cano e surgiu lá, com o gemido, em {InStage:F1} s");
+                            if (Audio().Roars <= (int)_mark) { Finish(false, "surgiu do cano sem o rugido"); return; }
+                            Next($"espirro noutra água: sumiu no cano e surgiu lá, rugindo, em {InStage:F1} s");
                             Reset();
                             break;
                         }
@@ -429,8 +559,78 @@ namespace BackRooms.EditorTools
                     }
                     break;
 
-                case 10:
-                    // 8. Drenada: arrasta-se devagar e pega quem fica parado no fundo.
+                case 14:
+                    // 12. Maré baixa: um barulho em cada água funda o faz surgir nela (ele não tem água própria).
+                    if (InStage < 1f || _controller.IsReturning) break;
+                    if (_step >= _regionCells.Count)
+                    {
+                        Next($"maré baixa: surgiu em cada uma das {_regionCells.Count} água(s) funda(s) pelo barulho dela ({string.Join("; ", _regionNotes)})");
+                        Reset();
+                        break;
+                    }
+                    {
+                        Vector2Int cell = _regionCells[_step];
+                        int region = _creature.Nav.Region[cell.x, cell.y];
+                        if (_mark2 < 0f)
+                        {
+                            _creature.SleepAt(Center(_lairCell));
+                            _creature.Hear(new Vector3(Center(cell).x, Surface() - 0.3f, Center(cell).z), 1f, null);
+                            _mark2 = Now;
+                            break;
+                        }
+                        UndertowState s = _creature.State;
+                        bool there = _creature.Nav.RegionAt(_creature.transform.position) == region;
+                        if (there && (s == UndertowState.Waking || s == UndertowState.Investigate || s == UndertowState.Hunt))
+                        {
+                            _regionNotes.Add($"{cell} em {Now - _mark2:F1} s");
+                            _mark2 = -1f;
+                            _step++;
+                            break;
+                        }
+                        if (Now - _mark2 > 25f) { Finish(false, $"barulho na água funda {cell} (região {region}): ele não surgiu lá em 25 s ({Describe()})"); return; }
+                    }
+                    break;
+
+                case 15:
+                    // 13. Maré baixa, sem barulho: muda de água pelo relógio (com bolhas e gorgolejo), nunca perto do jogador.
+                    if (_step == 0)
+                    {
+                        if (_controller.IsReturning) break;
+                        Teleport(StartPoint(), 0f);
+                        _creature.roamMinSeconds = 1f;
+                        _creature.roamMaxSeconds = 2f;
+                        _creature.SleepAt(Center(_lairCell));
+                        UndertowBrain.RoamPaused = false;
+                        _counter = _creature.Roams;
+                        _mark = Audio().Gurgles;
+                        _roamCells.Clear();
+                        _roamNear = float.MaxValue;
+                        _stageStart = Now;
+                        _step = 1;
+                        break;
+                    }
+                    if (_creature.State == UndertowState.Emerge || _creature.State == UndertowState.Asleep && _creature.Roams > _counter)
+                    {
+                        Vector2Int at = CellOf(_creature.transform.position);
+                        if (!_roamCells.Contains(at)) _roamCells.Add(at);
+                        _roamNear = Mathf.Min(_roamNear, Flat(_creature.transform.position - _local.transform.position).magnitude);
+                    }
+                    if (_creature.Roams - _counter >= 4 && _roamCells.Count >= 2 && InStage > 2f)
+                    {
+                        UndertowBrain.RoamPaused = true;
+                        if (Audio().Gurgles <= (int)_mark) { Finish(false, "mudou de água sem o gorgolejo"); return; }
+                        if (_roamNear < _creature.roamMinDistance - 0.5f) { Finish(false, $"surgiu a {_roamNear:F1} m do jogador (mínimo {_creature.roamMinDistance})"); return; }
+                        Next($"maré baixa, parado no início: mudou de lugar {_creature.Roams - _counter} vez(es), surgiu em {_roamCells.Count} ponto(s) ({string.Join(" ", _roamCells)}), o mais perto a {_roamNear:F1} m do jogador, {Audio().Gurgles - (int)_mark} gorgolejo(s)");
+                        _creature.roamMinSeconds = 16f;
+                        _creature.roamMaxSeconds = 30f;
+                        Reset();
+                        break;
+                    }
+                    if (InStage > 90f) { Finish(false, $"em 90 s mudou de água {_creature.Roams - _counter} vez(es), em {_roamCells.Count} ponto(s) ({Describe()})"); return; }
+                    break;
+
+                case 16:
+                    // 14. Drenada: arrasta-se devagar e pega quem anda no fundo.
                     if (_step == 0)
                     {
                         SwitchObjective objective = SwitchObjective.Instance;
@@ -449,13 +649,15 @@ namespace BackRooms.EditorTools
                         if (!FindDrained()) { Finish(false, "drenada, não há duas células fundas vizinhas para o teste"); return; }
                         _catches = _creature.Catches;
                         Teleport(Floor(_drained) + Vector3.up * 0.05f, 0f);
-                        _creature.Place(Floor(_drainedFrom) + Vector3.up * 0.3f, Quaternion.identity);
+                        _creature.FreeSpot(_drainedFrom.x, _drainedFrom.y, Center(_drainedFrom), out Vector3 spot, out Quaternion facing);
+                        _creature.Place(spot, facing);
                         _creature.Hear(_local.transform.position, 1f, _local);
                         _point = _creature.transform.position;
                         _stageStart = Now;
                         _step = 2;
                         break;
                     }
+                    Press(InStage % 1.4f < 0.7f ? Key.W : Key.S);
                     if (_step == 2)
                     {
                         if (InStage < 3f) break;
@@ -469,15 +671,18 @@ namespace BackRooms.EditorTools
                     }
                     if (_creature.Catches > _catches)
                     {
-                        Next($"drenada: pegou quem ficou parado no fundo em {InStage:F1} s");
+                        Press();
+                        Next($"drenada: pegou quem andava no fundo em {InStage:F1} s");
                         break;
                     }
-                    if (InStage > 20f) { Finish(false, $"drenada, não pegou quem ficou parado no fundo ({_creature.State}, a {Flat(_creature.Head - _local.transform.position).magnitude:F1} m)"); return; }
+                    if (InStage > 25f) { Finish(false, $"drenada, não pegou quem andava no fundo ({Describe()})"); return; }
                     break;
 
-                case 11:
+                case 17:
                     if (_outside > 0) { Finish(false, $"esteve fora do território {_outside} vez(es), a primeira {_outsideWhere}"); return; }
-                    Finish(true, "nunca saiu da água");
+                    if (_inRoom > 0) { Finish(false, $"entrou na sala inicial {_inRoom} vez(es), a primeira {_inRoomWhere}"); return; }
+                    if (_pierced > 0) { Finish(false, $"o corpo entrou em colisor da fase em {_pierced} quadro(s) de {_bodyFrames}; o primeiro: {_piercedWhere}"); return; }
+                    Finish(true, $"nunca saiu da água nem entrou na sala inicial; corpo conferido em {_bodyFrames} quadros, nenhum dentro de parede, escada, coluna ou piso ({_creature.Blocked} passo(s) recusado(s), {_creature.Stucks} travada(s))");
                     break;
             }
         }
@@ -486,11 +691,12 @@ namespace BackRooms.EditorTools
 
         static void TickHost(GameSession session)
         {
-            if (_creature != null) WatchTerritory();
+            if (_creature != null) WatchBody();
             switch (_stage)
             {
                 case 0:
                     UndertowDirector.Paused = true;
+                    UndertowBrain.RoamPaused = true;
                     PoolTide.Paused = true;
                     session.fixedSeed = Seed;
                     session.Host(localOnly: false);
@@ -514,13 +720,15 @@ namespace BackRooms.EditorTools
                 case 3:
                     if (InStage < 6f) break; // dá tempo ao cliente de conferir
                     if (_outside > 0) { Finish(false, $"esteve fora do território {_outside} vez(es)"); return; }
-                    Finish(true, "host ouviu e pegou o cliente");
+                    if (_pierced > 0) { Finish(false, $"o corpo entrou em colisor da fase em {_pierced} quadro(s); o primeiro: {_piercedWhere}"); return; }
+                    Finish(true, $"host ouviu e pegou o cliente; corpo conferido em {_bodyFrames} quadros");
                     break;
             }
         }
 
         static void TickJoin(GameSession session)
         {
+            if (_creature != null) WatchBody();
             switch (_stage)
             {
                 case 0:
@@ -558,7 +766,8 @@ namespace BackRooms.EditorTools
                     break;
                 }
                 case 2:
-                    Press(Key.Space);
+                    // Boiando e nadando de um lado para o outro (parado e quieto, ele perderia a pista).
+                    Press(Key.Space, InStage % 1.6f < 0.8f ? Key.W : Key.S);
                     if (_controller.IsCaught)
                     {
                         Press();
@@ -578,7 +787,9 @@ namespace BackRooms.EditorTools
                     if (fell < Mathf.Min(1f, room * 0.85f)) { Finish(false, $"pego, desceu só {fell:F2} m de {room:F2} m até o fundo (não foi puxado para o fundo)"); return; }
                     if (!SeenStates.Contains(UndertowState.Waking) || !SeenStates.Contains(UndertowState.Feed))
                     { Finish(false, $"o cliente não viu os estados (viu {string.Join(",", SeenStates)})"); return; }
-                    Finish(true, $"cliente: viu o Undertow acordar, vir e pegar; puxado {fell:F1} m para o fundo (estados {string.Join(",", SeenStates)})");
+                    if (Audio().Roars < 1) { Finish(false, "o cliente não ouviu o rugido"); return; }
+                    if (_pierced > 0) { Finish(false, $"no cliente, o corpo entrou em colisor da fase em {_pierced} quadro(s); o primeiro: {_piercedWhere}"); return; }
+                    Finish(true, $"cliente: viu o Undertow acordar, vir e pegar; {Audio().Roars} rugido(s); puxado {fell:F1} m para o fundo (estados {string.Join(",", SeenStates)}); corpo conferido em {_bodyFrames} quadros");
                     break;
             }
         }
@@ -675,6 +886,22 @@ namespace BackRooms.EditorTools
                 }
             if (!shallow) { why = "a água do covil não encosta em raso"; return false; }
 
+            // Uma célula de cada água funda separada (região): a do covil é a submersa (perto dele).
+            _regionCells.Clear();
+            _regionNotes.Clear();
+            var seen = new HashSet<int> { _region };
+            _regionCells.Add(_quiet);
+            for (int pass = 0; pass < 2; pass++)
+                for (int z = 0; z < d.Height; z++)
+                    for (int x = 0; x < d.Width; x++)
+                    {
+                        int r = _nav.Region[x, z];
+                        if (r < 0 || seen.Contains(r)) continue;
+                        if (pass == 0 && d.Depth[x, z] != PoolDepth.Deep) continue;
+                        seen.Add(r);
+                        _regionCells.Add(new Vector2Int(x, z));
+                    }
+
             // Outra água (para os canos): uma célula funda de outra região, a mais longe do covil.
             _hasOther = false;
             float best = -1f;
@@ -738,18 +965,99 @@ namespace BackRooms.EditorTools
             SeenStates.Clear();
         }
 
-        static void WatchTerritory()
+        // O tempo todo: o corpo inteiro fora de colisor fixo da fase (nas duas máquinas); no host,
+        // também no território (fora dos canos; ao sair, tem até 2,5 s para mergulhar no ralo) e
+        // nunca na sala inicial.
+        static void WatchBody()
         {
-            if (!_creature.IsServer || _creature.Nav == null || _creature.State == UndertowState.Travel) return;
-            Vector2Int at = CellOf(_creature.transform.position);
+            UndertowBody body = Body();
+            if (body != null && body.Visible && _creature.IsSpawned && _creature.State != UndertowState.Travel && _level != null)
+            {
+                _bodyFrames++;
+                body.Penetrations(_level, 0.04f, _piercings);
+                if (_piercings.Count > 0)
+                {
+                    if (_pierced == 0) _piercedWhere = $"{string.Join(", ", _piercings)} (etapa {_stage}.{_step}, {_creature.State}, ele em {_creature.transform.position}, recolhido {body.Tuck(0):F2}/{body.Tuck(1):F2})";
+                    _pierced++;
+                }
+            }
+
+            if (!_creature.IsServer || _creature.Nav == null) return;
             UndertowNav nav = _creature.Nav;
-            bool inside = at.x >= 0 && at.y >= 0 && at.x < nav.Data.Width && at.y < nav.Data.Height && nav.Territory[at.x, at.y];
-            if (inside) return;
-            // Na maré descendo, o raso sai do território debaixo dele: tem um instante para sair.
-            if (at.x >= 0 && at.y >= 0 && at.x < nav.Data.Width && at.y < nav.Data.Height &&
-                nav.Data.Depth[at.x, at.y] == PoolDepth.Shallow && nav.Column(at.x, at.y) > 1.0f) return;
+            Vector2Int at = CellOf(_creature.transform.position);
+            bool inGrid = at.x >= 0 && at.y >= 0 && at.x < nav.Data.Width && at.y < nav.Data.Height;
+            if (inGrid && nav.Data.InRoom(at.x, at.y))
+            {
+                if (_inRoom == 0) _inRoomWhere = $"na célula {at} (etapa {_stage}.{_step}, {_creature.State})";
+                _inRoom++;
+            }
+            if (_creature.State == UndertowState.Travel || inGrid && nav.Territory[at.x, at.y]) { _outsideSince = -1f; return; }
+            if (_outsideSince < 0f) _outsideSince = Now;
+            if (Now - _outsideSince < 2.5f) return;
             if (_outside == 0) _outsideWhere = $"na célula {at} (etapa {_stage}.{_step}, {_creature.State})";
             _outside++;
+        }
+
+        static void SetTide(double seconds)
+        {
+            PoolTide.Paused = false;
+            PoolTide.ForceSeconds = seconds;
+        }
+
+        static void StopTide()
+        {
+            PoolTide.ForceSeconds = -1.0;
+            PoolTide.Paused = true;
+        }
+
+        static bool TideHigh() => PoolTide.Current != null && PoolTide.Current.Offset >= PoolTide.Amplitude * 0.95f;
+
+        // Na maré alta: uma célula seca do território (fora da sala inicial) e outra do território a
+        // min..max células dela, pela água, de preferência também seca ou rasa.
+        static bool PickDry(out Vector2Int dry, out Vector2Int from, int min, int max)
+        {
+            UndertowNav nav = _creature.Nav;
+            LevelData d = _level.Data;
+            int[,] dist = nav.NewMap();
+            for (int pass = 0; pass < 2; pass++)
+                for (int z = 0; z < d.Height; z++)
+                    for (int x = 0; x < d.Width; x++)
+                    {
+                        if (!nav.Territory[x, z] || d.Depth[x, z] != PoolDepth.Dry || d.InRoom(x, z)) continue;
+                        nav.Distances(x, z, dist);
+                        for (int bz = 0; bz < d.Height; bz++)
+                            for (int bx = 0; bx < d.Width; bx++)
+                            {
+                                if (dist[bx, bz] < min || dist[bx, bz] > max) continue;
+                                if (pass == 0 && nav.IsDeep(bx, bz)) continue;
+                                dry = new Vector2Int(x, z);
+                                from = new Vector2Int(bx, bz);
+                                return true;
+                            }
+                    }
+            dry = from = new Vector2Int(-1, -1);
+            return false;
+        }
+
+        // Uma célula da sala inicial com divisa aberta para uma célula seca do território (a porta).
+        static bool PickRoomDoor(out Vector2Int room, out Vector2Int outside)
+        {
+            LevelData d = _level.Data;
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                {
+                    if (!d.InRoom(x, z)) continue;
+                    foreach (WallSide side in Sides)
+                    {
+                        if (!d.IsOpen(x, z, side) || !d.Neighbor(x, z, side, out int nx, out int nz)) continue;
+                        if (d.InRoom(nx, nz) || !_creature.Nav.Territory[nx, nz]) continue;
+                        room = new Vector2Int(x, z);
+                        outside = new Vector2Int(nx, nz);
+                        return true;
+                    }
+                }
+            room = outside = new Vector2Int(-1, -1);
+            return false;
         }
 
         // ---------------------------------------------------------------- Ajudas
@@ -855,6 +1163,7 @@ namespace BackRooms.EditorTools
             if (_finished) return;
             _finished = true;
             UndertowDirector.Paused = false;
+            UndertowBrain.RoamPaused = false;
             PoolTide.Paused = false;
             PoolTide.ForceSeconds = -1.0;
             Press();

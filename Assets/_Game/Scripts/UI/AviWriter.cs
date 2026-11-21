@@ -338,5 +338,97 @@ namespace BackRooms.UI
         {
             for (int i = 0; i < 4; i++) _writer.Write((byte)tag[i]);
         }
+
+        // ---------------------------------------------------------------- Leitura (galeria e testes)
+
+        /// <summary>O que o cabeçalho de um AVI diz, sem decodificar nada.</summary>
+        public struct Info
+        {
+            /// <summary>Começa com RIFF/AVI e tem o cabeçalho principal.</summary>
+            public bool Valid;
+            /// <summary>O cabeçalho final foi escrito (o arquivo foi fechado direito). Falso numa gravação em curso ou interrompida.</summary>
+            public bool Finished;
+            public int Frames;
+            public float FramesPerSecond;
+            public int Width, Height;
+            public bool HasAudio;
+            public int AudioRate, AudioChannels;
+            /// <summary>Amostras de som por canal.</summary>
+            public long AudioSamples;
+
+            public float Seconds => FramesPerSecond > 0f ? Frames / FramesPerSecond : 0f;
+        }
+
+        /// <summary>Lê o cabeçalho de um AVI (o que este gravador escreve; outros AVI simples também servem).</summary>
+        public static Info ReadInfo(string path)
+        {
+            var info = new Info();
+            try
+            {
+                byte[] head = new byte[4096];
+                int length;
+                using (var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                    length = file.Read(head, 0, head.Length);
+                if (length < 64 || Tag(head, 0) != "RIFF" || Tag(head, 8) != "AVI ") return info;
+                info.Finished = BitConverter.ToUInt32(head, 4) != 0;
+
+                // Percorre os pedaços do hdrl: avih, e um strh/strf por faixa.
+                string stream = null;
+                for (int at = 12; at + 8 <= length;)
+                {
+                    string tag = Tag(head, at);
+                    int size = BitConverter.ToInt32(head, at + 4);
+                    if (tag == "LIST")
+                    {
+                        string kind = Tag(head, at + 8);
+                        if (kind == "movi") break;
+                        at += 12; // entra na lista
+                        continue;
+                    }
+
+                    int data = at + 8;
+                    if (size < 0 || data + size > length) break;
+                    if (tag == "avih" && size >= 40)
+                    {
+                        int micro = BitConverter.ToInt32(head, data);
+                        info.FramesPerSecond = micro > 0 ? 1000000f / micro : 0f;
+                        info.Frames = BitConverter.ToInt32(head, data + 16);
+                        info.Width = BitConverter.ToInt32(head, data + 32);
+                        info.Height = BitConverter.ToInt32(head, data + 36);
+                        info.Valid = true;
+                    }
+                    else if (tag == "strh" && size >= 36)
+                    {
+                        stream = Tag(head, data);
+                        if (stream == "vids")
+                        {
+                            int scale = BitConverter.ToInt32(head, data + 20), rate = BitConverter.ToInt32(head, data + 24);
+                            if (scale > 0 && rate > 0) info.FramesPerSecond = rate / (float)scale;
+                            info.Frames = Mathf.Max(info.Frames, BitConverter.ToInt32(head, data + 32));
+                        }
+                        else if (stream == "auds")
+                        {
+                            info.HasAudio = true;
+                            info.AudioSamples = BitConverter.ToUInt32(head, data + 32);
+                        }
+                    }
+                    else if (tag == "strf" && stream == "auds" && size >= 16)
+                    {
+                        info.AudioChannels = BitConverter.ToInt16(head, data + 2);
+                        info.AudioRate = BitConverter.ToInt32(head, data + 4);
+                    }
+
+                    at = data + size + (size & 1);
+                }
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            return info;
+        }
+
+        static string Tag(byte[] bytes, int at)
+        {
+            return at + 4 <= bytes.Length ? System.Text.Encoding.ASCII.GetString(bytes, at, 4) : "";
+        }
     }
 }

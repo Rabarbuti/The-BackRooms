@@ -123,7 +123,7 @@ namespace BackRooms.Player
         /// O menu de pausa está aberto: o jogo continua (cai, afunda, é pego), mas o jogador não
         /// comanda nada. As leituras de tecla passam por <see cref="Held"/> e <see cref="Tapped"/>.
         /// </summary>
-        static bool Paused => BackRooms.UI.PauseMenu.IsOpen;
+        static bool Paused => BackRooms.UI.InputGate.Blocked;
 
         static bool Held(InputAction action) => !Paused && action.IsPressed();
         static bool Tapped(InputAction action) => !Paused && action.WasPressedThisFrame();
@@ -167,6 +167,7 @@ namespace BackRooms.Player
             if (IsReturning || !enabled) return;
 
             IsFalling = true;
+            ClearSeat();
             _fallTimer = pitRespawnDelay;
             Falls++;
         }
@@ -181,6 +182,7 @@ namespace BackRooms.Player
 
             IsCaught = true;
             _furniture = HideKind.None;
+            ClearSeat();
             _fallTimer = captureRespawnDelay;
             _horizontalVelocity = Vector3.zero;
             Captures++;
@@ -297,6 +299,57 @@ namespace BackRooms.Player
             _hidingSpots = Mathf.Max(0, _hidingSpots + (inside ? 1 : -1));
         }
 
+        // ---------------------------------------------------------------- Sentado (carteiras do Escritório)
+
+        /// <summary>Sentado numa cadeira (<c>ClassroomSeats</c>): parado, olhando em volta com limite. Não é esconderijo.</summary>
+        public bool IsSeated => _seat >= 0;
+
+        /// <summary>Em que cadeira (índice em <c>ClassroomSeats</c>), ou -1.</summary>
+        public int Seat => _seat;
+
+        /// <summary>Sentado, o jogador apertou andar ou pular: quer levantar (quem acha o lugar é o <c>ClassroomSeats</c>).</summary>
+        public bool WantsToStand { get; private set; }
+
+        int _seat = -1;
+        float _seatYaw, _seatTurn, _seatEye;
+        bool _seatMoveLatch;
+
+        /// <summary>
+        /// Senta na cadeira <paramref name="seat"/>: os pés em <paramref name="at"/>, de frente para
+        /// <paramref name="yaw"/>, com o olho a <paramref name="eye"/> do chão; a cabeça gira até
+        /// <paramref name="turn"/> graus para cada lado. Fica parado até <see cref="StandUp"/> ou até
+        /// qualquer salto (<see cref="Teleport"/>), queda ou captura.
+        /// </summary>
+        public void SitDown(int seat, Vector3 at, float yaw, float eye, float turn)
+        {
+            if (IsReturning || !enabled || InFurniture || seat < 0) return;
+
+            Teleport(at, yaw);
+            _seat = seat;
+            _seatYaw = yaw;
+            _seatTurn = turn;
+            _seatEye = eye;
+            _seatMoveLatch = true;
+            _pitch = 0f;
+            IsCrouching = false;
+            _eyeHeight = eye;
+        }
+
+        /// <summary>Levanta e fica de pé em <paramref name="exit"/>, olhando para onde já olhava.</summary>
+        public void StandUp(Vector3 exit)
+        {
+            if (!IsSeated) return;
+            Teleport(exit, transform.eulerAngles.y);
+            _eyeHeight = standingEyeHeight;
+        }
+
+        /// <summary>Solta a cadeira sem sair do lugar (captura, queda, a fase que acaba).</summary>
+        public void ClearSeat()
+        {
+            _seat = -1;
+            WantsToStand = false;
+        }
+
         CharacterController _controller;
         InputAction _move, _lookMouse, _lookStick, _jump, _sprint, _crouch;
 
@@ -379,6 +432,8 @@ namespace BackRooms.Player
             _verticalVelocity = 0f;
             _lastSafePosition = position;
             IsClimbing = false;
+            // Qualquer salto tira da cadeira (levado pelo Ascensorista, de volta ao início, outra fase).
+            ClearSeat();
         }
 
         void Update()
@@ -389,10 +444,14 @@ namespace BackRooms.Player
             UpdateLook(dt);
 
             // Dentro de um móvel: parado, sem gravidade nem colisão (o corpo está dentro da caixa
-            // do móvel), só olhando em volta.
-            if (InFurniture)
+            // do móvel), só olhando em volta. Sentado numa cadeira, o mesmo; andar ou pular pede para levantar.
+            // Quem chega segurando W não levanta na hora: o direcional só conta depois de solto uma vez.
+            bool moving = !Paused && _move.ReadValue<Vector2>().sqrMagnitude > 0.25f;
+            if (!moving) _seatMoveLatch = false;
+            WantsToStand = IsSeated && (Tapped(_jump) || moving && !_seatMoveLatch);
+            if (InFurniture || IsSeated)
             {
-                _eyeHeight = _furnitureEye;
+                _eyeHeight = IsSeated ? _seatEye : _furnitureEye;
                 _horizontalVelocity = Vector3.zero;
                 _verticalVelocity = 0f;
                 IsSprinting = false;
@@ -451,14 +510,20 @@ namespace BackRooms.Player
 
         void UpdateLook(float dt)
         {
-            if (!MouseCaptured) return;
+            if (MouseCaptured)
+            {
+                // O delta do mouse já é por quadro; o analógico é uma taxa e precisa do dt.
+                Vector2 look = _lookMouse.ReadValue<Vector2>() * (mouseSensitivity * GameOptions.MouseScale)
+                             + _lookStick.ReadValue<Vector2>() * (stickSensitivity * dt);
 
-            // O delta do mouse já é por quadro; o analógico é uma taxa e precisa do dt.
-            Vector2 look = _lookMouse.ReadValue<Vector2>() * (mouseSensitivity * GameOptions.MouseScale)
-                         + _lookStick.ReadValue<Vector2>() * (stickSensitivity * dt);
+                transform.Rotate(0f, look.x, 0f, Space.Self);
+                _pitch = Mathf.Clamp(_pitch - look.y, -85f, 85f);
+            }
 
-            transform.Rotate(0f, look.x, 0f, Space.Self);
-            _pitch = Mathf.Clamp(_pitch - look.y, -85f, 85f);
+            // Sentado, a cabeça gira só até o limite para cada lado da frente da cadeira.
+            if (!IsSeated) return;
+            float off = Mathf.DeltaAngle(_seatYaw, transform.eulerAngles.y);
+            if (Mathf.Abs(off) > _seatTurn) transform.rotation = Quaternion.Euler(0f, _seatYaw + Mathf.Clamp(off, -_seatTurn, _seatTurn), 0f);
         }
 
         void UpdateCrouch(float dt)

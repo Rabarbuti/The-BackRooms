@@ -551,7 +551,7 @@ MonoBehaviour:
   followSharpness: 14
   inputEnabled: 0
   infiniteBattery: 0
-  batterySeconds: 600
+  batterySeconds: 240
 --- !u!1 &5776794574773400324
 GameObject:
   m_ObjectHideFlags: 0

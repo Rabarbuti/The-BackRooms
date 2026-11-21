@@ -307,7 +307,9 @@ BUILDERS = [
     monitor_crt,
     mesa_simples,
     lambda: placa_de_teto("PlacaPenduradaOferta", "BIG", "SALE", 0.17, 0.30),  # textos em inglês
-    lambda: placa_de_teto("PlacaPenduradaLiquida", "CLEARANCE", "SALE!", 0.14, 0.28),
+    # O nome ficou, mas a placa não diz mais CLEARANCE (21/11/2026): a palavra é só das três
+    # etiquetas vermelhas do código da porta do Level 1 (ExitLock).
+    lambda: placa_de_teto("PlacaPenduradaLiquida", "HALF", "PRICE", 0.17, 0.28),
 ]
 
 if __name__ == "__main__":

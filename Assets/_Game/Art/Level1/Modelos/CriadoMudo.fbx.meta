@@ -327,6 +327,11 @@ ModelImporter:
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
+      name: Papel_Amarelo
+    second: {fileID: 2100000, guid: 2cb21324d79d8cd4ba45719a1e0d776e, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
       name: Papel_Branco
     second: {fileID: 2100000, guid: 425126ca8102b304baefeff73f91795c, type: 2}
   - first:
@@ -529,6 +534,11 @@ ModelImporter:
       assembly: UnityEngine.CoreModule
       name: Tinta_Laranja
     second: {fileID: 2100000, guid: 6c3f7c7c583197849861a2726dd832cb, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Tinta_Preta
+    second: {fileID: 2100000, guid: dabce27f40d6faa4b8fd851ed2daffbb, type: 2}
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule

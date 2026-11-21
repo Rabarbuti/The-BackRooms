@@ -24,6 +24,8 @@ namespace BackRooms.Items
         public Material[] inkMaterials;
         [Tooltip("Largura do traço, em metros.")]
         public float lineWidth = 0.024f;
+        [Tooltip("Largura do traço numa lousa do Escritório (marcador), em metros.")]
+        public float markerWidth = 0.036f;
         [Tooltip("Acima disso os traços mais antigos são apagados.")]
         public int maxStrokes = 1500;
 
@@ -37,6 +39,8 @@ namespace BackRooms.Items
             public byte Color;
             public Vector3 Normal;
             public float Lift;
+            /// <summary>Riscado numa lousa (<c>ClassroomSeats</c>): traço de marcador, mais grosso.</summary>
+            public bool Marker;
             public readonly List<Vector3> Points = new List<Vector3>();
             public GameObject Object;
             public Mesh Mesh;
@@ -69,6 +73,7 @@ namespace BackRooms.Items
             if (!_strokes.TryGetValue(key, out Stroke stroke))
             {
                 stroke = Create(key, color, normal);
+                stroke.Marker = BackRooms.World.ClassroomSeats.IsWhiteboard(points[0]);
                 _strokes.Add(key, stroke);
                 _order.Enqueue(key);
                 Trim();
@@ -81,6 +86,50 @@ namespace BackRooms.Items
             }
 
             Rebuild(stroke);
+        }
+
+        /// <summary>
+        /// Confere de novo quais traços caem numa lousa. A fase chama ao montar as lousas: quem entra
+        /// depois recebe os traços (<see cref="SendAll"/>) antes de montar a fase.
+        /// </summary>
+        public void RefreshMarkers()
+        {
+            foreach (Stroke stroke in _strokes.Values)
+            {
+                if (stroke.Points.Count == 0) continue;
+                bool marker = BackRooms.World.ClassroomSeats.IsWhiteboard(stroke.Points[0]);
+                if (marker == stroke.Marker) continue;
+                stroke.Marker = marker;
+                Rebuild(stroke);
+            }
+        }
+
+        /// <summary>Quantos traços estão numa lousa (para os testes).</summary>
+        public int MarkerCount
+        {
+            get
+            {
+                int n = 0;
+                foreach (Stroke stroke in _strokes.Values) if (stroke.Marker) n++;
+                return n;
+            }
+        }
+
+        /// <summary>
+        /// Para os testes: o traço com mais pontos numa lousa, em <paramref name="points"/> (cópia), e a
+        /// normal dele. Falso se não há traço em lousa.
+        /// </summary>
+        public bool MarkerStroke(List<Vector3> points, out Vector3 normal)
+        {
+            normal = Vector3.zero;
+            Stroke best = null;
+            foreach (Stroke stroke in _strokes.Values)
+                if (stroke.Marker && (best == null || stroke.Points.Count > best.Points.Count)) best = stroke;
+            if (best == null) return false;
+            points.Clear();
+            points.AddRange(best.Points);
+            normal = best.Normal;
+            return true;
         }
 
         public void Clear()
@@ -154,7 +203,7 @@ namespace BackRooms.Items
             List<Vector3> points = stroke.Points;
             Vector3 normal = stroke.Normal;
             Vector3 lift = normal * stroke.Lift;
-            float half = lineWidth * 0.5f;
+            float half = (stroke.Marker ? markerWidth : lineWidth) * 0.5f;
 
             if (points.Count == 1)
             {

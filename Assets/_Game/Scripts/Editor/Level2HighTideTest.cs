@@ -20,7 +20,9 @@ namespace BackRooms.EditorTools
     /// fundas mais longe de um seco, e, só com o teclado virtual (Espaço e W, olhando para o próximo
     /// ponto), o faz subir à tona e nadar até o seco mais perto, onde fica de pé, respirando, à espera
     /// da vazante. Passa quando chega de pé ao seco, fora d'água e sem se afogar, no tempo dado. O
-    /// Undertow fica pausado: aqui a medida é de geometria e de fôlego (ele tem teste próprio).
+    /// Undertow fica pausado: aqui a medida é de geometria e de fôlego (ele tem teste próprio). Desde
+    /// 21/11/2026 o seco alagado não é mais abrigo do Undertow (na maré alta ele caça no mapa inteiro,
+    /// menos a sala inicial): o seco continua sendo onde se respira, e é isso que se mede aqui.
     ///
     /// Linha de comando: -executeMethod BackRooms.EditorTools.Level2HighTideTest.BatchRun, com -seed N
     /// ou -seeds A,B,C (padrão 1998). Sai com 0 se todas as tentativas chegaram, 3 se não. Cada
@@ -205,7 +207,7 @@ namespace BackRooms.EditorTools
 
         // ---------------------------------------------------------------- Planejamento
 
-        // Na maré alta passa-se por toda divisa aberta (nadando à tona); o seco é o refúgio.
+        // Na maré alta passa-se por toda divisa aberta (nadando à tona); o seco é onde se respira.
         static Dictionary<Vector2Int, int> RefugeDistances(LevelData d, out Dictionary<Vector2Int, Vector2Int> next)
         {
             var dist = new Dictionary<Vector2Int, int>();
@@ -352,7 +354,8 @@ namespace BackRooms.EditorTools
             Press(Key.Space, Key.W);
         }
 
-        // De pé num seco, fora d'água (respirando), sem nadar: o refúgio da maré alta.
+        // De pé num seco, fora d'água (respirando), sem nadar: onde se respira na maré alta (não é mais
+        // abrigo do Undertow, só do afogamento).
         static bool Safe(out Vector2Int cell)
         {
             cell = CellOf(_local.transform.position);

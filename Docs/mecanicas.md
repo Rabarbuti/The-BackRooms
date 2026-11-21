@@ -26,11 +26,15 @@ junto** (sanidade), **se separar** (objetivos), **falar** (coordenação) ou **f
 - **Co-op de 1 a 4 por IP.** Um hospeda, os outros entram. Cada máquina monta o mesmo mapa a partir
   da seed que o host envia.
 - **Movimento:** anda, corre (6 s de fôlego), agacha, pula.
-- **Lanterna** (F), com bateria: 10 min acesa. **Pilhas no chão** (desde 19/11/2026, `BatteryPickups`):
+- **Lanterna** (F), com bateria: 4 min acesa (era 10 até 21/11/2026), em porcentagem no painel, piscando
+  em vermelho abaixo de 20%. **Pilhas no chão** (desde 19/11/2026, `BatteryPickups`):
   de 4 a 9 cartelas por mapa, postas pela seed; mira + E pega e a lanterna de quem pegou volta cheia;
   quem chega primeiro leva (o host decide).
-- **Filmadora VHS:** a tela inteira é a imagem de uma fita, com REC, contador e hora. F9 grava um
-  vídeo de verdade.
+- **Filmadora VHS:** a tela inteira é a imagem de uma fita, com contador e hora. F9 grava um vídeo de
+  verdade (AVI na pasta Vídeos\The BackRooms, com o efeito, o painel e o som): parado, o canto diz STBY;
+  gravando, REC verde piscando com o tempo do clipe; ao parar, SAVED e o nome do arquivo. A tela
+  **Recordings** (menu inicial e menu de pausa) lista os clipes, abre no reprodutor do sistema, abre a
+  pasta e apaga com confirmação.
 - **Caneta de riscar** em três cores (1, 2, 3). Risca parede, chão e teto; todos veem os riscos.
 - **Não há morte.** Cair num buraco, ser pego ou se afogar dá NO SIGNAL e o jogador volta para a
   sala inicial.
@@ -146,7 +150,7 @@ Projeto completo em `level1-mostruario.md`.
 
 ### Também existe (desde 17/11/2026)
 
-- **Totens:** 6 a 10 estátuas iguais ao Capitão de longe, numa base preta com a placa de preço e
+- **Totens:** 6 a 10 estátuas iguais ao Capitão de longe, numa base preta com a placa amarela DISPLAY ONLY e
   com brilho de fibra de vidro. No apagão ele pode trocar de lugar com um totem que ninguém vê.
   De perto, o Capitão de verdade vira a cabeça para quem está perto e a perna de pau dele deixa
   marcas no chão.
@@ -154,9 +158,11 @@ Projeto completo em `level1-mostruario.md`.
   de jantar (agachado + E; ele vê quem está no cone dele a até 6 m).
 - **Plástico-bolha:** estala alto e conta como corrida para o ouvido dele. **Barricadas** de móveis
   do chão ao teto: ninguém passa, e nunca isolam nada.
-- **Objetivo:** a porta de saída tem um teclado (mira + E em cada tecla). O código está em **três
-  etiquetas vermelhas de CLEARANCE** (liquidação), longe umas das outras; o bilhete na sala inicial
-  ("DOCK: / 4 3 9 / SCRAMBLED") traz os dígitos fora de ordem.
+- **Objetivo:** a porta de saída tem um teclado; mira + E nele abre o painel do código na tela
+  (digita-se pelo teclado ou clicando; o jogo não para enquanto isso). O código está em **três
+  etiquetas vermelhas de CLEARANCE** (liquidação), longe umas das outras, cada uma com o dígito e a
+  posição (1/3, 2/3, 3/3). Só elas são vermelhas com CLEARANCE: as outras placas de preço são
+  amarelas (DISPLAY ONLY). Sem bilhete na sala inicial (tirado em 21/11/2026: ficava fácil demais).
 - **Som:** jingle de caixinha perto do Capitão, música de loja que some antes do apagão e passos
   diferentes no laminado e no vinílico.
 
@@ -230,28 +236,40 @@ Projeto completo em `level2-piscinas.md`.
     (`TIDE COMING`);
   - a água **sobe 1,3 m em 20 s**, fica **alta 15 s** e **desce em 20 s** (a vazante); enquanto anda,
     ronco de água correndo e superfície agitada;
-  - na maré alta o **raso passa da cabeça** (1,72 m de água: ou se nada, e o Undertow pode ouvir, ou se
-    espera no seco) e o **seco fica com água pelo peito** (1,12 m: vadeia-se devagar, é o refúgio);
+  - na maré alta o **raso passa da cabeça** (1,72 m de água: ou se nada ou se espera no seco) e o **seco
+    fica com água pelo peito** (1,12 m: vadeia-se devagar e respira-se; mas desde 21/11/2026 não é abrigo
+    do Undertow, que na maré alta caça no mapa inteiro);
   - **com água acima do joelho não se corre**;
   - a água deixa marca molhada nas paredes e no chão, que seca em ~50 s, e há uma linha de sujeira na
     altura da maré alta (dá para saber até onde ela chega).
 - **O ralo**: na **vazante** a água sai pelos ralos dos poços e puxa para a grade quem nada até 10 m
   além do poço; chegar à grade é afogar. As lâmpadas perto do poço piscam e os ralos gorgolejam.
 - **The Undertow** (desde 21/11/2026), o inimigo da água funda: um afogado esticado de 3,4 m.
-  - **Vive na água funda** (piscinas, raias, canais, poços) e **nunca sai dela**. Seco e raso são
-    abrigo; **na maré alta o raso vira território dele** (o seco não).
-  - **Dorme no fundo de um poço** (o mais longe da sala inicial), desde o começo da fase.
-  - **É cego: caça pelo barulho na água.** Pular ou cair na água (espirro) chama de 24 m, até pelos
-    canos de outra piscina; correr no raso perto da funda, até 24 m; nadar à tona, ~11 m; nadar
-    submerso, ~3 m; boiar parado, nada. Entrar devagar pela escada e nadar com calma (ou submerso)
-    passa.
+  - **Maré baixa: está em qualquer água em que dá para afundar** (piscinas, raias, canais, poços) e
+    **nunca sai dela**; seco e raso são abrigo. Começa no poço mais longe da sala inicial, mas **não tem
+    casa**: parado sem ouvir nada, a cada 16–30 s muda de água pelos canos, de preferência para uma a
+    ~14 m de algum jogador, nunca a menos de 10 m de ninguém nem numa água onde alguém nada. Surge com
+    bolhas e um gorgolejo do ralo, sem rugido: nunca se sabe em qual água ele está.
+  - **Maré alta: persegue pelo mapa inteiro.** Quando o seco alaga (1,12 m de água), ele **ruge** e passa
+    a rondar os jogadores a 8–18 m (nunca a menos de 7 m), vindo pelo barulho. Fora da água funda é mais
+    lento: vem a 1,6 m/s, caça a 2,2 (quem vadeia anda a 1,54, sem correr) e dá um **bote** a 3 m/s nos
+    últimos 2,5 m. **A sala inicial continua abrigo.** Quando a maré começa a descer, ele some pelos ralos
+    e volta a uma água funda.
+  - **É cego: caça pelo barulho na água.** Pular ou cair na água (espirro) chama de 24 m; correr
+    chapinhando, até 24 m; andar vadeando, ~13 m; andar agachado na água, ~6 m; nadar à tona, ~11 m;
+    nadar submerso, ~3 m; parado, nada. De outra água, pelos canos, só espirro e corrida.
+  - **Só pega quem ele ouve:** quem ele ouviu nos últimos 2 s (ou quem esbarra nele, a 0,6 m). **Parado e
+    quieto, ele perde a pista:** vem até perto de onde ouviu o último barulho, para a 1,6 m, escuta 4 s e
+    vai embora. Ao ouvir o rugido, o certo é parar (ou sair da linha dele devagar, agachado).
   - **Os canos ligam as piscinas:** um espirro noutra água o chama; ele afunda, some e reaparece lá
-    (num poço dela, se houver).
-  - **Avisos:** um gemido grave ao acordar ou surgir (ouve-se a 45 m) e uma nuvem de bolhas; nadando,
-    um latejar grave como um coração (mais alto e rápido caçando); a sombra de braços abertos
-    passando no fundo.
-  - **Pega quem nada na água dele** e puxa para o fundo (NO SIGNAL). **Quem sai da água escapa**: ele
-    ronda a borda por onde o jogador saiu por 8 s e volta a dormir.
+    (num poço dela, se houver), rugindo.
+  - **Avisos:** um **rugido** animal, rasgado, que se ouve de longe (abafado para quem está com a cabeça
+    debaixo d'água), ao ouvir e acordar, ao dar o bote e quando a maré alaga o seco; nadando, um
+    **rosnado** de garganta com a água revolvendo, que cresce e sobe de tom quanto mais perto; a sombra
+    de braços abertos passando no fundo; as bolhas.
+  - **Pega quem está com água acima da cintura no território dele** e puxa para o fundo (NO SIGNAL).
+    **Quem sai da água escapa** (na maré baixa): ele ronda a borda por onde o jogador saiu por 8 s e vai
+    descansar ali mesmo, na água funda.
   - **Drenada a fase**, arrasta-se pelo fundo das piscinas vazias a 0,9 m/s (o jogador anda a 2,8) e
     ainda pega quem fica no fundo; nos poços, ainda com água, nada normal.
   - Números: vai ao barulho a 2,3 m/s e caça a 3,3 (o jogador nada a 1,26).

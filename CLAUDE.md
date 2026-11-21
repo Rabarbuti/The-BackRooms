@@ -13,8 +13,8 @@ Capitão, que só anda quando ninguém o vê iluminado (seção "Level 1: onde p
 **Level 2 — As Piscinas** (as Poolrooms), tem projeto e uma versão de teste jogável: salas de
 azulejo sorteadas pelo `PoolGenerator` (não o labirinto do Level 0), água em quatro profundidades,
 luz só por claraboias e janelas, nado e fôlego, a maré com alarme e o ralo (`PoolTide`), as válvulas que
-drenam (uma delas só se alcança nadando) e o **Undertow**, que dorme no fundo de um poço e caça pelo
-barulho na água (`Docs/level2-piscinas.md`, cabeçalho "Já existe / Falta"). A quarta, o **Level 3 — O Escritório**, tem
+drenam (uma delas só se alcança nadando) e o **Undertow**, que muda de água pelos canos, caça pelo
+barulho na água e, na maré alta, pelo mapa inteiro (menos a sala inicial) (`Docs/level2-piscinas.md`, cabeçalho "Já existe / Falta"). A quarta, o **Level 3 — O Escritório**, tem
 projeto e uma versão de teste jogável: um andar de prédio vazio sorteado pelo `OfficeGenerator` (anel de
 corredores de teto técnico, salas, saguão de elevadores, cafeteria, vão da escada com a saída), luz fria,
 armários amarelos que batem, a onda de luzes que persegue os jogadores, interruptores de luz, botões de
@@ -59,7 +59,7 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   placas de curva no lugar das setas pintadas; também as barricadas, os totens, o plástico-bolha, o
   piso por zona e o objetivo). Do Level 1: `HideSpot` (guarda-roupa e mesa de esconder, tecla E;
   `HideSpotInput`), `BubbleWrap` (plástico-bolha: barulho e estalo), `Totem` (estátua do Capitão),
-  `ExitLock` (porta trancada por teclado, etiquetas e bilhete) e `FloorZones` (laminado e
+  `ExitLock` (porta trancada por teclado e etiquetas; o painel do código na tela é o `CodePanel`) e `FloorZones` (laminado e
   vinílico, para os passos). As Piscinas têm gerador e construtor próprios:
   `PoolGenerator` (planta por salas, C# puro, com `Validate`), `PoolData` (divisas, claraboias,
   salas, colunas, lâmpadas), `LevelBuilder.Pools.cs` (a geometria, parte do `LevelBuilder`) e
@@ -98,8 +98,10 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   cansa quem o encara, arrancadas no apagão), `CaptainBody` (segura a pose congelado; e
   `CaptainHeadMesh`, do corpo antigo) e `CaptainAudio` (a perna de pau). O mesmo `EntityDirector`
   põe um ou outro, pelo prefab. O inimigo das Piscinas, o Undertow: `UndertowNav` (território na
-  água: funda e poço; raso na maré alta), `UndertowBrain` (só no host; ouve o barulho na água pelo
-  `Footsteps` e pelo `WorldNoise`), `UndertowDirector` (põe-no dormindo no covil; `Paused`),
+  água: funda e poço; na maré alta também o raso e o seco alagado, nunca a sala inicial), `UndertowBrain`
+  (só no host; ouve o barulho na água pelo `Footsteps` e pelo `WorldNoise`; muda de água pelo relógio,
+  `RoamPaused`; confere o corpo inteiro contra a fase a cada passo, `Fits`), `UndertowDirector` (põe-no
+  no covil, só o ponto de partida; `Paused`),
   `UndertowBody` e `UndertowAudio`. O Zelador do Level 3: `JanitorBrain` (herda do `EntityBrain` pelo
   gancho `CellOpen`: só pisa no escuro; `JanitorBrain.Waves.cs`: escolhe os trechos da onda perto dos
   jogadores, nasce na ponta, decide o interruptor), `JanitorBody`, `JanitorAudio`, `JanitorDirector` (põe
@@ -164,7 +166,8 @@ risca, E abre a porta
 de saída (ou solta, se já estava esperando os outros), mira + E pega pilhas, mira + segurar E arma um
 disjuntor, gira uma válvula (a da água, boiando: Espaço e E juntos) ou puxa um alarme, mira + E num
 interruptor de luz religa o trecho escuro (Escritório), mira + E num botão de elevador abre, fecha ou
-chama, F9 grava a tela, Esc abre o menu de pausa (tarefas, teclas e opções; o jogo não para; fechar
+chama, mira + E numa carteira das salas de aula do Escritório senta (E de novo, andar ou pular levanta), mira + E no teclado da porta do Level 1 abre o painel do código (números ou clique,
+Backspace apaga, Enter confirma, Esc ou E fecha), F9 grava a tela, Esc abre o menu de pausa (tarefas, teclas e opções; o jogo não para; fechar
 prende o mouse de novo; Start no controle). No menu: H hospeda, J entra; a lista "Level" troca de nível
 (no editor todas ficam liberadas). Na água funda das
 Piscinas (piscinas, raias, canais e poços: não dá pé), segurar Espaço sobe e fica à tona; sem tecla,
@@ -309,8 +312,9 @@ velho. Mudança só de código não precisa. A cena do Level 1 não tem versão:
   perfil): o mapa é gerado ao hospedar e não tem luz rebatida, então sem ela tudo o que nenhuma luminária
   alcança direto fica preto puro. Desligar o céu por desempenho não rende (medido em 20/11 na T2000: 0
   ms); a queda de 27 para 20 ms em 12/11 veio da oclusão de ambiente, que continua desligada.
-- **Entrada nova de jogador ignora a tecla com `PauseMenu.IsOpen`** (o jogo não para com o menu aberto:
-  o jogador ainda cai, afunda e é pego, só não comanda).
+- **Entrada nova de jogador ignora a tecla com `InputGate.Blocked`** (menu de pausa ou painel do código
+  aberto, ou o quadro em que o painel fechou; o jogo não para: o jogador ainda cai, afunda e é pego, só
+  não comanda).
 - **No menu (sessão fora de `Playing`) o `AudioListener` fica mudo** (`GameOptions.MenuSilence`) e só a
   `MenuMusic` passa (`ignoreListenerVolume`): a fase é montada atrás do menu e os sons dela (zumbido dos
   pontos do objetivo, música da loja) tocavam no menu. Som novo não precisa saber do menu.
@@ -327,9 +331,15 @@ velho. Mudança só de código não precisa. A cena do Level 1 não tem versão:
   jogador, inimigo, porta que se mexe, pilha): quem entra depois monta com os outros já andando. Os
   interruptores fazem assim e o host publica um resumo das posições, que o cliente confere; os raios que
   põem os pontos do objetivo ignoram jogadores (`SwitchObjective.WallRay`).
-- **Nas Piscinas, na maré alta (+1,3 m) o raso vira nado e o seco continua refúgio** (1,12 m de água,
-  nunca território do Undertow). Maré acima de ~1,45 m acaba com o refúgio. Mudou maré, água, jogador,
-  borda ou escada: rode também o `Level2HighTideTest`.
+- **Nas Piscinas, na maré alta (+1,3 m) o raso vira nado e o seco é onde se respira** (1,12 m de água;
+  desde 21/11/2026 é território do Undertow, que caça no mapa inteiro menos a sala inicial). Maré acima de
+  ~1,45 m acaba com onde respirar. Mudou maré, água, jogador, borda ou escada: rode também o
+  `Level2HighTideTest`.
+- **O corpo do Undertow é comprido (3,4 m, braços de 2,9 m de ponta a ponta): o meio dentro do território
+  não basta.** Cada passo e giro confere os pontos do corpo contra os colisores da fase
+  (`UndertowBrain.Fits`, `BodyProbes`), a altura sai do piso medido por raio sob o corpo todo (degraus,
+  capa, deque do poço redondo) e o `UndertowBody.Fit` recolhe os braços onde eles bateriam. Até 21/11/2026
+  só o meio era conferido e ele atravessava parede e escada; o `UndertowTest` confere o corpo o tempo todo.
 - **Teste em dois editores compara as máquinas pela sonda (`NetProbe`)**: o host manda a hora da sessão
   e o estado, e o cliente compara no mesmo instante. Valor que cada máquina calcula pela própria hora
   (maré, apagão, onda) só prova algo junto com a conferência do relógio, e o relógio se mede pelo início
@@ -404,14 +414,18 @@ são postos, o Capitão e as regras dele, objetivo, som, ordem de construção e
 - **Abrigo e perigo** (`PropLayer`, pela seed): guarda-roupa e mesa de jantar de esconder (mira + E;
   na mesa, só agachado; o guarda-roupa esconde sempre, a mesa só fora do cone do inimigo, até 6 m;
   dentro, a tela vira a fresta da porta e o jogador não vigia o Capitão); totens (6 a 10: o corpo
-  do Capitão na pose parada, em fibra de vidro, numa base preta com a placa de preço CLEARANCE);
+  do Capitão na pose parada, em fibra de vidro, numa base preta com a placa amarela DISPLAY ONLY);
   plástico-bolha (barulho de corrida, mesmo agachado); barricadas (2,5% das células, entupidas do
   chão ao teto; nunca isolam nada: `LevelData.Barricade`, que o `LevelNav` evita).
-- **Objetivo** (`ExitLock`): a porta de saída fica trancada por um teclado na parede ao lado (mira +
-  E em cada tecla; as teclas 1, 2 e 3 são das canetas); o código de 3 dígitos sai da seed e está em
-  três etiquetas vermelhas de CLEARANCE, em blocos diferentes e longe umas das outras; um bilhete
-  na sala inicial traz os dígitos fora de ordem. O cliente manda o código ao host
-  (`GameSession`, mensagens nomeadas), que destranca e avisa todos, inclusive quem entra depois.
+- **Objetivo** (`ExitLock`): a porta de saída fica trancada por um teclado na parede ao lado; mira +
+  E nele abre o painel do código na tela (`CodePanel`, UI Toolkit): digita-se pelos números (fileira
+  de cima ou numérico) ou clicando, Backspace apaga, Enter confirma, Esc ou E fecha; o jogo não para
+  (o jogador só não comanda: `InputGate.Blocked`). O código de 3 dígitos sai da seed e está em
+  três etiquetas vermelhas de CLEARANCE, cada uma com o dígito e a posição (1/3, 2/3, 3/3), em
+  blocos diferentes e longe umas das outras. Vermelho com CLEARANCE é só delas: as outras placas da
+  loja são amarelas (DISPLAY ONLY) ou dizem outra coisa. Sem bilhete na sala inicial (tirado em
+  21/11/2026). O cliente manda o código ao host (`GameSession`, mensagens nomeadas), que destranca e
+  avisa todos, inclusive quem entra depois.
 - **Som e piso:** música de loja baixinha (some antes do aviso do apagão); laminado nas vitrines de
   jantar e de estar e vinílico no estoque, com passos próprios (`Footsteps`: `Laminate`, `Vinyl`).
 - **O corpo do Capitão** (`CaptainBody.Pose(fase, velocidade, parado, boca, tempo)`). Modelo esculpido no Blender (seção "Inimigos esculpidos"): mais sujo e
@@ -500,11 +514,15 @@ Sozinho na máquina, direto:
   entra) e a troca com um totem num apagão forçado. Linha `[BackRooms] Teste de abrigo do Level 1`.
   Dois editores: `BatchHost` + `BatchJoin` (o cliente vê o host sumir no guarda-roupa e o totem
   trocar de lugar).
-- `Level1ObjectiveTest.BatchRun` — o objetivo: três etiquetas em blocos diferentes, bilhete na sala
-  inicial, porta trancada não abre, a mira numa tecla mostra o aviso dela, código errado não
-  destranca, o certo (mira + E, tecla por tecla) destranca e a porta abre. Linha
-  `[BackRooms] Teste do objetivo do Level 1`. Dois editores: `BatchHost` destranca e espera;
-  `BatchJoin` entra depois e tem de achar a porta destrancada.
+- `Level1ObjectiveTest.BatchRun` — o objetivo: três etiquetas em blocos diferentes, nenhum bilhete,
+  placa amarela nos totens, porta trancada não abre; o painel do código com teclado e mouse
+  virtuais (mira + E abre; aberto não anda, não gira e o 1 não puxa a caneta; Backspace apaga; errado
+  pisca vermelho e limpa; Esc fecha sem abrir a pausa; E fecha sem mexer na porta; o certo, por
+  clique, numérico e fileira de cima, destranca e fecha) e a porta abre; fotos em
+  `Logs/Previews/level1_placas/painel_*.png`. Linha `[BackRooms] Teste do objetivo do Level 1`. Dois
+  editores: `BatchHost` + `BatchJoin` (o cliente digita no painel um código errado e o certo; o host
+  destranca) e `BatchHostLate` + `BatchJoinLate` (o host destranca; o cliente entra depois e acha a
+  porta destrancada).
 - `Level1SoundTest.BatchRun` — som do Level 1 com teclado virtual: passos no laminado, no vinílico e
   no carpete; a música da loja toca e se cala antes do aviso do apagão; o jingle do Capitão alto e
   agudo a 3 m, baixo a 13 m. Linha `[BackRooms] Teste de som do Level 1`.
@@ -600,11 +618,16 @@ Sozinho na máquina, direto:
 - `Level2Preview.BatchTide` (`-seed N`; sem ela, 1998 e 7) — fotos da maré do mesmo ponto em água baixa,
   alarme, maré alta e depois, em `Logs/Previews/mare`.
 - `UndertowTest.BatchRun` — o Undertow em Play: nadar submerso não o acorda, o espirro acorda (com
-  gemido), nadar à tona longe não acorda, quem sobe na borda escapa enquanto ele ronda, pega e puxa quem
-  boia, na maré alta entra no raso, surge noutra água pelos canos e, drenado, se arrasta e pega quem fica
-  no fundo; nunca sai do território. Linha `[BackRooms] Teste do Undertow`. Dois editores: `BatchHost` +
-  `BatchJoin` (o cliente espirra perto do covil, é pego e puxado). `UndertowPreview.BatchCapture`
-  (`-seed N`): fotos em `Logs/Previews/undertow/`. `Level2EscapeTest -undertow` roda com ele ativo e
+  rugido), nadar à tona longe não acorda, quem sobe na borda escapa enquanto ele ronda, pega e puxa quem
+  nada perto; na maré alta entra no raso, ruge e ronda, pega quem anda no seco alagado, perde quem fica
+  parado e quieto e não entra na sala inicial; na vazante some pelos ralos; surge noutra água pelos canos,
+  em cada água funda pelo barulho dela e muda de água pelo relógio; drenado, se arrasta e pega quem anda
+  no fundo. O tempo todo: nunca fica fora do território, nunca entra na sala inicial e nenhuma parte do
+  corpo entra em colisor fixo da fase (4 cm de tolerância). Linha `[BackRooms] Teste do Undertow`. Dois
+  editores: `BatchHost` + `BatchJoin` (o cliente espirra perto do covil e nada, é pego e puxado, ouve o
+  rugido; o corpo é conferido nas duas máquinas). `UndertowPreview.BatchCapture` (`-seed N`): fotos em
+  `Logs/Previews/undertow/` (com `-fotoTag X`, as séries da braçada e da maré alta saem com o prefixo X_;
+  com `-so bracada` ou `-so mare`, só elas). `Level2EscapeTest -undertow` roda com ele ativo e
   conta à parte as tentativas pegas.
 - `NetTests.BatchHostLevel2` + `BatchJoinLevel2` (e `Level3`) — dois editores: planta, pontos do
   objetivo e pilhas iguais, e relógio igual; maré igual no mesmo instante (Level 2); pilhas pegas por um
@@ -712,7 +735,8 @@ tempo. O `LevelBuilder.objective` diz o tipo (`Breaker` no Level 0, posto sempre
   3 com três ou quatro: `RequiredFor`) têm de vir dentro dela; sozinho não há janela.
 - Nas Piscinas, a válvula 0 fica no seco (a pé) e a 1 só se alcança nadando (`WaterValveSpot`:
   `AcrossWater`, numa ilha ou na parede sobre a funda; `WellBottom`, no fundo de um poço, desligado;
-  `LevelBuilder.waterValve`), por sorteio próprio fugindo da água do covil do Undertow.
+  `LevelBuilder.waterValve`), por sorteio próprio fugindo da água do covil do Undertow (onde ele começa;
+  depois ele muda de água).
 - Quem segura E faz barulho de corrida (`PlayerNetwork.Working`, lido pelo `EntityBrain`); cumprido, o
   host solta o estrondo pelo mundo (`WorldNoise.Emit`, `CompleteNoiseRadius` 500 m) a partir do último
   ponto, e o evento `SwitchObjective.Completed` dispara uma vez em todas as máquinas (inclusive em quem

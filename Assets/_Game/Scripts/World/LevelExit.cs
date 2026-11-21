@@ -109,7 +109,7 @@ namespace BackRooms.World
             if (LocalWaiting && (body.IsReturning || Flat(body.transform.position - DoorPosition).magnitude > waitRadius))
                 LocalWaiting = false;
 
-            if (_interact.WasPressedThisFrame() && !BackRooms.UI.PauseMenu.IsOpen) Interact();
+            if (_interact.WasPressedThisFrame() && !BackRooms.UI.InputGate.Blocked) Interact();
         }
 
         /// <summary>

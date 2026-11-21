@@ -149,6 +149,18 @@ def trunk(P):
         hc = J["Quadril"] + v3(0.13 * s, 0, 0.055)
         d = smin(d, ellipsoid(P, hc, (0.045, 0.07, 0.035)), 0.035)
 
+    # Cintura escapular: o perfil do tronco acaba estreito (5,5 cm) antes da altura dos ombros, e as
+    # juntas dos braços ficam a 26 cm do meio, no vazio. Sem isto os braços (peças à parte, que
+    # giram na junta) pareciam soltos do corpo (21/11/2026). Peito alto e largo até as juntas, uma
+    # clavícula de cada lado e o deltoide em volta da junta, onde nasce o braço.
+    up = J["Ombros"] + FWD * -0.1
+    d = smin(d, ellipsoid(P, up + v3(0, 0, 0.005), (0.2, 0.13, 0.085)), 0.07)
+    for tag in ("E", "D"):
+        sj = J["Braco_" + tag]
+        root = J["Ombros"] + FWD * -0.06 + v3(0, 0, 0.02)
+        d = smin(d, capsule(P, root, sj, 0.07, 0.058), 0.06)                  # clavícula e ombro
+        d = smin(d, sphere(P, sj + FWD * -0.015 + v3(0, 0, 0.005), 0.066), 0.05)  # deltoide
+
     # Nadadeira de pele na ponta da cauda, rasgada.
     fin = ellipsoid(P, TAIL_TIP - FWD * 0.05, (0.18, 0.21, 0.016))
     rag = 0.03 * (0.5 + 0.5 * vnoise(P, 18.0, 5)) * smooth(0.08, 0.2, np.abs(x))
@@ -393,8 +405,8 @@ def build():
     m_eye = pb.material("Afogado_Olho", rough=0.12, spec=0.7, coat=0.8)
     objs = {}
 
-    lo = np.array((-0.34, min(J["Cabeca"][1], J["Ombros"][1]) - 0.12, Z0 - 0.2))
-    hi = np.array((0.34, TAIL_TIP[1] + 0.3, Z0 + 0.24))
+    lo = np.array((-0.42, min(J["Cabeca"][1], J["Ombros"][1]) - 0.12, Z0 - 0.2))
+    hi = np.array((0.42, TAIL_TIP[1] + 0.3, Z0 + 0.24))
     objs["Afogado_Corpo"] = pb.sdf_mesh("Afogado_Corpo", trunk, lo, hi, 0.0075 if EXPORT else 0.009, trunk_color, m_skin)
     for tag in ("E", "D"):
         a, b = arm_bounds(tag)

@@ -11,7 +11,7 @@ namespace BackRooms.World
 {
     /// <summary>
     /// Pilhas da lanterna no chão (<c>P0.3</c> de mecanicas.md): a lanterna gasta bateria
-    /// (<see cref="Flashlight"/>, 10 min acesa) e as pilhas, poucas, ficam pelo mapa para quem chegar
+    /// (<see cref="Flashlight"/>, 4 min acesa) e as pilhas, poucas, ficam pelo mapa para quem chegar
     /// primeiro. Mirar e apertar E pega; a lanterna de quem pegou volta a ficar cheia.
     ///
     /// - Postas pela seed sem mudar o mapa: um <c>System.Random</c> próprio, depois de tudo, numa
@@ -171,7 +171,7 @@ namespace BackRooms.World
         {
             Prompt = null;
             PlayerNetwork local = PlayerNetwork.Local;
-            bool pressed = (_use != null && _use.WasPressedThisFrame() && !BackRooms.UI.PauseMenu.IsOpen) || PressForTest;
+            bool pressed = (_use != null && _use.WasPressedThisFrame() && !BackRooms.UI.InputGate.Blocked) || PressForTest;
             PressForTest = false;
             if (local == null || !local.InGame || local.controller.IsReturning || local.controller.InFurniture) return;
 

@@ -136,6 +136,7 @@ namespace BackRooms.Player
         }
 
         bool _remote;
+        float _submersion;
         Vector3 _lastPosition;
         float _phase;
         float _smoothedSpeed;
@@ -227,6 +228,7 @@ namespace BackRooms.Player
 
             EnsureWaterClips();
             float submersion = ReadWater(water, out bool swimming, out bool underwater);
+            _submersion = submersion;
             Surface = underwater ? StepSurface.Underwater
                     : swimming ? StepSurface.Swim
                     : submersion > WetDepth ? StepSurface.Wade
@@ -338,7 +340,12 @@ namespace BackRooms.Player
             if (Mathf.FloorToInt(_phase) == Mathf.FloorToInt(before)) return;
             if (_phase > 1000f) _phase -= 1000f;
 
-            OnStepped(_smoothedSpeed < 2f ? 0.25f : _smoothedSpeed > 4f ? 1f : 0.55f);
+            // Vadeando, o passo é mais lento para o mesmo esforço (PlayerController.WadeFactor): o
+            // ritmo se mede pela velocidade em seco, senão quem anda no seco alagado da maré alta
+            // (1,54 m/s) soaria como quem anda agachado para quem o ouve (o Undertow, no host).
+            float pace = _smoothedSpeed;
+            if (Surface == StepSurface.Wade && controller != null) pace /= Mathf.Max(0.3f, controller.WadeFactor(_submersion));
+            OnStepped(pace < 2f ? 0.25f : pace > 4f ? 1f : 0.55f);
         }
 
         void OnStepped(float loudness)

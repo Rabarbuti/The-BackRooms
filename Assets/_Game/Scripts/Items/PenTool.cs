@@ -102,7 +102,7 @@ namespace BackRooms.Items
 
             for (int i = 0; i < _keys.Length; i++)
             {
-                if (!_keys[i].WasPressedThisFrame() || BackRooms.UI.PauseMenu.IsOpen) continue;
+                if (!_keys[i].WasPressedThisFrame() || BackRooms.UI.InputGate.Blocked) continue;
                 Select(KeyColors[i]);
                 break;
             }
@@ -200,7 +200,9 @@ namespace BackRooms.Items
 
         void AddSample(DrawingBoard board, Vector3 point, Vector3 normal)
         {
-            bool sameSurface = _active && Vector3.Dot(normal, _normal) > 0.98f;
+            // Mesma direção não basta: a lousa do Escritório fica 3,5 cm à frente da parede, com a mesma
+            // normal; saindo de uma para a outra o traço recomeça (e a lousa ganha o traço de marcador).
+            bool sameSurface = _active && Vector3.Dot(normal, _normal) > 0.98f && Mathf.Abs(Vector3.Dot(point - _last, _normal)) < 0.01f;
             bool near = (point - _last).sqrMagnitude <= maxJump * maxJump;
 
             if (!sameSurface || !near || _pointsInStroke >= DrawingBoard.MaxPointsPerStroke)

@@ -7,11 +7,13 @@ namespace BackRooms.Entities
 {
     /// <summary>
     /// Põe o Undertow (<see cref="UndertowBrain"/>) nas Piscinas. Roda só no host. Não é o
-    /// <see cref="EntityDirector"/>: ela não surge atrás de ninguém; está lá desde o começo,
-    /// dormindo no fundo do covil, e é o barulho na água que a acorda.
+    /// <see cref="EntityDirector"/>: ele não surge atrás de ninguém; está lá desde o começo,
+    /// parado no fundo do covil, e é o barulho na água que o acorda. Desde 21/11/2026 o covil é só
+    /// onde ele começa: depois ele muda de água pelo relógio e pelo barulho (o cérebro decide).
     ///
     /// O covil: um poço (o mais longe da sala inicial), ou, se a planta não tem poço, a célula de
-    /// água funda mais longe da sala inicial.
+    /// água funda mais longe da sala inicial. Determinístico (pela planta): o sorteio das válvulas
+    /// (<see cref="SwitchObjective"/>) foge da água dele, e por isso a conta não muda.
     ///
     /// Os testes que nadam e não são dela a desligam com <see cref="Paused"/> (ou com o
     /// <see cref="EntityDirector.Paused"/>, que vale para todo inimigo).

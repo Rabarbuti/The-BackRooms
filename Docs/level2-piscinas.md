@@ -50,9 +50,10 @@ Level 2 (teste)) com as etapas 1 a 7 da seção 8.1:
   não é o covil, é o passo seguinte, pronto e desligado). Abertas dentro de 5 s (sozinho, as duas, sem
   janela) drenam 2 m em 30 s, param a maré e destrancam a saída. A planta não mudou (nenhuma regra nova
   no `PoolGenerator`).
-- **O inimigo, The Undertow** (21/11/2026, `UndertowBrain` e cia.; seção 5): um afogado de 3,4 m que dorme
-  no fundo do poço mais longe do início, caça pelo barulho na água, nunca sai dela, vem pelos canos para
-  outra piscina e, drenada a fase, arrasta-se pelo fundo. Modelo esculpido no Blender (`afogado.py`).
+- **O inimigo, The Undertow** (21/11/2026, `UndertowBrain` e cia.; seção 5): um afogado de 3,4 m que começa
+  no fundo do poço mais longe do início e muda de água pelos canos (pelo relógio e pelo barulho), caça pelo
+  barulho na água, na maré baixa nunca sai dela, na maré alta persegue pelo mapa inteiro (menos a sala
+  inicial) e, drenada a fase, arrasta-se pelo fundo. Modelo esculpido no Blender (`afogado.py`).
 - **Texto do jogador em inglês** (21/11/2026): marcações "2.0 M", "NO DIVING", "DEEP END"; filmadora
   `WATER`, `AIR`, `HOLD SPACE`, `W - CLIMB`, `TIDE ...`; no menu, "Level 2 — The Poolrooms"; cartaz de
   dicas na sala inicial (TIPS / MARK THE SHALLOWS / STAY OFF THE DRAINS / HOLD SPACE TO FLOAT / ESC:
@@ -426,7 +427,8 @@ parada, 20 s subindo até +1,3 m, 15 s de maré alta e 20 s descendo (a vazante)
 
 - Na maré alta, o raso fica com 1,72 m de água: **de pé, a cabeça fica debaixo d'água**, então ou se
   nada à tona (e o raso vira território do Undertow) ou se espera no seco. O seco (+0,2 m) fica com
-  1,12 m: vadeia-se sem nadar e continua refúgio (decisão 5 da seção 9). Não há arco baixo que fique
+  1,12 m: vadeia-se sem nadar e respira-se (decisão 5 da seção 9); desde 21/11/2026 não é mais abrigo do
+  Undertow, que na maré alta caça no mapa inteiro, menos a sala inicial. Não há arco baixo que fique
   submerso: só acima de ~1,45 m de maré, quando o seco também viraria nado.
 - **Alarme:** 10 s antes e durante a subida, sirene na fase inteira e lâmpadas vermelhas de parede
   piscando (uma ou duas por sala, `PoolAlarm`); no começo, a buzina de piscina de ondas e um glub;
@@ -466,13 +468,17 @@ A decisão 2 da seção 9 mudou: a fase ganhou um inimigo, o que "só aparece co
 segue quem espirra". Regras em linguagem de jogador em `mecanicas.md`, seção 4. Em resumo:
 
 - Vive na água funda e no poço (`UndertowNav`; o raso entra na maré alta, com a coluna d'água acima de
-  1,3 m) e nunca sai dela; dorme no fundo do poço mais longe do início (o covil, sem sorteio).
+  1,3 m, e, desde 21/11/2026, o seco alagado, acima de 0,95 m, menos a sala inicial) e na maré baixa nunca
+  sai dela. Começa no poço mais longe do início (o covil, sem sorteio) e muda de água pelos canos pelo
+  relógio (16–30 s parado) e pelo barulho; na maré alta ronda os jogadores pelo mapa inteiro e, na vazante,
+  some pelos ralos. Só pega quem ouviu nos últimos 2 s: parado e quieto, perde a pista.
 - Cego: o barulho na água (o mesmo que o jogador ouve: espirro, braçada, passos no raso) o chama, com
   alcance de 24 m × a força do barulho; pelos canos, só barulho forte (espirro, corrida) e não caçando.
-- Pega quem nada na água dele (1,4 m; água mais de 1 m acima dos pés) e puxa para o fundo; quem sai da
-  água escapa (ele ronda a borda 8 s). Drenada a fase, arrasta-se pelo fundo a 0,9 m/s.
-- Números em campos do `UndertowBrain`: 2,3 m/s indo ao barulho, 3,3 caçando, 1,4 rondando; acordar
-  leva 2,2 s, com gemido. A rota de nado até a válvula da água foge do covil (a mais perto passa a 23 m).
+- Pega quem ele ouviu nos últimos 2 s e está na água dele (1,4 m; água mais de 0,9 m acima dos pés) e puxa
+  para o fundo; quem sai da água escapa (ele ronda a borda 8 s). Drenada a fase, arrasta-se pelo fundo a 0,9 m/s.
+- Números em campos do `UndertowBrain`: 2,3 m/s indo ao barulho, 3,3 caçando, 1,4 rondando; fora da
+  água funda (maré alta) 1,6 indo, 2,2 caçando, bote de 3 nos últimos 2,5 m e 1,2 rondando; acordar
+  leva 2,2 s, com rugido. A rota de nado até a válvula da água foge do covil (a mais perto passa a 23 m).
 
 ---
 

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BackRooms.Net;
 using BackRooms.World;
 using UnityEngine;
 
@@ -23,6 +24,12 @@ namespace BackRooms.Entities
     ///
     /// O corpo inclina (nariz para cima ou para baixo) pela velocidade vertical, calculada aqui pela
     /// posição que chega da rede. Some nos canos (estado Travel, depois de afundar).
+    ///
+    /// Encaixe na fase (<see cref="Fit"/>, em todas as máquinas, a cada quadro): os braços abertos
+    /// medem ~2,9 m de ponta a ponta e a braçada desce as mãos ~0,7 m; onde um braço bateria em
+    /// parede, escada, coluna ou piso (um vão, o seco alagado de 1,12 m), ele se recolhe ao longo do
+    /// corpo, na hora (e solta devagar). A inclinação e a onda da cauda também cedem onde a ponta
+    /// bateria. O meio do corpo, a cabeça e a cauda reta quem guarda é o <see cref="UndertowBrain"/>.
     /// </summary>
     public sealed class UndertowBody : MonoBehaviour
     {
@@ -68,6 +75,15 @@ namespace BackRooms.Entities
         readonly Transform[] _forearm = new Transform[2];
         readonly Transform[] _hand = new Transform[2];
         readonly Transform[] _fingers = new Transform[2];
+
+        // O último braço que a pose pediu (antes de recolher) e quanto cada um está recolhido (0 a 1).
+        readonly float[] _armYaw = new float[2], _armPitch = new float[2], _armElbow = new float[2];
+        readonly float[] _handX = new float[2], _handY = new float[2], _fingersX = new float[2];
+        readonly float[] _tuck = new float[2];
+        static readonly RaycastHit[] Hits = new RaycastHit[16];
+
+        /// <summary>Quanto cada braço está recolhido agora (0 aberto, 1 ao longo do corpo).</summary>
+        public float Tuck(int arm) => _tuck[arm];
 
         UndertowBrain _brain;
         Renderer[] _renderers;
@@ -150,6 +166,9 @@ namespace BackRooms.Entities
             float pitch = -Mathf.Atan2(_vertical, Mathf.Max(0.6f, _speed)) * Mathf.Rad2Deg;
             _rig.localRotation = Quaternion.Euler(Mathf.Clamp(pitch, -35f, 35f) * (1f - _sleep), 0f, 0f);
 
+            GameSession session = GameSession.Instance;
+            if (session != null && session.level != null && !hidden) Fit(session.level, dt);
+
             UpdateBubbles(dt, state, hidden);
         }
 
@@ -208,11 +227,114 @@ namespace BackRooms.Entities
                 elbow = Mathf.Lerp(elbow, 55f, grab);
                 elbow = Mathf.Lerp(elbow, 70f, sleep);
 
-                _arm[i].localRotation = Quaternion.Euler(pitch, side * yaw, 0f);
-                _forearm[i].localRotation = Quaternion.Euler(0f, -side * elbow, 0f);
-                Turn(_hand[i], 10f * (1f - grab), -side * 10f * grab, 0f);
-                Turn(_fingers[i], Mathf.Lerp(12f, 70f, Mathf.Max(grab, sleep * 0.6f)), 0f, 0f);
+                _armYaw[i] = yaw;
+                _armPitch[i] = pitch;
+                _armElbow[i] = elbow;
+                _handX[i] = 10f * (1f - grab);
+                _handY[i] = -side * 10f * grab;
+                _fingersX[i] = Mathf.Lerp(12f, 70f, Mathf.Max(grab, sleep * 0.6f));
+                PoseArm(i, _tuck[i]);
             }
+        }
+
+        // O braço na pose pedida, recolhido pela fração dada: ao longo do corpo, para trás e um pouco
+        // para cima, cotovelo quase reto, dedos fechados.
+        void PoseArm(int i, float tuck)
+        {
+            float side = i == 0 ? 1f : -1f;
+            float yaw = Mathf.Lerp(_armYaw[i], 168f, tuck);
+            float pitch = Mathf.Lerp(_armPitch[i], -4f, tuck);
+            float elbow = Mathf.Lerp(_armElbow[i], 4f, tuck);
+            _arm[i].localRotation = Quaternion.Euler(pitch, side * yaw, 0f);
+            _forearm[i].localRotation = Quaternion.Euler(0f, -side * elbow, 0f);
+            Turn(_hand[i], Mathf.Lerp(_handX[i], 0f, tuck), _handY[i] * (1f - tuck), 0f);
+            Turn(_fingers[i], Mathf.Lerp(_fingersX[i], 20f, tuck), 0f, 0f);
+        }
+
+        // ---------------------------------------------------------------- Encaixe na fase
+
+        /// <summary>
+        /// Encaixa a pose atual na fase: cada braço que bateria (ombro, cotovelo, pulso ou ponta dos
+        /// dedos em colisor da fase) se recolhe na hora até caber, e solta devagar (<paramref name="dt"/>;
+        /// 0 = sem pressa, para as fotos); a inclinação cede se a ponta do focinho ou da cauda bateria; a
+        /// cauda fica reta se a onda a levaria para dentro de uma parede.
+        /// </summary>
+        public void Fit(LevelBuilder level, float dt = 0f)
+        {
+            if (level == null || _rig == null) return;
+            Transform root = level.transform;
+
+            // A inclinação: metade, e depois nenhuma, se o focinho ou a cauda bateria.
+            for (int k = 0; k < 2 && (Blocked(root, SpineHead(), 0f) || Blocked(root, SpineTail(), 0f)); k++)
+                _rig.localRotation = Quaternion.Slerp(Quaternion.identity, _rig.localRotation, k == 0 ? 0.5f : 0f);
+
+            // A cauda: sem a onda, reta atrás do corpo (e enrolada, dormindo, como estava).
+            if (Blocked(root, SpineTail(), 0f))
+                for (int i = 0; i < _tail.Length; i++)
+                    if (_tail[i] != null) _tail[i].localRotation = _rest[_tail[i]] * Quaternion.Euler(0f, 22f * _sleep, 0f);
+
+            for (int i = 0; i < 2; i++)
+            {
+                float relaxed = dt > 0f ? Mathf.Max(0f, _tuck[i] - dt * 0.8f) : 0f;
+                float chosen = 1f;
+                foreach (float t in new[] { relaxed, _tuck[i], Mathf.Max(_tuck[i], 0.5f), 0.8f })
+                {
+                    PoseArm(i, t);
+                    if (Blocked(root, ArmChain(i), 0f)) continue;
+                    chosen = t;
+                    break;
+                }
+                _tuck[i] = chosen;
+                PoseArm(i, chosen);
+            }
+        }
+
+        Vector3[] SpineHead() => new[] { transform.position, _shoulders.position, _head.position, HeadTip() };
+        Vector3[] SpineTail() => new[] { transform.position, _pelvis.position, _tail[0].position, _tail[1].position, _tail[2].position, _tail[3].position, TailTip() };
+        Vector3[] ArmChain(int i) => new[] { _arm[i].position, _forearm[i].position, _hand[i].position, _fingers[i].position, FingerTip(i) };
+
+        Vector3 HeadTip() => _head.position + _head.forward * 0.26f;
+        Vector3 TailTip() => _tail[3].position - _tail[3].forward * 0.42f;
+        Vector3 FingerTip(int i) => _fingers[i].position + _fingers[i].forward * 0.24f;
+
+        // A corrente de pontos encosta em colisor da fase? Cada trecho por raio, sem os últimos
+        // <paramref name="tolerance"/> metros do fim.
+        static bool Blocked(Transform root, Vector3[] chain, float tolerance)
+        {
+            for (int k = 0; k + 1 < chain.Length; k++)
+                if (SegmentHits(root, chain[k], chain[k + 1], tolerance)) return true;
+            return false;
+        }
+
+        static bool SegmentHits(Transform root, Vector3 a, Vector3 b, float tolerance)
+        {
+            Vector3 d = b - a;
+            float length = d.magnitude - tolerance;
+            if (length <= 0.001f) return false;
+            int count = Physics.RaycastNonAlloc(a, d.normalized, Hits, length, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+                if (Hits[i].collider.transform.IsChildOf(root)) return true;
+            // E de trás para a frente: o raio não acha a face de quem começa dentro de um colisor.
+            count = Physics.RaycastNonAlloc(b - d.normalized * tolerance, -d.normalized, Hits, length, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+                if (Hits[i].collider.transform.IsChildOf(root)) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Para os testes: as partes do corpo (cabeça, mãos e ponta dos dedos, ponta da cauda) que
+        /// entram em colisor fixo da fase, com a tolerância dada (metros do fim de cada trecho, da
+        /// espinha para a ponta). Vazio se o corpo inteiro está fora de parede, escada, coluna e piso.
+        /// </summary>
+        public void Penetrations(LevelBuilder level, float tolerance, List<string> where)
+        {
+            where.Clear();
+            if (level == null || _rig == null) return;
+            Transform root = level.transform;
+            if (Blocked(root, SpineHead(), tolerance)) where.Add($"cabeça {HeadTip()}");
+            if (Blocked(root, SpineTail(), tolerance)) where.Add($"cauda {TailTip()}");
+            for (int i = 0; i < 2; i++)
+                if (Blocked(root, ArmChain(i), tolerance)) where.Add($"mão {(i == 0 ? "E" : "D")} {FingerTip(i)}");
         }
 
         void Turn(Transform joint, float x, float y, float z)

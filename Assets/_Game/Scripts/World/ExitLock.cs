@@ -9,32 +9,35 @@ namespace BackRooms.World
     /// <summary>
     /// O objetivo do Level 1, "fechar o caixa" (level1-mostruario.md, seção 6): a porta de saída
     /// (a da doca) fica trancada por um teclado na parede, ao lado dela. O código tem três
-    /// dígitos, sai da seed e está nas três etiquetas vermelhas de LIQUIDAÇÃO espalhadas pela
-    /// loja, cada uma com um dígito e a sua ordem ("1/3", "2/3", "3/3"). Um bilhete na sala
-    /// inicial traz os três dígitos fora de ordem.
+    /// dígitos, sai da seed e está nas três etiquetas vermelhas de CLEARANCE espalhadas pela
+    /// loja, cada uma com um dígito e a sua ordem ("1/3", "2/3", "3/3"). Vermelho com CLEARANCE é
+    /// só delas: as outras placas da loja são de outra cor e dizem outra coisa. Até 21/11/2026 um
+    /// bilhete na sala inicial trazia os três dígitos fora de ordem; saiu (ficava fácil demais).
     ///
-    /// O teclado se usa mirando e apertando E em cada tecla (o padrão de mira de
-    /// <c>PenTool.TryAim</c>; as teclas 1, 2 e 3 do teclado são das canetas). O "OK" manda o
-    /// código para o host, que confere e, se estiver certo, destranca e avisa todos
-    /// (<see cref="GameSession"/>, mensagens nomeadas); quem entra depois recebe o aviso junto
-    /// com a seed. Trancada, a porta de saída não deixa esperar nela (<see cref="LevelExit"/>).
+    /// Mira no teclado da parede + E (o padrão de mira de <c>PenTool.TryAim</c>) abre o painel do
+    /// código na tela (<see cref="CodePanel"/>), onde se digita pelo teclado ou pelo mouse; até
+    /// 21/11/2026 era mirando tecla por tecla. O Enter manda o código para o host, que confere e, se
+    /// estiver certo, destranca e avisa todos (<see cref="GameSession"/>, mensagens nomeadas); quem
+    /// entra depois recebe o aviso junto com a seed. O cliente também confere o código pela própria
+    /// seed, só para o visor responder na hora (vermelho ou aceito); quem destranca é o host.
+    /// Trancada, a porta de saída não deixa esperar nela (<see cref="LevelExit"/>).
     /// </summary>
     public sealed class ExitLock : MonoBehaviour, ITaskSource
     {
         // Textos das tarefas do menu de pausa (a língua do jogo é o inglês).
         const string TagsTask = "Find the 3 red CLEARANCE tags (the door code)";
-        const string TagsDetail = "Each tag has one digit and its place (1/3, 2/3, 3/3). The note in the first room has the digits out of order.";
+        const string TagsDetail = "Each tag has one digit and its place in the code (1/3, 2/3, 3/3).";
         const string KeypadTask = "Type the code on the keypad next to the exit door";
-        const string KeypadDetail = "Aim + E on each key, then OK. X clears.";
+        const string KeypadDetail = "Aim at the keypad + E, type the digits and press Enter.";
         const string ExitTask = "Leave through the exit door";
         const string ExitLocked = "Locked until the code is in.";
         const string KeypadKey = "Aim + E";
-        const string KeypadAction = "press a keypad key";
-        // Textos pintados no mundo (PixelFont: só A-Z, 0-9 e : . , / - = ( )). Etiqueta: até 10
-        // letras; bilhete: até 9 letras na linha de baixo.
+        const string KeypadAction = "use the door keypad";
+        // O aviso da mira no painel da filmadora.
+        const string KeypadPrompt = "E - KEYPAD";
+        const string OpenPrompt = "OPEN";
+        // Texto pintado na etiqueta (PixelFont: só A-Z, 0-9 e : . , / - = ( )): até 10 letras.
         const string TagWord = "CLEARANCE";
-        const string NoteTitle = "DOCK:";
-        const string NoteOrder = "SCRAMBLED";
 
         public static ExitLock Instance { get; private set; }
 
@@ -49,10 +52,22 @@ namespace BackRooms.World
         /// <summary>O que está digitado agora (para os testes).</summary>
         public string Typed => _typed;
 
+        /// <summary>Teclas especiais de <see cref="Press"/>: apaga o último dígito e confirma.</summary>
+        public const string EraseKey = "BS", EnterKey = "OK";
+
+        /// <summary>O que o visor mostra: o aviso (ERR, OK, OPEN) ou os dígitos, com traço no que falta.</summary>
+        public string Display => _status ?? _typed.PadRight(3, '-');
+
+        /// <summary>O visor está no aviso de código errado.</summary>
+        public bool ShowingError => _status == ErrorStatus;
+
+        /// <summary>O código certo foi digitado aqui (esperando o host) ou a porta já destrancou.</summary>
+        public bool Accepted => Unlocked || _sentRight;
+
         /// <summary>O que a tecla E faz agora no teclado, para o painel. Nulo se nada.</summary>
         public static string Prompt { get; private set; }
 
-        /// <summary>Para os testes: aperta E na tecla mirada.</summary>
+        /// <summary>Para os testes: aperta E mirando o teclado (abre o painel).</summary>
         public static bool PressForTest;
 
         /// <summary>
@@ -68,12 +83,16 @@ namespace BackRooms.World
         public float reach = 2f;
 
         static readonly RaycastHit[] Hits = new RaycastHit[16];
+        // O desenho da face (as teclas da parede são só enfeite: digita-se no painel da tela).
         static readonly string[] Keys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "X", "0", "OK" };
+        const string ErrorStatus = "ERR", SentStatus = "OK", OpenStatus = "OPEN";
 
         // Face do teclado: 64 x 96 pontos.
         const int FaceW = 64, FaceH = 96;
 
         Transform _keypad;
+        Collider _keypadCollider;
+        bool _sentRight;
         Texture2D _face;
         Color32[] _pixels;
         string _typed = "";
@@ -81,7 +100,7 @@ namespace BackRooms.World
         float _statusUntil;
         InputAction _use;
         AudioSource _audio;
-        AudioClip _beep, _buzz, _clunk;
+        AudioClip _beep, _buzz, _clunk, _accept;
 
         /// <summary>Monta o código pela seed. Chamado pela PropLayer, que põe as etiquetas.</summary>
         public void Init(int seed)
@@ -134,10 +153,10 @@ namespace BackRooms.World
             keypad.transform.localPosition = new Vector3(0.95f, 1.3f, -0.03f);
             _keypad = keypad.transform;
 
-            // A caixa cinza-escura, com a face desenhada.
+            // A caixa cinza-escura, com a face desenhada. O colisor dela é o que a mira procura.
             var box = GameObject.CreatePrimitive(PrimitiveType.Cube);
             box.name = "Caixa";
-            DestroyCollider(box);
+            _keypadCollider = box.GetComponent<Collider>();
             box.transform.SetParent(keypad.transform, false);
             box.transform.localScale = new Vector3(0.2f, 0.3f, 0.05f);
             box.GetComponent<MeshRenderer>().sharedMaterial = Tinted(template, new Color(0.12f, 0.12f, 0.13f));
@@ -155,18 +174,6 @@ namespace BackRooms.World
             faceMaterial.SetColor("_BaseColor", Color.white);
             front.GetComponent<MeshRenderer>().sharedMaterial = faceMaterial;
 
-            // As teclas: uma caixa fina com colisor em cima de cada uma das 12 do desenho.
-            for (int i = 0; i < Keys.Length; i++)
-            {
-                int col = i % 3, row = i / 3;
-                var key = new GameObject("Tecla_" + Keys[i]);
-                key.transform.SetParent(keypad.transform, false);
-                Vector2 center = KeyCenter(col, row);
-                key.transform.localPosition = new Vector3((center.x / FaceW - 0.5f) * 0.18f, (0.5f - center.y / FaceH) * 0.27f, -0.03f);
-                var collider = key.AddComponent<BoxCollider>();
-                collider.size = new Vector3(0.045f, 0.04f, 0.01f);
-            }
-
             _audio = keypad.AddComponent<AudioSource>();
             _audio.spatialBlend = 1f;
             _audio.minDistance = 1f;
@@ -176,6 +183,7 @@ namespace BackRooms.World
             _beep = Tone("Bipe", 1320f, 0.07f, 0f);
             _buzz = Tone("Erro", 180f, 0.35f, 0.5f);
             _clunk = Tone("Destrava", 90f, 0.4f, 0.15f);
+            _accept = Tone("Aceito", 1760f, 0.16f, 0f);
 
             Redraw();
             if (PendingUnlock) SetUnlocked();
@@ -195,26 +203,30 @@ namespace BackRooms.World
             Prompt = null;
             PlayerNetwork local = PlayerNetwork.Local;
             if (_keypad == null || local == null || !local.InGame || local.controller.IsReturning || local.controller.InFurniture) return;
+            if (CodePanel.IsOpen) return;
 
-            bool pressed = (_use.WasPressedThisFrame() && !PauseMenu.IsOpen) || PressForTest;
+            bool pressed = (_use.WasPressedThisFrame() && !InputGate.Blocked) || PressForTest;
             PressForTest = false;
 
-            string key = Aimed(local);
-            if (key == null) return;
+            if (!AimedAtKeypad(local)) return;
             if (Unlocked)
             {
-                Prompt = "OPEN";
+                Prompt = OpenPrompt;
                 return;
             }
 
-            Prompt = "E - " + (key == "OK" ? "ENTER" : key == "X" ? "CLEAR" : "KEY " + key);
-            if (pressed) Press(key);
+            Prompt = KeypadPrompt;
+            if (pressed)
+            {
+                Prompt = null;
+                CodePanel.Open(this);
+            }
         }
 
-        string Aimed(PlayerNetwork local)
+        bool AimedAtKeypad(PlayerNetwork local)
         {
             Camera camera = local.playerCamera;
-            if (camera == null) return null;
+            if (camera == null) return false;
             Transform eye = camera.transform;
             int count = Physics.RaycastNonAlloc(eye.position, eye.forward, Hits, reach, ~0, QueryTriggerInteraction.Ignore);
             Transform self = local.transform.root;
@@ -226,31 +238,54 @@ namespace BackRooms.World
                 best = Hits[i].distance;
                 nearest = Hits[i].collider;
             }
-            if (nearest == null || nearest.transform.parent != _keypad || !nearest.name.StartsWith("Tecla_")) return null;
-            return nearest.name.Substring("Tecla_".Length);
+            return nearest != null && nearest == _keypadCollider;
         }
 
-        /// <summary>Aperta uma tecla ("0" a "9", "X" apaga, "OK" manda). Público para os testes.</summary>
+        /// <summary>
+        /// Aperta uma tecla do painel: "0" a "9", <see cref="EraseKey"/> apaga o último, "X" apaga
+        /// tudo, <see cref="EnterKey"/> manda (só com os três dígitos). Público para os testes.
+        /// </summary>
         public void Press(string key)
         {
-            if (Unlocked) return;
-            Play(_beep);
+            if (Accepted) return;
+            // Digitar de novo tira o aviso de erro do visor.
+            if (_status == ErrorStatus) _status = null;
 
-            if (key == "X") _typed = "";
-            else if (key == "OK")
+            if (key == "X") { _typed = ""; Play(_beep); }
+            else if (key == EraseKey) { if (_typed.Length > 0) _typed = _typed.Substring(0, _typed.Length - 1); Play(_beep); }
+            else if (key == EnterKey)
             {
-                if (_typed.Length == 3)
-                {
-                    int code = int.Parse(_typed);
-                    GameSession session = GameSession.Instance;
-                    if (session != null && !session.IsHosting) session.SendExitCode(code);
-                    else Submit(code);
-                }
+                if (_typed.Length < 3) { Play(_beep); Redraw(); return; }
+                int code = int.Parse(_typed);
                 _typed = "";
+                GameSession session = GameSession.Instance;
+                if (session != null && !session.IsHosting)
+                {
+                    // O host confere e destranca; aqui só o visor responde na hora.
+                    session.SendExitCode(code);
+                    if (code == Code)
+                    {
+                        _sentRight = true;
+                        Play(_accept);
+                        ShowStatus(SentStatus, 1e9f);
+                    }
+                    else WrongCode();
+                }
+                else
+                {
+                    if (code == Code) Play(_accept);
+                    Submit(code);
+                }
             }
-            else if (_typed.Length < 3) _typed += key;
+            else if (_typed.Length < 3) { _typed += key; Play(_beep); }
 
             Redraw();
+        }
+
+        void WrongCode()
+        {
+            ShowStatus(ErrorStatus);
+            Play(_buzz);
         }
 
         /// <summary>Host: confere um código digitado (aqui ou num cliente). Certo, destranca para todos.</summary>
@@ -260,8 +295,7 @@ namespace BackRooms.World
             if (code != Code)
             {
                 WrongCodes++;
-                ShowStatus("ERR");
-                Play(_buzz);
+                WrongCode();
                 return;
             }
 
@@ -274,8 +308,9 @@ namespace BackRooms.World
         {
             if (Unlocked) return;
             Unlocked = true;
+            _typed = "";
             Play(_clunk);
-            ShowStatus("OPEN", 1e9f);
+            ShowStatus(OpenStatus, 1e9f);
         }
 
         /// <summary>Host, só nos testes: destranca sem digitar.</summary>
@@ -305,10 +340,10 @@ namespace BackRooms.World
 
             for (int i = 0; i < _pixels.Length; i++) _pixels[i] = body;
             Fill(6, 6, FaceW - 12, 20, screen);
-            string shown = _status ?? (_typed.PadRight(3, '-'));
+            string shown = Display;
             int scale = 2;
             PixelFont.Draw(_pixels, FaceW, FaceH, (FaceW - PixelFont.Measure(shown, scale)) / 2, 9, shown, scale,
-                           _status == "ERR" ? red : lit);
+                           ShowingError ? red : lit);
 
             for (int i = 0; i < Keys.Length; i++)
             {
@@ -331,9 +366,9 @@ namespace BackRooms.World
                         _pixels[(FaceH - 1 - yy) * FaceW + xx] = color;
         }
 
-        // ---------------------------------------------------------------- Etiquetas e bilhete
+        // ---------------------------------------------------------------- Etiquetas
 
-        /// <summary>Textura de uma etiqueta vermelha de LIQUIDAÇÃO: o dígito grande e a ordem.</summary>
+        /// <summary>Textura de uma etiqueta vermelha de CLEARANCE: o dígito grande e a ordem.</summary>
         public static Texture2D TagTexture(int digit, int order)
         {
             const int w = 64, h = 40;
@@ -351,31 +386,6 @@ namespace BackRooms.World
             PixelFont.Draw(pixels, w, h, w - 6 - PixelFont.Measure(o, 1), 28, o, 1, white);
 
             var texture = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, name = "Etiqueta_" + order };
-            texture.SetPixels32(pixels);
-            texture.Apply(false);
-            return texture;
-        }
-
-        /// <summary>Textura do bilhete da sala inicial: os três dígitos, fora de ordem.</summary>
-        public static Texture2D NoteTexture(int[] digits, int seed)
-        {
-            const int w = 64, h = 48;
-            var pixels = new Color32[w * h];
-            var paper = new Color32(236, 228, 196, 255);
-            var ink = new Color32(30, 34, 90, 255);
-            for (int i = 0; i < pixels.Length; i++) pixels[i] = paper;
-
-            // Fora de ordem, mas sempre do mesmo jeito para a mesma seed.
-            var order = new[] { 0, 1, 2 };
-            var rng = new System.Random(seed ^ 0x4E4F5441); // "NOTA"
-            for (int i = 2; i > 0; i--) { int j = rng.Next(i + 1); (order[i], order[j]) = (order[j], order[i]); }
-
-            PixelFont.Draw(pixels, w, h, 4, 4, NoteTitle, 1, ink);
-            string code = $"{digits[order[0]]} {digits[order[1]]} {digits[order[2]]}";
-            PixelFont.Draw(pixels, w, h, (w - PixelFont.Measure(code, 2)) / 2, 17, code, 2, ink);
-            PixelFont.Draw(pixels, w, h, (w - PixelFont.Measure(NoteOrder, 1)) / 2, 36, NoteOrder, 1, ink);
-
-            var texture = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, name = "Bilhete" };
             texture.SetPixels32(pixels);
             texture.Apply(false);
             return texture;

@@ -1099,7 +1099,7 @@ namespace BackRooms.World
             }
 
             int aimed = Aimed(local);
-            bool holding = (_use.IsPressed() && !PauseMenu.IsOpen) || HoldForTest;
+            bool holding = (_use.IsPressed() && !InputGate.Blocked) || HoldForTest;
             if (aimed < 0)
             {
                 _held = -1;

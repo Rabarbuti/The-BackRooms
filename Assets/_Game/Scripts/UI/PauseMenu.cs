@@ -53,7 +53,7 @@ namespace BackRooms.UI
         };
         static readonly (string key, string action)[] EndKeys =
         {
-            ("F9", "record the screen"),
+            ("F9", "record the screen (again: stop; clips in Recordings)"),
             ("Esc", "tasks / back to the game"),
         };
 
@@ -61,8 +61,8 @@ namespace BackRooms.UI
         public const string TaskClass = "pausa-tarefa";
         public const string KeyClass = "pausa-tecla";
 
-        // Largura dos três botões da fileira de baixo.
-        const float ButtonWidth = 300f;
+        // Largura dos quatro botões da fileira de baixo.
+        const float ButtonWidth = 266f;
 
         public GameSession session;
 
@@ -84,6 +84,7 @@ namespace BackRooms.UI
         VisualElement _tasksBox;
         VisualElement _keysBox;
         MenuKit.OptionsPanel _options;
+        RecordingsScreen _recordings;
         readonly List<LevelTask> _tasks = new List<LevelTask>();
         readonly List<(string key, string action)> _keys = new List<(string key, string action)>();
         readonly StringBuilder _sb = new StringBuilder();
@@ -183,7 +184,8 @@ namespace BackRooms.UI
 
             Button resume = MenuKit.MenuButton(ContinueText, () => SetOpen(false));
             Button leave = MenuKit.MenuButton(LeaveText, Leave);
-            Button[] row = { resume, toggle, leave };
+            Button recordings = MenuKit.MenuButton(RecordingsScreen.ButtonText, () => _recordings.Show());
+            Button[] row = { resume, toggle, recordings, leave };
             for (int i = 0; i < row.Length; i++)
             {
                 Button b = row[i];
@@ -196,7 +198,13 @@ namespace BackRooms.UI
             }
             _options.Root.style.marginTop = 12;
             _options.Root.style.marginLeft = ButtonWidth + 14;
+
+            // A galeria das gravações (F9), por cima do painel.
+            _recordings = new RecordingsScreen(_overlay);
         }
+
+        /// <summary>A galeria das gravações deste menu (testes).</summary>
+        public RecordingsScreen Recordings => _recordings;
 
         static Label Heading(string text)
         {
@@ -218,7 +226,13 @@ namespace BackRooms.UI
                 return;
             }
 
-            if (_toggle.WasPressedThisFrame()) SetOpen(!IsOpen);
+            // Com o painel do código na tela, o Esc é dele (fecha o painel, não abre este menu).
+            // Com a galeria aberta, o Esc fecha só ela.
+            if (_toggle.WasPressedThisFrame() && !CodePanel.TakesInput)
+            {
+                if (_recordings != null && _recordings.IsOpen) _recordings.Hide();
+                else SetOpen(!IsOpen);
+            }
             if (IsOpen) Refresh();
         }
 
@@ -226,6 +240,7 @@ namespace BackRooms.UI
         public void SetOpen(bool open, bool relock = true)
         {
             IsOpen = open;
+            if (!open) _recordings?.Hide();
             if (_overlay != null) _overlay.style.display = open ? DisplayStyle.Flex : DisplayStyle.None;
             if (open)
             {

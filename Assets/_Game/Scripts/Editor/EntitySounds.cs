@@ -59,9 +59,13 @@ namespace BackRooms.EditorTools
             Save(folder, "capitao_toc", CaptainAudio.CreateKnock());
             Save(folder, "capitao_arrasta", CaptainAudio.CreateDrag());
             Save(folder, "capitao_jingle", BackRooms.Audio.ShopMusic.CreateJingle());
-            // O Undertow (Level 2): o gemido ao acordar, o latejar nadando e o puxão ao pegar.
-            Save(folder, "undertow_gemido", UndertowAudio.CreateGroan());
-            Save(folder, "undertow_latejar", UndertowAudio.CreateThrob());
+            // O Undertow (Level 2), refeito em 21/11/2026: os dois rugidos (ao ouvir, no bote e quando
+            // a maré sobe), o rosnado de aproximação (em laço), o gorgolejo de quem surge de um ralo e
+            // o puxão ao pegar.
+            Save(folder, "undertow_rugido_1", UndertowAudio.CreateRoar(5101));
+            Save(folder, "undertow_rugido_2", UndertowAudio.CreateRoar(5102));
+            Save(folder, "undertow_rosnado", UndertowAudio.CreateGrowl());
+            Save(folder, "undertow_gorgolejo", UndertowAudio.CreateGurgle());
             Save(folder, "undertow_puxao", UndertowAudio.CreateGrab());
             // O Zelador (Level 3): chaves, esfregão molhado, gota, subir e afundar no chão.
             for (int i = 1; i <= 4; i++) Save(folder, "zelador_chaves_" + i, JanitorAudio.CreateKeys(i));

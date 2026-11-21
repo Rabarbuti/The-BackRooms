@@ -35,6 +35,8 @@ namespace BackRooms.World
         const string DiningText = "DINING ROOM";
         const string LivingText = "LIVING ROOM";
         const string StockText = "STOCKROOM";
+        // Modelo da placa na base dos totens: a amarela de DISPLAY ONLY (o nome do modelo é antigo).
+        const string TotemSign = "PlacaLiquidacao";
 
         [Tooltip("Modelos disponíveis (os FBX de Art/Level1/Modelos), achados pelo nome. Modelo que faltar é pulado.")]
         public GameObject[] models;
@@ -62,7 +64,7 @@ namespace BackRooms.World
         [Header("Objetivo (level1-mostruario.md, seção 6)")]
         [Tooltip("Porta de saída trancada por um teclado; o código está em três etiquetas vermelhas.")]
         public bool exitCode;
-        [Tooltip("Material-base (HDRP/Lit branco) das etiquetas, do bilhete e do teclado: cada um recebe a própria textura.")]
+        [Tooltip("Material-base (HDRP/Lit branco) das etiquetas e do teclado: cada um recebe a própria textura.")]
         public Material labelMaterial;
         [Tooltip("Distância mínima entre as etiquetas, em células.")]
         public int tagSpacing = 6;
@@ -108,7 +110,7 @@ namespace BackRooms.World
         /// <summary>Placas penduradas com texto (zona e PROIBIDO ENTRAR).</summary>
         public int ZoneSigns { get; private set; }
 
-        /// <summary>Etiquetas vermelhas de LIQUIDAÇÃO postas (o objetivo pede 3).</summary>
+        /// <summary>Etiquetas vermelhas de CLEARANCE postas (o objetivo pede 3).</summary>
         public int Tags { get; private set; }
 
         /// <summary>Células das etiquetas, na ordem do dígito.</summary>
@@ -207,7 +209,7 @@ namespace BackRooms.World
                 for (int x = 0; x < _data.Width; x++)
                     PlaceCell(x, z);
 
-            // O objetivo: teclado na porta, etiquetas e bilhete.
+            // O objetivo: teclado na porta e etiquetas.
             Tags = 0;
             TagCells.Clear();
             if (exitCode && labelMaterial != null) PlaceObjective(level);
@@ -582,7 +584,8 @@ namespace BackRooms.World
         }
 
         // O totem num canto da célula, virado para o meio dela: base preta, a estátua do Capitão
-        // em cima e a placa de OFERTA na frente. Um colisor só, da base à cabeça.
+        // em cima e a placa amarela de DISPLAY ONLY na frente (o modelo PlacaLiquidacao; vermelho
+        // com CLEARANCE é só das etiquetas do código). Um colisor só, da base à cabeça.
         bool PlaceTotem(Rect region, Vector2 anchor, Vector3 origin, System.Random rng)
         {
             if (totemModel == null || totemMaterials == null || totemMaterials.Length == 0) return false;
@@ -622,12 +625,12 @@ namespace BackRooms.World
             GameObject figure = Totem.CreateStatue(root.transform, totemModel, totemMaterials);
             if (figure != null) figure.transform.localPosition = new Vector3(0f, baseH, 0f);
 
-            // A placa de OFERTA encostada na frente da base.
-            GameObject sign = Get("PlacaOferta");
+            // A placa de DISPLAY ONLY encostada na frente da base.
+            GameObject sign = Get(TotemSign);
             if (sign != null)
             {
                 GameObject plate = Instantiate(sign, root.transform);
-                plate.name = "PlacaOferta";
+                plate.name = "PlacaTotem";
                 Bounds sb = BoundsOf(sign);
                 plate.transform.localPosition = new Vector3(0.18f, baseH - sb.min.y, baseD * 0.5f + 0.02f - sb.min.z);
                 plate.transform.localRotation = Quaternion.Euler(-8f, Jitter(rng, 10f), 0f);
@@ -659,7 +662,6 @@ namespace BackRooms.World
 
             Physics.SyncTransforms();
             PlaceTags(exitLock.Digits);
-            PlaceNote(exitLock.Digits);
             unchecked { _hash = _hash * 31 + exitLock.Code + 7919; }
         }
 
@@ -703,18 +705,6 @@ namespace BackRooms.World
                 MountLabel($"Etiqueta_{i + 1}", cell.x, cell.y, side, 1.45f, new Vector2(0.6f, 0.4f), ExitLock.TagTexture(digits[i], i + 1));
                 Tags++;
                 unchecked { _hash = _hash * 31 + cell.x * 131 + cell.y * 7 + digits[i]; }
-            }
-        }
-
-        // O bilhete na sala inicial, numa parede fechada dela.
-        void PlaceNote(int[] digits)
-        {
-            int x = _data.SpawnX, z = _data.SpawnZ;
-            for (int s = 0; s < 4; s++)
-            {
-                if (!Closed(x, z, s)) continue;
-                MountLabel("Bilhete", x, z, Sides[s], 1.4f, new Vector2(0.32f, 0.24f), ExitLock.NoteTexture(digits, _seed));
-                return;
             }
         }
 

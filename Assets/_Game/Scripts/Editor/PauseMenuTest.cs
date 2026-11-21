@@ -22,6 +22,10 @@ namespace BackRooms.EditorTools
     /// sala inicial virou dicas (sem "ao mesmo tempo"); Esc fecha e W volta a andar; "Quit to menu"
     /// volta ao menu e, hospedando de novo, o jogador anda (o menu não fica preso aberto). Uma foto do
     /// menu aberto por fase em <c>Logs/Previews/pausa/pausa_&lt;cena&gt;.png</c> (1920 x 1080).
+    /// No Level 0, a galeria das gravações (<see cref="RecordingsScreen"/>): pelo menu inicial, vazia
+    /// (diz como gravar); pelo menu de pausa, com um clipe gravado no teste (Play e Open folder
+    /// entregam o endereço certo, sem abrir nada), Delete pede confirmação e apaga, a lista volta a
+    /// ficar vazia e o Esc fecha só a galeria. Tudo em inglês; fotos em <c>Logs/Previews/filmadora</c>.
     ///
     /// Linha de comando: -executeMethod BackRooms.EditorTools.PauseMenuTest.BatchRun (as quatro fases)
     /// ou BatchRunLevel0. Sai com 0 se passou, 3 se falhou. Linhas "[BackRooms] Teste do menu de
@@ -63,6 +67,7 @@ namespace BackRooms.EditorTools
         static float _stageStart;
         static bool _finished;
         static Keyboard _keyboard;
+        static int _panelStep, _panelTicks;
         static Mouse _mouse;
         static InputSettings.BackgroundBehavior _backgroundBefore;
         static InputSettings.EditorInputBehaviorInPlayMode _editorInputBefore;
@@ -78,6 +83,15 @@ namespace BackRooms.EditorTools
         static int _menuShot, _shotTicks;
         static bool _menuChecked;
         static RenderTexture _photoUi;
+        // Galeria das gravações (só no Level 0).
+        const string FilmFolder = "Logs/Previews/filmadora";
+        const string GalleryFolder = "Logs/Gravacoes/pausa";
+        const string EmptyFolder = "Logs/Gravacoes/vazia";
+        static int _galleryStep;
+        static float _galleryAt;
+        static string _galleryClip;
+        static readonly List<string> Opened = new List<string>();
+        static RenderTexture _galleryTarget;
 
         [MenuItem("BackRooms/Testar menu de pausa (quatro fases)")]
         public static void RunFromMenu()
@@ -194,6 +208,8 @@ namespace BackRooms.EditorTools
                     if (menu == null) { Finish(false, "a cena não tem o menu de pausa (PauseMenu)"); return; }
                     if (PauseMenu.IsOpen) { Finish(false, "o menu de pausa começou aberto"); return; }
                     if (!CheckNote()) return;
+                    // Level 1: o painel do código, em inglês, e o Esc que o fecha não abre a pausa.
+                    if (ExitLock.Instance != null && !PanelCheck()) break;
                     if (GameOptions.MenuSilence || !Mathf.Approximately(AudioListener.volume, GameOptions.Volume))
                     { Finish(false, $"jogando, o som da fase não voltou (ouvinte em {AudioListener.volume:F2}, volume geral {GameOptions.Volume:F2})"); return; }
                     _from = body.transform.position;
@@ -298,7 +314,7 @@ namespace BackRooms.EditorTools
                     }
                     else
                     {
-                        if (tasks == _tasksBefore || tasks.Contains("Aim + E on each key")) { if (InStage > 2f) Finish(false, $"destrancada a porta, as tarefas não mudaram: {OneLine(tasks)}"); break; }
+                        if (tasks == _tasksBefore || tasks.Contains("type the digits")) { if (InStage > 2f) Finish(false, $"destrancada a porta, as tarefas não mudaram: {OneLine(tasks)}"); break; }
                         Notes.Add("destrancada a porta: " + OneLine(tasks));
                     }
                     BeginPhoto();
@@ -309,7 +325,15 @@ namespace BackRooms.EditorTools
                 case 8:
                     // A foto: alguns quadros para o painel se desenhar na textura.
                     if (_stageTicks < 8) break;
-                    if (!TakePhoto(body)) return;
+                    if (_galleryStep == 0)
+                    {
+                        if (!TakePhoto(body)) return;
+                        if (Index != 0) { Next(); break; }
+                        _galleryStep = 1;
+                        break;
+                    }
+                    // No Level 0, a galeria das gravações, aberta por este menu.
+                    if (!Gallery(menu)) break;
                     Next();
                     break;
 
@@ -381,6 +405,39 @@ namespace BackRooms.EditorTools
             if (_local == null || !_local.InGame || session.level == null) { _stageStart = Now; return false; }
             CharacterController character = _local.controller.GetComponent<CharacterController>();
             return InStage >= 2f && (character == null || character.isGrounded);
+        }
+
+        // O painel do código do Level 1 (CodePanel): abre, todo texto visível em inglês, e o Esc
+        // fecha o painel sem abrir o menu de pausa. Devolve true quando terminou.
+        static bool PanelCheck()
+        {
+            _panelTicks++;
+            switch (_panelStep)
+            {
+                case 0:
+                    CodePanel.Open(ExitLock.Instance);
+                    _panelStep = 1;
+                    _panelTicks = 0;
+                    return false;
+                case 1:
+                    if (_panelTicks < 6) return false;
+                    if (!CodePanel.IsOpen || CodePanel.Instance == null || !CodePanel.Instance.Shown) { Finish(false, "o painel do código não abriu"); return false; }
+                    if (!EnglishOnly(CodePanel.Instance.Document, "o painel do código")) return false;
+                    Keys(Key.Escape);
+                    _panelStep = 2;
+                    _panelTicks = 0;
+                    return false;
+                case 2:
+                    if (_panelTicks == 2) Keys();
+                    if (_panelTicks < 6) return false;
+                    if (CodePanel.IsOpen) { Finish(false, "Esc não fechou o painel do código"); return false; }
+                    if (PauseMenu.IsOpen) { Finish(false, "o Esc que fechou o painel do código abriu o menu de pausa"); return false; }
+                    Notes.Add("painel do código: Esc fecha sem abrir a pausa");
+                    _panelStep = 3;
+                    return true;
+                default:
+                    return true;
+            }
         }
 
         // O cartaz da sala inicial: dicas, a lembrança do Esc e nada de "ao mesmo tempo".
@@ -589,11 +646,190 @@ namespace BackRooms.EditorTools
                     }
                     _menuShot = 3;
                     return false;
-                default:
+                case 3:
+                case 4:
+                {
                     if (ConnectionMenu.EndingShown) { Finish(false, "\"Back to menu\" não fechou a tela de fim da fita"); return false; }
                     if (Index == 0 && !MenuPanelShown(menu)) { Finish(false, "depois de \"Back to menu\" o painel do menu não voltou"); return false; }
+                    if (Index != 0 || _menuShot == 4) return true;
+                    // A galeria pelo menu inicial, com a pasta vazia: diz como gravar.
+                    string empty = Path.GetFullPath(EmptyFolder);
+                    if (Directory.Exists(empty)) Directory.Delete(empty, true);
+                    ScreenRecorder.FolderOverride = empty;
+                    if (!Click(document, RecordingsScreen.ButtonText)) { Finish(false, "o menu inicial não tem o botão \"Recordings\""); return false; }
+                    _shotTicks = 0;
+                    _menuShot = 5;
+                    return false;
+                }
+                case 5:
+                {
+                    if (++_shotTicks < 4) return false;
+                    if (menu.Recordings == null || !menu.Recordings.IsOpen) { Finish(false, "\"Recordings\" no menu inicial não abriu a galeria"); return false; }
+                    string rows = Rows(document);
+                    if (menu.Recordings.Clips.Count != 0 || !rows.Contains("F9")) { Finish(false, $"com a pasta vazia, a galeria não diz como gravar: {OneLine(rows)}"); return false; }
+                    if (!EnglishOnly(document, "a galeria vazia (menu inicial)")) return false;
+                    if (!Click(document, "Back", true)) { Finish(false, "a galeria não tem o botão Back"); return false; }
+                    _shotTicks = 0;
+                    _menuShot = 6;
+                    return false;
+                }
+                default:
+                    if (++_shotTicks < 3) return false;
+                    if (menu.Recordings.IsOpen) { Finish(false, "Back não fechou a galeria do menu inicial"); return false; }
+                    if (!MenuPanelShown(menu)) { Finish(false, "fechada a galeria, o painel do menu não está à mostra"); return false; }
+                    Notes.Add("menu inicial: Recordings abre a galeria vazia, que diz como gravar (F9), e Back fecha");
+                    ScreenRecorder.FolderOverride = null;
                     return true;
             }
+        }
+
+        // ---------------------------------------------------------------- Galeria das gravações
+
+        // Pelo menu de pausa aberto: grava um clipe curto, abre a galeria, Play e Open folder, apaga
+        // com confirmação, confere a lista vazia e fecha com Esc (o menu de pausa continua aberto).
+        // Devolve verdadeiro quando terminou; falhando, chama Finish.
+        static bool Gallery(PauseMenu menu)
+        {
+            ScreenRecorder recorder = ScreenRecorder.Instance;
+            RecordingsScreen screen = menu.Recordings;
+            UIDocument document = menu.Document;
+            _shotTicks++;
+            switch (_galleryStep)
+            {
+                case 1:
+                {
+                    if (recorder == null) { Finish(false, "a cena não tem o gravador (ScreenRecorder)"); return false; }
+                    string folder = Path.GetFullPath(GalleryFolder);
+                    if (Directory.Exists(folder)) Directory.Delete(folder, true);
+                    ScreenRecorder.FolderOverride = folder;
+                    RecordingsScreen.OpenOverride = url => Opened.Add(url);
+                    // Sem janela a câmera só desenha numa textura (os quadros do vídeo saem dela).
+                    if (Application.isBatchMode)
+                    {
+                        _galleryTarget = new RenderTexture(1280, 720, 24);
+                        _local.playerCamera.targetTexture = _galleryTarget;
+                    }
+                    if (!recorder.Begin()) { Finish(false, "o gravador não começou: " + recorder.LastError); return false; }
+                    _galleryAt = Now;
+                    _galleryStep = 2;
+                    return false;
+                }
+                case 2:
+                    if (Now - _galleryAt < 1.6f) return false;
+                    recorder.Stop();
+                    _local.playerCamera.targetTexture = null;
+                    if (_galleryTarget != null) { _galleryTarget.Release(); Object.Destroy(_galleryTarget); _galleryTarget = null; }
+                    _galleryClip = recorder.LastFile;
+                    if (!File.Exists(_galleryClip)) { Finish(false, "o clipe do teste não foi salvo: " + recorder.LastError); return false; }
+                    if (!Click(document, RecordingsScreen.ButtonText)) { Finish(false, "o menu de pausa não tem o botão \"Recordings\""); return false; }
+                    _shotTicks = 0;
+                    _galleryStep = 3;
+                    return false;
+                case 3:
+                {
+                    if (_shotTicks < 4) return false;
+                    if (screen == null || !screen.IsOpen) { Finish(false, "\"Recordings\" no menu de pausa não abriu a galeria"); return false; }
+                    if (!PauseMenu.IsOpen) { Finish(false, "aberta a galeria, o menu de pausa fechou"); return false; }
+                    if (screen.Clips.Count != 1) { Finish(false, $"a galeria lista {screen.Clips.Count} clipes (gravado 1)"); return false; }
+                    RecordingsScreen.Clip clip = screen.Clips[0];
+                    string length = RecordingsScreen.Duration(clip.Seconds);
+                    string rows = Rows(document);
+                    if (!clip.Finished || clip.Seconds < 1f || !rows.Contains(length) || !rows.Contains(RecordingsScreen.Size(clip.Bytes)))
+                    { Finish(false, $"a linha do clipe está errada (fechado={clip.Finished}, {clip.Seconds:F2} s): {OneLine(rows)}"); return false; }
+                    if (!EnglishOnly(document, "a galeria com um clipe")) return false;
+                    Opened.Clear();
+                    if (!Click(document, "Play")) { Finish(false, "a linha do clipe não tem Play"); return false; }
+                    if (!Click(document, "Open folder")) { Finish(false, "a galeria não tem Open folder"); return false; }
+                    string expected = new System.Uri(_galleryClip).AbsoluteUri;
+                    if (Opened.Count != 2 || Opened[0] != expected || !Opened[1].StartsWith("file:///") || !expected.StartsWith(Opened[1]))
+                    { Finish(false, $"Play/Open folder abriram {string.Join(" e ", Opened)} (esperado {expected} e a pasta)"); return false; }
+                    Notes.Add($"galeria: 1 clipe ({OneLine(rows)}); Play abre {expected}; Open folder abre {Opened[1]}");
+                    BeginPhoto(document);
+                    _shotTicks = 0;
+                    _galleryStep = 4;
+                    return false;
+                }
+                case 4:
+                    if (_shotTicks < 8) return false;
+                    if (!TakePhoto(_local.playerCamera, Path.Combine(FilmFolder, "gravacoes_um_clipe.png"), 0.2f, "a galeria com um clipe")) return false;
+                    if (!Click(document, "Delete")) { Finish(false, "a linha do clipe não tem Delete"); return false; }
+                    _shotTicks = 0;
+                    _galleryStep = 5;
+                    return false;
+                case 5:
+                    if (_shotTicks < 3) return false;
+                    if (!screen.Confirming(_galleryClip) || !Rows(document).Contains("Delete this clip?")) { Finish(false, "Delete não pediu confirmação"); return false; }
+                    if (!File.Exists(_galleryClip)) { Finish(false, "Delete apagou antes de confirmar"); return false; }
+                    BeginPhoto(document);
+                    _shotTicks = 0;
+                    _galleryStep = 6;
+                    return false;
+                case 6:
+                    if (_shotTicks < 8) return false;
+                    if (!TakePhoto(_local.playerCamera, Path.Combine(FilmFolder, "gravacoes_confirmar.png"), 0.2f, "a confirmação de apagar")) return false;
+                    if (!Click(document, "Yes, delete")) { Finish(false, "a confirmação não tem \"Yes, delete\""); return false; }
+                    _shotTicks = 0;
+                    _galleryStep = 7;
+                    return false;
+                case 7:
+                {
+                    if (_shotTicks < 3) return false;
+                    if (File.Exists(_galleryClip)) { Finish(false, "confirmado, o clipe não foi apagado"); return false; }
+                    string rows = Rows(document);
+                    if (screen.Clips.Count != 0 || !rows.Contains("F9")) { Finish(false, $"apagado o clipe, a galeria não ficou vazia: {OneLine(rows)}"); return false; }
+                    if (!EnglishOnly(document, "a galeria vazia")) return false;
+                    BeginPhoto(document);
+                    _shotTicks = 0;
+                    _galleryStep = 8;
+                    return false;
+                }
+                case 8:
+                    if (_shotTicks < 8) return false;
+                    if (!TakePhoto(_local.playerCamera, Path.Combine(FilmFolder, "gravacoes_vazia.png"), 0.2f, "a galeria vazia")) return false;
+                    _shotTicks = 0;
+                    _galleryStep = 9;
+                    return false;
+                default:
+                    // Esc fecha só a galeria; o menu de pausa continua aberto.
+                    if (_shotTicks == 1) { Keys(Key.Escape); return false; }
+                    if (_shotTicks == 3) Keys();
+                    if (_shotTicks < 6) return false;
+                    if (screen.IsOpen) { Finish(false, "Esc não fechou a galeria"); return false; }
+                    if (!PauseMenu.IsOpen) { Finish(false, "o Esc na galeria fechou também o menu de pausa"); return false; }
+                    Notes.Add("Delete pediu confirmação e apagou; a galeria vazia diz como gravar; Esc fechou só a galeria");
+                    ScreenRecorder.FolderOverride = null;
+                    RecordingsScreen.OpenOverride = null;
+                    return true;
+            }
+        }
+
+        // O texto das linhas da galeria como está desenhado agora (inclusive a confirmação).
+        static string Rows(UIDocument document)
+        {
+            var text = new System.Text.StringBuilder();
+            document.rootVisualElement.Query<Label>(className: RecordingsScreen.RowClass).ForEach(l => text.Append(l.text).Append('\n'));
+            return text.ToString();
+        }
+
+        // Aperta o botão visível com este texto (ou que começa com ele).
+        static bool Click(UIDocument document, string text, bool prefix = false)
+        {
+            Button found = null;
+            document.rootVisualElement.Query<Button>().ForEach(b =>
+            {
+                if (found != null || b.text == null) return;
+                if (prefix ? !b.text.StartsWith(text) : b.text != text) return;
+                for (VisualElement e = b; e != null; e = e.parent)
+                    if (e.resolvedStyle.display == DisplayStyle.None) return;
+                found = b;
+            });
+            if (found == null) return false;
+            using (NavigationSubmitEvent e = NavigationSubmitEvent.GetPooled())
+            {
+                e.target = found;
+                found.SendEvent(e);
+            }
+            return true;
         }
 
         // O painel do menu inicial (campo privado _panel do ConnectionMenu) está à mostra?
@@ -638,6 +874,16 @@ namespace BackRooms.EditorTools
             _finished = true;
 
             if (_photoPanel != null && _photoDocument != null) _photoDocument.panelSettings = _photoOriginal;
+            if (ScreenRecorder.Instance != null) ScreenRecorder.Instance.Stop();
+            ScreenRecorder.FolderOverride = null;
+            RecordingsScreen.OpenOverride = null;
+            if (_galleryTarget != null)
+            {
+                if (_local != null && _local.playerCamera != null) _local.playerCamera.targetTexture = null;
+                _galleryTarget.Release();
+                Object.Destroy(_galleryTarget);
+                _galleryTarget = null;
+            }
             SwitchObjective.PlayersForTest = 0;
             EntityDirector.Paused = false;
             PoolTide.Paused = false;
@@ -688,6 +934,9 @@ namespace BackRooms.EditorTools
             _rehosted = false;
             _menuShot = 0;
             _menuChecked = false;
+            _galleryStep = 0;
+            _panelStep = 0;
+            _panelTicks = 0;
 
             int next = Index + 1;
             if (next < Scenes.Length)

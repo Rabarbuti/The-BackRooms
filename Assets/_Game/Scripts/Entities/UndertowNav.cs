@@ -15,7 +15,10 @@ namespace BackRooms.Entities
     /// • o raso quando a maré o deixa fundo o bastante para nadar (coluna d'água de
     ///   <see cref="EnterColumn"/> m; sai dele só abaixo de <see cref="LeaveColumn"/>, para não
     ///   piscar na borda da conta enquanto a maré desce);
-    /// • o seco nunca (na maré alta fica com 0,85 m: ninguém nada ali).
+    /// • o seco alagado na maré alta (coluna de <see cref="FloodEnterColumn"/> m; sai abaixo de
+    ///   <see cref="FloodLeaveColumn"/>): com a maré cheia ela persegue pelo mapa inteiro
+    ///   (<see cref="Flooded"/>). Até 21/11/2026 o seco nunca era dela;
+    /// • a sala inicial nunca: é abrigo em qualquer maré, como em toda fase.
     /// Drenada a fase, a funda continua território, mas quase sem água: ali ela se arrasta
     /// (<see cref="Swimmable"/> falso), devagar.
     ///
@@ -29,8 +32,15 @@ namespace BackRooms.Entities
         public const float EnterColumn = 1.3f;
         /// <summary>Coluna d'água (m) abaixo da qual o raso deixa de ser território (maré descendo).</summary>
         public const float LeaveColumn = 1.15f;
-        /// <summary>Coluna d'água (m) a partir da qual ela nada; abaixo disso, se arrasta.</summary>
-        public const float SwimColumn = 1.2f;
+        /// <summary>Coluna d'água (m) a partir da qual o seco (fora da sala inicial) vira território na maré alta (fica com 1,12 m).</summary>
+        public const float FloodEnterColumn = 0.95f;
+        /// <summary>Coluna d'água (m) abaixo da qual o seco deixa de ser território (maré descendo).</summary>
+        public const float FloodLeaveColumn = 0.8f;
+        /// <summary>
+        /// Coluna d'água (m) a partir da qual ela nada; abaixo disso, se arrasta (fundo drenado). Era
+        /// 1,2 m até 21/11/2026; baixou para o seco alagado (1,12 m) ser nado, não arrasto.
+        /// </summary>
+        public const float SwimColumn = 0.9f;
 
         static readonly WallSide[] Sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
 
@@ -51,6 +61,9 @@ namespace BackRooms.Entities
 
         public int RegionCount { get; private set; }
 
+        /// <summary>A maré alagou o seco: alguma célula seca é território (ela caça no mapa inteiro).</summary>
+        public bool Flooded { get; private set; }
+
         public UndertowNav(LevelBuilder builder)
         {
             _builder = builder;
@@ -66,9 +79,14 @@ namespace BackRooms.Entities
         public void Refresh(float surfaceY)
         {
             SurfaceY = surfaceY;
+            bool flooded = false;
             for (int z = 0; z < Data.Height; z++)
                 for (int x = 0; x < Data.Width; x++)
+                {
                     Territory[x, z] = IsTerritory(x, z, Territory[x, z]);
+                    if (Territory[x, z] && Data.Depth[x, z] == PoolDepth.Dry) flooded = true;
+                }
+            Flooded = flooded;
 
             for (int z = 0; z < Data.Height; z++)
                 for (int x = 0; x < Data.Width; x++)
@@ -88,8 +106,10 @@ namespace BackRooms.Entities
             if (!Data.HasPools || Data.IsSolid(x, z)) return false;
             PoolDepth depth = Data.Depth[x, z];
             if (depth == PoolDepth.Deep || depth == PoolDepth.Well) return true;
-            if (depth != PoolDepth.Shallow) return false;
+            if (Data.InRoom(x, z)) return false;
             float column = Column(x, z);
+            if (depth == PoolDepth.Dry) return column >= FloodEnterColumn || before && column >= FloodLeaveColumn;
+            if (depth != PoolDepth.Shallow) return false;
             return column >= EnterColumn || before && column >= LeaveColumn;
         }
 
@@ -118,6 +138,9 @@ namespace BackRooms.Entities
 
         /// <summary>Água acima do piso da célula agora, em metros (0 se a água está abaixo dele).</summary>
         public float Column(int x, int z) => Mathf.Max(0f, SurfaceY - FloorY(x, z));
+
+        /// <summary>Água funda ou poço (onde ela descansa na maré baixa)?</summary>
+        public bool IsDeep(int x, int z) => Data.Depth[x, z] == PoolDepth.Deep || Data.Depth[x, z] == PoolDepth.Well;
 
         /// <summary>Dá para nadar ali (senão, drenada, ela se arrasta pelo fundo)?</summary>
         public bool Swimmable(int x, int z) => Column(x, z) >= SwimColumn;

@@ -21,7 +21,14 @@ namespace BackRooms.Player
         [Header("Bateria")]
         [Tooltip("Desligado nas fases: as pilhas do chão recarregam (BatteryPickups).")]
         public bool infiniteBattery;
-        public float batterySeconds = 600f;
+        [Tooltip("Segundos de luz contínua com a carga cheia. Era 600 (10 min) até 21/11/2026; o jogador achou que durava demais.")]
+        public float batterySeconds = DefaultBatterySeconds;
+
+        /// <summary>Carga cheia, em segundos de luz contínua (4 min). O prefab do jogador nasce com ela.</summary>
+        public const float DefaultBatterySeconds = 240f;
+
+        /// <summary>Abaixo disto o painel pisca a porcentagem em vermelho.</summary>
+        public const float LowBattery01 = 0.2f;
 
         /// <summary>Bateria restante, de 0 a 1.</summary>
         public float Battery01 => batterySeconds <= 0f ? 0f : _battery / batterySeconds;
@@ -57,7 +64,7 @@ namespace BackRooms.Player
 
         void Update()
         {
-            if (inputEnabled && _toggle.WasPressedThisFrame() && !BackRooms.UI.PauseMenu.IsOpen && (_battery > 0f || infiniteBattery))
+            if (inputEnabled && _toggle.WasPressedThisFrame() && !BackRooms.UI.InputGate.Blocked && (_battery > 0f || infiniteBattery))
                 _light.enabled = !_light.enabled;
 
             if (!_light.enabled) return;
@@ -88,9 +95,10 @@ namespace BackRooms.Player
             transform.rotation = Quaternion.Slerp(transform.rotation, follow.rotation, t);
         }
 
+        /// <summary>Soma (ou, negativo, tira) segundos de carga, entre vazia e cheia.</summary>
         public void Recharge(float seconds)
         {
-            _battery = Mathf.Min(batterySeconds, _battery + seconds);
+            _battery = Mathf.Clamp(_battery + seconds, 0f, batterySeconds);
         }
     }
 }

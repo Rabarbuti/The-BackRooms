@@ -148,23 +148,41 @@ MonoBehaviour:
   crawlSpeed: 0.9
   acceleration: 5
   verticalSpeed: 2.2
-  turnSpeed: 200
+  turnSpeed: 150
+  floodInvestigateSpeed: 1.6
+  floodHuntSpeed: 2.2
+  lungeSpeed: 3
+  lungeRange: 2.5
+  prowlSpeed: 1.2
+  prowlNear: 8
+  prowlFar: 18
+  prowlKeepAway: 7
   hearRange: 24
-  pipeLoudness: 0.8
+  pipeLoudness: 0.6
   huntRange: 9
   huntMemory: 1.6
   circleMemory: 8
   investigateSeconds: 12
   lingerSeconds: 4
+  contactSeconds: 2
+  stopShort: 1.6
+  bumpRadius: 0.6
+  roamMinSeconds: 16
+  roamMaxSeconds: 30
+  roamNearPlayer: 0.65
+  roamMinDistance: 10
+  roamPreferred: 14
   wakeSeconds: 2.2
+  emergeSeconds: 1.6
   circleSeconds: 8
   pipeSeconds: 4
   pipeSpeed: 8
   diveSeconds: 1.4
   feedSeconds: 3
   mercySeconds: 10
+  roarCooldown: 5
   catchRadius: 1.4
-  catchSubmersion: 1
+  catchSubmersion: 0.9
   headForward: 1.25
   bodyRadius: 0.45
 --- !u!114 &8029566869516479107
@@ -180,5 +198,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Entities.UndertowAudio
   volume: 0.95
-  throbRange: 30
-  groanRange: 45
+  growlRange: 36
+  roarRange: 110
+  underwaterCutoff: 650

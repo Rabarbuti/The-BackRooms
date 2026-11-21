@@ -7,7 +7,7 @@ namespace BackRooms.EditorTools
 {
     /// <summary>
     /// Fotos de conferência dos textos pintados no mundo (a língua do jogo é o inglês), fora do
-    /// Play: as etiquetas e o bilhete do Level 1 (<see cref="ExitLock"/>), as placas de papelão
+    /// Play: as etiquetas do Level 1 (<see cref="ExitLock"/>), as placas de papelão
     /// (<see cref="PropLayer.SignTexture"/>) e os cartazes de dicas das outras fases
     /// (<see cref="SwitchObjective.NoteTexture"/>). Cada desenho sai ampliado (pontos nítidos) em
     /// <c>Logs/Previews/ingles/textura_*.png</c>.
@@ -44,7 +44,6 @@ namespace BackRooms.EditorTools
             int count = 0;
             int[] digits = { 9, 4, 3 };
             for (int i = 0; i < 3; i++) count += Save(ExitLock.TagTexture(digits[i], i + 1), "textura_etiqueta_" + (i + 1));
-            count += Save(ExitLock.NoteTexture(digits, 1998), "textura_bilhete_codigo");
             foreach (var sign in PropLayer.SignTexts)
                 count += Save(PropLayer.SignTexture(sign.text, sign.ink, sign.paper), "textura_placa_" + sign.text.Replace(' ', '_').ToLowerInvariant());
             string[] levels = { "level0", "level2", "level3" };

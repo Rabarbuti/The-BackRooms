@@ -51,8 +51,9 @@ namespace BackRooms.World
         // andava-se pelo fundo; a maré não fechava nada). Agora, na maré alta, o raso fica com 1,75 m
         // de água: a cabeça de quem está de pé fica debaixo d'água, então ou se nada à tona (território
         // do Undertow, UndertowNav.EnterColumn) ou se espera no seco, que fica com 1,15 m: vadeia-se
-        // devagar, sem nadar, e nunca é território dele. Acima de ~1,45 m o seco também viraria nado e
-        // deixaria de haver refúgio.
+        // devagar, sem nadar, respirando. Desde 21/11/2026 o seco alagado também é território dele
+        // (UndertowNav.FloodEnterColumn): na maré alta ele caça no mapa inteiro, pelo barulho. Acima de
+        // ~1,45 m o seco também viraria nado e não haveria onde respirar.
         public const float Amplitude = 1.3f;
         public const float DrainDepth = 2f;
         public const float DrainSeconds = 30f;

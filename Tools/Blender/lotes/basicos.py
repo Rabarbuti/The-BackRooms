@@ -287,8 +287,17 @@ BUILDERS = [
     caixa,
     pilha_caixas,
     lambda: placa("PlacaOferta", "SALE", "$199"),  # textos em inglês (a língua do jogo)
-    lambda: placa("PlacaLiquidacao", "CLEARANCE", "$49", card="Papel_Vermelho", ink="Tinta_Branca"),
+    # O nome ficou "PlacaLiquidacao", mas desde 21/11/2026 a placa é amarela com DISPLAY ONLY:
+    # vermelho com CLEARANCE é só das três etiquetas do código da porta (ExitLock), e uma placa
+    # vermelha de CLEARANCE no chão se confundia com elas. É também a placa da base dos totens.
+    lambda: placa("PlacaLiquidacao", "DISPLAY", "ONLY", card="Papel_Amarelo", ink="Tinta_Preta"),
 ]
 
+# Cores só deste lote (a paleta comum está em moveis_base.py).
+PALETA = {
+    "Papel_Amarelo": ((232, 194, 40), 0.8, 0.0),
+    "Tinta_Preta": ((24, 24, 26), 0.6, 0.0),
+}
+
 if __name__ == "__main__":
-    main_guard(lambda: run_lote("basicos", BUILDERS))
+    main_guard(lambda: run_lote("basicos", BUILDERS, PALETA))

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.HighDefinition;
@@ -164,8 +165,15 @@ namespace BackRooms.World
 
         // ---------------------------------------------------------------- Salas
 
+        // Cadeiras de sentar e lousas das salas de aula (ClassroomSeats), em coordenadas da fase.
+        List<ClassroomSeats.Seat> _officeSeats;
+        List<Bounds> _officeBoards;
+
         void BuildOfficeRooms()
         {
+            _officeSeats = new List<ClassroomSeats.Seat>();
+            _officeBoards = new List<Bounds>();
+
             foreach (OfficeRoom room in Data.OfficeRooms)
             {
                 var rng = new System.Random(room.Variant);
@@ -178,6 +186,12 @@ namespace BackRooms.World
                     case OfficeCell.Lobby: LobbyProps(room, rng); break;
                 }
             }
+
+            // As carteiras e as lousas: sentar (mira + E) e o traço de marcador. Sem sorteio: não muda
+            // nada do que vem depois.
+            CreateChild("Carteiras").AddComponent<ClassroomSeats>().Init(_officeSeats, _officeBoards);
+            _officeSeats = null;
+            _officeBoards = null;
         }
 
         void RoomBounds(OfficeRoom room, out Vector3 min, out Vector3 max)
@@ -187,23 +201,26 @@ namespace BackRooms.World
             max = new Vector3((room.X0 + room.Width) * Cell - inset, 0f, (room.Z0 + room.Height) * Cell - inset);
         }
 
-        void Chair(Vector3 position, Quaternion rotation, bool collider)
+        /// <summary>Cadeira de escritório; devolve o colisor (nulo sem colisor).</summary>
+        Collider Chair(Vector3 position, Quaternion rotation, bool collider)
         {
             OTurned(office.blackPlastic, position + rotation * new Vector3(0f, 0.47f, 0f), new Vector3(0.48f, 0.07f, 0.46f), rotation, false);
             OTurned(office.blackPlastic, position + rotation * new Vector3(0f, 0.86f, -0.22f), new Vector3(0.46f, 0.5f, 0.04f), rotation, false);
             OTube(office.steel, position + Vector3.up * 0.08f, position + Vector3.up * 0.44f, 0.022f, 6);
             OTurned(office.darkMetal, position + Vector3.up * 0.05f, new Vector3(0.6f, 0.04f, 0.06f), rotation, false);
             OTurned(office.darkMetal, position + Vector3.up * 0.05f, new Vector3(0.06f, 0.04f, 0.6f), rotation, false);
-            if (collider) TurnedCollider(position + Vector3.up * 0.5f, new Vector3(0.55f, 1f, 0.55f), rotation);
+            return collider ? TurnedCollider(position + Vector3.up * 0.5f, new Vector3(0.55f, 1f, 0.55f), rotation) : null;
         }
 
-        void TurnedCollider(Vector3 center, Vector3 size, Quaternion rotation)
+        BoxCollider TurnedCollider(Vector3 center, Vector3 size, Quaternion rotation)
         {
             var go = new GameObject("Colisor");
             go.transform.SetParent(_ok.Colliders.transform, false);
             go.transform.localPosition = center;
             go.transform.localRotation = rotation;
-            go.AddComponent<BoxCollider>().size = size;
+            BoxCollider box = go.AddComponent<BoxCollider>();
+            box.size = size;
+            return box;
         }
 
         void Table(Vector3 center, Vector3 size, Material top)
@@ -260,7 +277,10 @@ namespace BackRooms.World
                         if (rng.NextDouble() < 0.12) continue;
                         float yaw = rng.NextDouble() < 0.15 ? (float)(rng.NextDouble() * 140.0 - 70.0) : (float)(rng.NextDouble() * 16.0 - 8.0);
                         Vector3 seat = p - face * (0.7f + (float)rng.NextDouble() * 0.15f) + side * k;
-                        Chair(seat, facing * Quaternion.Euler(0f, yaw, 0f), true);
+                        Quaternion turn = facing * Quaternion.Euler(0f, yaw, 0f);
+                        Collider chair = Chair(seat, turn, true);
+                        // Carteira: senta-se nela de frente para a lousa, mesmo na cadeira torta (ClassroomSeats).
+                        if (_officeSeats != null) _officeSeats.Add(new ClassroomSeats.Seat { Feet = seat, Yaw = facing.eulerAngles.y, Collider = chair });
                     }
                 }
             }
@@ -269,7 +289,12 @@ namespace BackRooms.World
             Vector3 wall = Point(0f, 0f);
             if (frontFree)
             {
-                OBox(office.whiteboard, wall - face * 0.02f + Vector3.up * 1.5f, Abs(side) * 3f + Abs(face) * 0.03f + Vector3.up * 1.2f);
+                // A lousa tem colisor próprio: a caneta risca na face dela, não na parede 3,5 cm atrás
+                // (sem ele o traço nascia atrás da lousa e ninguém via). O DrawingBoard engrossa o traço
+                // que cai nela (marcador).
+                Vector3 boardCenter = wall - face * 0.02f + Vector3.up * 1.5f, boardSize = Abs(side) * 3f + Abs(face) * 0.03f + Vector3.up * 1.2f;
+                OSolid(office.whiteboard, boardCenter, boardSize);
+                if (_officeBoards != null) _officeBoards.Add(new Bounds(boardCenter, boardSize));
                 OBox(office.frameWhite, wall - face * 0.06f + Vector3.up * 0.88f, Abs(side) * 3f + Abs(face) * 0.08f + Vector3.up * 0.03f);
             }
             if (frontFree && width >= 7f)

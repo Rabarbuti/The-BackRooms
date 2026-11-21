@@ -46,7 +46,7 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 23;
+        public const int ContentVersion = 24;
 
         /// <summary>Música da tela inicial (cópia do arquivo mandado pelo usuário; não é gerada).</summary>
         public const string MenuMusicPath = "Assets/_Game/Audio/Musica/Menu_Tema.mp3";
@@ -547,8 +547,9 @@ namespace BackRooms.EditorTools
             var flashlight = torch.AddComponent<Flashlight>();
             flashlight.follow = pivot.transform;
             flashlight.inputEnabled = false;
-            // A bateria acaba (10 min acesa); as pilhas do chão recarregam (BatteryPickups, P0.3).
+            // A bateria acaba (4 min acesa); as pilhas do chão recarregam (BatteryPickups, P0.3).
             flashlight.infiniteBattery = false;
+            flashlight.batterySeconds = Flashlight.DefaultBatterySeconds;
 
             // Corpo visto pelos outros: explorador em traje de proteção. As peças são montadas
             // em código quando o jogador aparece (PlayerBody); o prefab leva só os materiais.
