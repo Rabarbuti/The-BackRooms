@@ -46,7 +46,7 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 22;
+        public const int ContentVersion = 23;
 
         /// <summary>Música da tela inicial (cópia do arquivo mandado pelo usuário; não é gerada).</summary>
         public const string MenuMusicPath = "Assets/_Game/Audio/Musica/Menu_Tema.mp3";
@@ -679,10 +679,43 @@ namespace BackRooms.EditorTools
 
         // ---------------------------------------------------------------- Volume
 
+        // Luz ambiente do Level 0 (e do Level 1, que usa o mesmo perfil): o céu em degradê de
+        // antes de 12/11/2026 vezes esta escala. Sem ela, tudo que nenhuma luminária alcança em
+        // linha reta (o lado de trás de uma parede, o chão longe da lâmpada, o nicho, o forro)
+        // fica preto puro: o mapa é montado ao hospedar e não tem luz rebatida pré-calculada.
+        // Medido em Logs/Previews/luz0: com 1 o chão longe da luminária ainda some.
+        const float AmbientScale = 4f;
+
+        // Liga o céu de luz ambiente no perfil, novo ou já existente (o perfil não é recriado a
+        // cada montagem, então a correção tem de chegar também no que já está no disco).
+        static void ApplyAmbientSky(GradientSky sky)
+        {
+            const float k = AmbientScale;
+            sky.top.Override(new Color(2.4f * k, 2.3f * k, 1.3f * k));
+            sky.middle.Override(new Color(3.6f * k, 3.5f * k, 2.0f * k));
+            sky.bottom.Override(new Color(7.0f * k, 6.8f * k, 3.8f * k));
+            sky.gradientDiffusion.Override(1f);
+            sky.exposure.Override(0f);
+            sky.multiplier.Override(1f);
+            // Desligado de 12/11 a 20/11/2026 (era para o desempenho, junto com a oclusão de
+            // ambiente): deixava cantos pretos sem motivo. O apagão (LightsOut) escurece este céu.
+            sky.active = true;
+        }
+
         static VolumeProfile EnsureVolumeProfile()
         {
             var existing = AssetDatabase.LoadAssetAtPath<VolumeProfile>(ProfilePath);
-            if (existing != null) return existing;
+            if (existing != null)
+            {
+                if (existing.TryGet(out GradientSky existingSky))
+                {
+                    ApplyAmbientSky(existingSky);
+                    EditorUtility.SetDirty(existingSky);
+                    EditorUtility.SetDirty(existing);
+                    AssetDatabase.SaveAssets();
+                }
+                return existing;
+            }
 
             var profile = ScriptableObject.CreateInstance<VolumeProfile>();
             AssetDatabase.CreateAsset(profile, ProfilePath);
@@ -693,16 +726,7 @@ namespace BackRooms.EditorTools
             environment.skyType.Override((int)SkyType.Gradient);
             environment.skyAmbientMode.Override(SkyAmbientMode.Dynamic);
 
-            var sky = Add<GradientSky>(profile);
-            sky.top.Override(new Color(2.4f, 2.3f, 1.3f));
-            sky.middle.Override(new Color(3.6f, 3.5f, 2.0f));
-            sky.bottom.Override(new Color(7.0f, 6.8f, 3.8f));
-            sky.gradientDiffusion.Override(1f);
-            sky.exposure.Override(0f);
-            sky.multiplier.Override(1f);
-            // Desligado em 12/11/2026 (ajuste feito à mão no editor e trazido para cá): a fase
-            // fica só com a luz das luminárias, e a exposição subiu para compensar.
-            sky.active = false;
+            ApplyAmbientSky(Add<GradientSky>(profile));
 
             // Exposição fixa: a automática clarearia as áreas escuras.
             var exposure = Add<Exposure>(profile);

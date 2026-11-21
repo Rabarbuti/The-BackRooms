@@ -12,37 +12,62 @@ namespace BackRooms.UI
     /// código com UI Toolkit. Atalhos de teclado: H hospeda, J entra no endereço digitado.
     /// A lista de fases mostra as zeradas e a próxima (<see cref="LevelProgress"/>); no modo
     /// desenvolvedor, todas.
-    /// Durante o jogo vira uma linha de estado no canto e, com o mouse solto (Esc), um
-    /// botão para sair da sessão.
+    /// Durante o jogo vira uma linha de estado no canto; Esc abre o menu de pausa
+    /// (<see cref="PauseMenu"/>, criado aqui num documento próprio), que tem o botão de sair.
     /// </summary>
     [RequireComponent(typeof(UIDocument))]
     public sealed class ConnectionMenu : MonoBehaviour
     {
         public GameSession session;
 
-        static readonly Color Yellow = new Color(0.87f, 0.78f, 0.36f);
-        static readonly Color Paper = new Color(0.93f, 0.9f, 0.78f);
-        static readonly Color PanelColor = new Color(0.04f, 0.035f, 0.02f, 0.82f);
-        static readonly Color ButtonColor = new Color(0.33f, 0.29f, 0.12f);
-        static readonly Color CurrentColor = new Color(0.55f, 0.47f, 0.16f);
-        static readonly Color LockedColor = new Color(0.16f, 0.15f, 0.12f);
+        static Color Yellow => MenuKit.Yellow;
+        static Color Paper => MenuKit.Paper;
+        static Color PanelColor => MenuKit.PanelColor;
+        static Color ButtonColor => MenuKit.ButtonColor;
+        static Color CurrentColor => MenuKit.CurrentColor;
+        static Color LockedColor => MenuKit.LockedColor;
+
+        // ---------------------------------------------------------------- Textos (a língua do jogo é o inglês)
+        const string PauseHint = "Esc: tasks and options";
+        const string EndingTitle = "END OF TAPE";
+        const string EndingLine = "You got out. For now.";
+        const string BackText = "Back to menu";
+        const string TotalText = "Total";
+        const string ClearedNotice = " CLEARED";
+        const string UnlockedNotice = " unlocked in the menu";
+        const string HostText = "Host  (or play alone)        [H]";
+        const string AddressLabel = "Address of whoever is hosting";
+        const string JoinText = "Join        [J]";
+        const string LevelLabel = "Level";
+        const string DevNote = "Developer mode: all levels unlocked.";
+        const string StateHere = "here";
+        const string StateCleared = "cleared";
+        const string StateUnlocked = "unlocked";
+        const string StateLocked = "clear {0} first";
+        const string ConnectedTo = "Connected to ";
+        const string Hosting = "Hosting";
+        const string PortText = "port ";
+        const string OnePlayer = " player";
+        const string ManyPlayers = " players";
+        const string LocalIp = "Local IP ";
+        const string Or = " or ";
+        const string NoLocalIp = "Local IP not found";
 
         VisualElement _panel;
         TextField _address;
         Label _status;
         Label _hud;
-        Button _leave;
+        PauseMenu _pause;
         Label _subtitle;
         Label _devNote;
         Label _notice;
         Button[] _levelButtons;
-        VisualElement _options;
+        MenuKit.OptionsPanel _options;
         VisualElement _ending;
         Label _endingTimes;
 
         /// <summary>A tela de fim da fita está aberta (testes).</summary>
         public static bool EndingShown { get; private set; }
-        Label _volumeValue, _mouseValue, _qualityValue;
         float _noticeUntil;
         string _localAddresses;
 
@@ -57,6 +82,7 @@ namespace BackRooms.UI
             BuildHud(root);
 
             BuildEnding(root);
+            EnsurePauseMenu();
 
             _localAddresses = FindLocalAddresses();
             LevelProgress.LevelCleared += OnLevelCleared;
@@ -81,11 +107,11 @@ namespace BackRooms.UI
             _ending.style.display = DisplayStyle.None;
             root.Add(_ending);
 
-            var title = Text("FIM DA FITA", 44, Yellow);
+            var title = Text(EndingTitle, 44, Yellow);
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.marginBottom = 8;
             _ending.Add(title);
-            var line = Text("Vocês saíram. Por enquanto.", 18, Paper);
+            var line = Text(EndingLine, 18, Paper);
             line.style.opacity = 0.75f;
             line.style.marginBottom = 26;
             _ending.Add(line);
@@ -93,7 +119,7 @@ namespace BackRooms.UI
             _endingTimes.style.unityTextAlign = TextAnchor.MiddleCenter;
             _endingTimes.style.marginBottom = 30;
             _ending.Add(_endingTimes);
-            Button back = MenuButton("Voltar ao menu", () => { _ending.style.display = DisplayStyle.None; EndingShown = false; });
+            Button back = MenuButton(BackText, () => { _ending.style.display = DisplayStyle.None; EndingShown = false; });
             back.style.width = 260;
             _ending.Add(back);
         }
@@ -109,7 +135,7 @@ namespace BackRooms.UI
                 total += t;
                 text += LevelCatalog.Get(i).Name + "   " + LevelProgress.FormatTime(t) + "\n";
             }
-            _endingTimes.text = text + "\nTotal   " + LevelProgress.FormatTime(total);
+            _endingTimes.text = text + "\n" + TotalText + "   " + LevelProgress.FormatTime(total);
             _ending.style.display = DisplayStyle.Flex;
             EndingShown = true;
         }
@@ -117,8 +143,8 @@ namespace BackRooms.UI
         void OnLevelCleared(int index)
         {
             LevelInfo next = LevelCatalog.Get(index + 1);
-            _notice.text = LevelCatalog.Get(index).Name.ToUpperInvariant() + " ZERADO" +
-                           (next != null ? "   •   " + next.Name + " liberado no menu" : "");
+            _notice.text = LevelCatalog.Get(index).Name.ToUpperInvariant() + ClearedNotice +
+                           (next != null ? "   •   " + next.Name + UnlockedNotice : "");
             _noticeUntil = Time.unscaledTime + 8f;
         }
 
@@ -154,9 +180,9 @@ namespace BackRooms.UI
 
             BuildLevelList();
 
-            _panel.Add(MenuButton("Hospedar  (ou jogar sozinho)        [H]", () => session.Host()));
+            _panel.Add(MenuButton(HostText, () => session.Host()));
 
-            var joinLabel = Text("Endereço de quem está hospedando", 14, Paper);
+            var joinLabel = Text(AddressLabel, 14, Paper);
             joinLabel.style.marginTop = 22;
             joinLabel.style.opacity = 0.75f;
             _panel.Add(joinLabel);
@@ -168,7 +194,7 @@ namespace BackRooms.UI
             _address.style.marginBottom = 8;
             _panel.Add(_address);
 
-            _panel.Add(MenuButton("Entrar        [J]", () => session.Join(_address.value)));
+            _panel.Add(MenuButton(JoinText, () => session.Join(_address.value)));
 
             BuildOptions();
 
@@ -179,64 +205,37 @@ namespace BackRooms.UI
             _panel.Add(_status);
         }
 
-        // Opções desta máquina (GameOptions): um botão abre as três linhas, cada uma com - e +.
-        void BuildOptions()
+        // Opções desta máquina (GameOptions): as mesmas do menu de pausa (MenuKit).
+        void BuildOptions() => _options = MenuKit.AddOptions(_panel);
+
+        void OnDestroy()
         {
-            Button toggle = MenuButton("Opções", () =>
-            {
-                _options.style.display = _options.style.display == DisplayStyle.None ? DisplayStyle.Flex : DisplayStyle.None;
-                RefreshOptions();
-            });
-            toggle.style.marginTop = 14;
-            toggle.style.height = 36;
-            toggle.style.fontSize = 16;
-            _panel.Add(toggle);
-
-            _options = new VisualElement();
-            _options.style.display = DisplayStyle.None;
-            _options.style.marginTop = 6;
-            _panel.Add(_options);
-
-            _volumeValue = OptionRow("Volume", () => GameOptions.SetVolume(GameOptions.Volume - 0.1f), () => GameOptions.SetVolume(GameOptions.Volume + 0.1f));
-            _mouseValue = OptionRow("Mouse", () => GameOptions.SetMouseScale(GameOptions.MouseScale - 0.25f), () => GameOptions.SetMouseScale(GameOptions.MouseScale + 0.25f));
-            _qualityValue = OptionRow("Qualidade", () => GameOptions.SetQuality(GameOptions.Quality - 1), () => GameOptions.SetQuality(GameOptions.Quality + 1));
+            if (_pause != null) Destroy(_pause.gameObject);
         }
 
-        Label OptionRow(string name, System.Action less, System.Action more)
+        // O menu de pausa vive num documento próprio (este se limpa inteiro ao ligar), com o mesmo
+        // PanelSettings e desenhado por cima. Criado aqui para valer em toda cena que tem este menu.
+        void EnsurePauseMenu()
         {
-            var row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.alignItems = Align.Center;
-            row.style.marginBottom = 4;
-            var label = Text(name, 15, Paper);
-            label.style.width = 120;
-            row.Add(label);
-            Button minus = MenuButton("-", () => { less(); RefreshOptions(); });
-            minus.style.width = 40; minus.style.height = 30;
-            row.Add(minus);
-            var value = Text("", 15, Yellow);
-            value.style.width = 150;
-            value.style.unityTextAlign = TextAnchor.MiddleCenter;
-            row.Add(value);
-            Button plus = MenuButton("+", () => { more(); RefreshOptions(); });
-            plus.style.width = 40; plus.style.height = 30;
-            row.Add(plus);
-            _options.Add(row);
-            return value;
-        }
-
-        void RefreshOptions()
-        {
-            if (_volumeValue == null) return;
-            _volumeValue.text = Mathf.RoundToInt(GameOptions.Volume * 100f) + "%";
-            _mouseValue.text = GameOptions.MouseScale.ToString("0.00") + "x";
-            _qualityValue.text = GameOptions.QualityName;
+            if (_pause != null) return;
+            UIDocument mine = GetComponent<UIDocument>();
+            var holder = new GameObject("MenuPausa");
+            holder.SetActive(false);
+            // Na raiz da cena, não como filho: um UIDocument filho de outro entra na árvore do pai,
+            // e este documento se limpa inteiro ao ligar.
+            UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(holder, gameObject.scene);
+            UIDocument document = holder.AddComponent<UIDocument>();
+            document.panelSettings = mine.panelSettings;
+            document.sortingOrder = mine.sortingOrder + 10;
+            _pause = holder.AddComponent<PauseMenu>();
+            _pause.session = session;
+            holder.SetActive(true);
         }
 
         // Uma linha por fase: a atual em destaque, as liberadas clicáveis, as outras apagadas.
         void BuildLevelList()
         {
-            var label = Text("Fase", 14, Paper);
+            var label = Text(LevelLabel, 14, Paper);
             label.style.opacity = 0.75f;
             label.style.marginBottom = 4;
             _panel.Add(label);
@@ -255,7 +254,7 @@ namespace BackRooms.UI
                 _panel.Add(button);
             }
 
-            _devNote = Text("Modo desenvolvedor: todas as fases liberadas.", 12, Paper);
+            _devNote = Text(DevNote, 12, Paper);
             _devNote.style.opacity = 0.5f;
             _devNote.style.marginBottom = 18;
             _panel.Add(_devNote);
@@ -272,10 +271,10 @@ namespace BackRooms.UI
             {
                 LevelInfo info = LevelCatalog.Levels[i];
                 bool unlocked = LevelProgress.IsUnlocked(i);
-                string state = i == current ? "aqui"
-                    : LevelProgress.IsCleared(i) ? "zerado"
-                    : unlocked ? "liberado"
-                    : "zere o " + LevelCatalog.Get(i - 1).Name;
+                string state = i == current ? StateHere
+                    : LevelProgress.IsCleared(i) ? StateCleared
+                    : unlocked ? StateUnlocked
+                    : string.Format(StateLocked, LevelCatalog.Get(i - 1).Name);
 
                 Button button = _levelButtons[i];
                 button.text = info.Name + " — " + info.Subtitle + "   [" + state + "]";
@@ -304,36 +303,11 @@ namespace BackRooms.UI
             _notice.style.unityTextAlign = TextAnchor.MiddleCenter;
             _notice.style.unityFontStyleAndWeight = FontStyle.Bold;
             root.Add(_notice);
-
-            _leave = MenuButton("Sair da sessão", () => session.Leave());
-            _leave.style.position = Position.Absolute;
-            _leave.style.right = 14;
-            _leave.style.top = 10;
-            _leave.style.width = 190;
-            _leave.style.height = 40;
-            root.Add(_leave);
         }
 
-        static Label Text(string text, int size, Color color)
-        {
-            var label = new Label(text);
-            label.style.fontSize = size;
-            label.style.color = color;
-            return label;
-        }
+        static Label Text(string text, int size, Color color) => MenuKit.Text(text, size, color);
 
-        static Button MenuButton(string text, System.Action onClick)
-        {
-            var button = new Button(onClick) { text = text };
-            button.style.height = 48;
-            button.style.fontSize = 19;
-            button.style.color = Paper;
-            button.style.backgroundColor = ButtonColor;
-            button.style.borderTopWidth = 0; button.style.borderBottomWidth = 0;
-            button.style.borderLeftWidth = 0; button.style.borderRightWidth = 0;
-            button.style.marginLeft = 0; button.style.marginRight = 0;
-            return button;
-        }
+        static Button MenuButton(string text, System.Action onClick) => MenuKit.MenuButton(text, onClick);
 
         void Update()
         {
@@ -346,27 +320,30 @@ namespace BackRooms.UI
                 EndingShown = false;
             }
             bool playing = session.Phase == SessionPhase.Playing;
+            // Fora do jogo só a música do menu se ouve: a fase montada atrás do menu fica muda.
+            GameOptions.SetMenuSilence(!playing);
 
-            _panel.style.display = playing ? DisplayStyle.None : DisplayStyle.Flex;
+            // Com o fim da fita na tela, o painel do menu some (aparecia apagado por trás, com o texto
+            // por cima de END OF TAPE) e volta com "Back to menu".
+            _panel.style.display = playing || EndingShown ? DisplayStyle.None : DisplayStyle.Flex;
             _panel.SetEnabled(inMenu);
             _status.text = session.Status;
 
             _hud.style.display = playing ? DisplayStyle.Flex : DisplayStyle.None;
-            _leave.style.display = playing && UnityEngine.Cursor.lockState != CursorLockMode.Locked ? DisplayStyle.Flex : DisplayStyle.None;
 
             if (playing) _hud.text = DescribeSession();
-            _notice.style.display = Time.unscaledTime < _noticeUntil ? DisplayStyle.Flex : DisplayStyle.None;
-            if (inMenu) ReadHotkeys();
+            _notice.style.display = Time.unscaledTime < _noticeUntil && !EndingShown ? DisplayStyle.Flex : DisplayStyle.None;
+            if (inMenu && !EndingShown) ReadHotkeys();
             if (!playing) RefreshLevels();
         }
 
         string DescribeSession()
         {
-            if (!session.IsHosting) return "Conectado a " + session.Address + "   •   Esc solta o mouse";
+            if (!session.IsHosting) return ConnectedTo + session.Address + "   •   " + PauseHint;
 
             int players = session.PlayerCount;
-            return "Hospedando   •   " + _localAddresses + "   •   porta " + session.port + "   •   " +
-                   players + (players == 1 ? " jogador" : " jogadores") + "   •   Esc solta o mouse";
+            return Hosting + "   •   " + _localAddresses + "   •   " + PortText + session.port + "   •   " +
+                   players + (players == 1 ? OnePlayer : ManyPlayers) + "   •   " + PauseHint;
         }
 
         void ReadHotkeys()
@@ -398,14 +375,14 @@ namespace BackRooms.UI
                 foreach (IPAddress address in Dns.GetHostAddresses(Dns.GetHostName()))
                 {
                     if (address.AddressFamily != AddressFamily.InterNetwork || IPAddress.IsLoopback(address)) continue;
-                    found += (found.Length > 0 ? " ou " : "") + address;
+                    found += (found.Length > 0 ? Or : "") + address;
                 }
 
-                return found.Length > 0 ? "IP local " + found : "IP local não encontrado";
+                return found.Length > 0 ? LocalIp + found : NoLocalIp;
             }
             catch (SocketException)
             {
-                return "IP local não encontrado";
+                return NoLocalIp;
             }
         }
     }

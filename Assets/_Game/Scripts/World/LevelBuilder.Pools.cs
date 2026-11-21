@@ -27,6 +27,14 @@ namespace BackRooms.World
         /// <summary>Nas Piscinas, paredes, pilaretes e colisores de piso descem até aqui (abaixo do poço).</summary>
         public const float PoolBase = -7f;
 
+        [Header("Maré (Piscinas)")]
+        [Tooltip("Película molhada (escura, brilhante) nas paredes e no seco por onde a maré passou (PoolWater).")]
+        public Material poolWetMaterial;
+        [Tooltip("Linha de sujeira na altura da maré alta, em toda parede: mostra até onde a água chega.")]
+        public Material poolTideLineMaterial;
+        [Tooltip("Lente das lâmpadas de alarme vermelhas que piscam quando a maré vai subir (PoolAlarm).")]
+        public Material poolAlarmMaterial;
+
         const float HalfWall = PoolWall * 0.5f;
         // Trecho de parede entre dois pilaretes de canto: de -1,8 a 1,8 a partir do meio da divisa.
         const float SegmentHalf = Cell * 0.5f - HalfWall;
@@ -134,6 +142,8 @@ namespace BackRooms.World
             public MeshBuilder Wall, Floor, Worn, Bottom, Accent, Coping;
             public MeshBuilder CurvedWall, CurvedAccent, CurvedBottom, Ceiling;
             public MeshBuilder Cove, Caustics, Rails, Lamps, Grate, Water;
+            /// <summary>Da maré: paredes da faixa que ela molha (em Y relativo à água), piso seco que ela cobre, linha da maré alta e cáustica do seco.</summary>
+            public MeshBuilder TideWalls, TideFloor, TideLine, TideCaustics;
             public bool[] WornRoom, AccentRoom;
             public float[] Band;
             public bool[,] RoundWell;
@@ -179,6 +189,10 @@ namespace BackRooms.World
                 Lamps = new MeshBuilder(1f),
                 Grate = new MeshBuilder(1f),
                 Water = new MeshBuilder(4f),
+                TideWalls = new MeshBuilder(1f),
+                TideFloor = new MeshBuilder(1f),
+                TideLine = new MeshBuilder(1f),
+                TideCaustics = new MeshBuilder(4f),
                 RoundWell = new bool[w, h],
                 WallS = new bool[w, h + 1],
                 WallW = new bool[w + 1, h],
@@ -223,6 +237,7 @@ namespace BackRooms.World
             BuildSkylights(resolution);
             BuildLitOpenings(resolution);
             BuildLamps();
+            BuildTideAlarms();
             BuildPoolStains();
             BuildPoolMarks();
             BuildExit();
@@ -367,6 +382,8 @@ namespace BackRooms.World
             }
             else main.AddPolygon(poly, normal);
 
+            EmitTide(poly, normal, look);
+
             if (look.NoCaustics || look.Room < 0 || poolCausticsMaterial == null) return;
             float lowest = float.MaxValue;
             foreach (Vector3 p in poly) lowest = Mathf.Min(lowest, p.y);
@@ -376,6 +393,57 @@ namespace BackRooms.World
             if (wet.Count < 3) return;
             for (int k = 0; k < wet.Count; k++) wet[k] += normal * CausticsLift;
             _kit.Caustics.AddPolygon(wet, normal);
+        }
+
+        // Afastamento das películas da maré da face (a marca molhada por baixo da cáustica do seco).
+        const float TideWetLift = 0.006f;
+        const float TideLineHalf = 0.04f;
+
+        /// <summary>
+        /// A parte da face que a maré alcança (da água parada até <see cref="PoolWater.WetBandHeight"/>
+        /// acima): na parede vai para a marca molhada, em Y relativo à água (o <see cref="PoolWater"/>
+        /// a achata até onde a água chegou) e, na altura da maré alta, para a linha de sujeira; no
+        /// piso (o seco), para o piso molhado e a cáustica que só acende com água por cima.
+        /// </summary>
+        void EmitTide(List<Vector3> poly, Vector3 normal, Look look)
+        {
+            if (look.Room < 0 || look.NoCaustics) return;
+            float lo = float.MaxValue, hi = float.MinValue;
+            foreach (Vector3 p in poly) { lo = Mathf.Min(lo, p.y); hi = Mathf.Max(hi, p.y); }
+            float top = WaterY + PoolWater.WetBandHeight;
+            if (hi <= WaterY + 0.001f || lo >= top) return;
+
+            if (Mathf.Abs(normal.y) < 0.3f)
+            {
+                // Na faixa achatada só entra parede que nasce no piso seco ou abaixo dele: um pedaço
+                // que começa mais alto (em volta de vigia, janelão, tijolo de vidro) desceria junto.
+                List<Vector3> band = lo <= LevelData.DepthFloor(PoolDepth.Dry) + 0.02f ? ClipY(poly, WaterY, top) : new List<Vector3>();
+                if (band.Count >= 3)
+                {
+                    var rel = new List<Vector3>(band.Count);
+                    foreach (Vector3 p in band) rel.Add(p + normal * TideWetLift - Vector3.up * WaterY);
+                    _kit.TideWalls.AddPolygon(rel, normal);
+                }
+                float peak = WaterY + PoolTide.Amplitude;
+                List<Vector3> line = ClipY(poly, peak - TideLineHalf, peak + TideLineHalf);
+                if (line.Count >= 3)
+                {
+                    for (int k = 0; k < line.Count; k++) line[k] += normal * (TideWetLift * 2f);
+                    _kit.TideLine.AddPolygon(line, normal);
+                }
+            }
+            else if (normal.y > 0.7f && lo > WaterY + 0.01f && hi < top)
+            {
+                var wet = new List<Vector3>(poly.Count);
+                var light = new List<Vector3>(poly.Count);
+                foreach (Vector3 p in poly)
+                {
+                    wet.Add(p + normal * TideWetLift);
+                    light.Add(p + normal * (CausticsLift * 1.5f));
+                }
+                _kit.TideFloor.AddPolygon(wet, normal);
+                if (poolCausticsMaterial != null) _kit.TideCaustics.AddPolygon(light, normal);
+            }
         }
 
         static List<Vector3> Poly(params Vector3[] points) => new List<Vector3>(points);
@@ -1707,6 +1775,20 @@ namespace BackRooms.World
             if (poolRailMaterial != null && !_kit.Grate.IsEmpty)
                 CreateRenderer("Ralo", _kit.Grate.ToMesh("Ralo"), poolRailMaterial, ShadowCastingMode.Off);
 
+            // A maré: a marca molhada (achatada pelo PoolWater até onde a água chegou: a malha está em
+            // Y relativo à água parada), o piso molhado, a linha da maré alta e a cáustica do seco.
+            if (poolWetMaterial != null && !_kit.TideWalls.IsEmpty)
+            {
+                MeshRenderer walls = CreateRenderer(PoolWater.WetWallsName, _kit.TideWalls.ToMesh(PoolWater.WetWallsName), poolWetMaterial, ShadowCastingMode.Off);
+                walls.transform.localPosition = new Vector3(0f, WaterY, 0f);
+            }
+            if (poolWetMaterial != null && !_kit.TideFloor.IsEmpty)
+                CreateRenderer(PoolWater.WetFloorName, _kit.TideFloor.ToMesh(PoolWater.WetFloorName), poolWetMaterial, ShadowCastingMode.Off);
+            if (poolTideLineMaterial != null && !_kit.TideLine.IsEmpty)
+                CreateRenderer(PoolWater.TideLineName, _kit.TideLine.ToMesh(PoolWater.TideLineName), poolTideLineMaterial, ShadowCastingMode.Off);
+            if (poolCausticsMaterial != null && !_kit.TideCaustics.IsEmpty)
+                CreateRenderer(PoolWater.TideCausticsName, _kit.TideCaustics.ToMesh(PoolWater.TideCausticsName), poolCausticsMaterial, ShadowCastingMode.Off);
+
             if (!_kit.Water.IsEmpty)
             {
                 MeshRenderer water = CreateRenderer("Agua", _kit.Water.ToMesh("Agua"), waterMaterial, ShadowCastingMode.Off);
@@ -2713,6 +2795,78 @@ namespace BackRooms.World
 
             if (!_kit.Lamps.IsEmpty)
                 CreateRenderer("LampadasSubmersas", _kit.Lamps.ToMesh("LampadasSubmersas"), poolLampMaterial, ShadowCastingMode.Off, root);
+        }
+
+        // ---------------------------------------------------------------- Alarme da maré
+
+        /// <summary>
+        /// Lâmpadas de alarme vermelhas (giroflex de parede) que piscam quando a maré vai subir
+        /// (<see cref="PoolAlarm"/>, ligado pelo <see cref="PoolTide"/>): uma por sala (duas nas de
+        /// mais de 6 células), numa parede lisa, perto do teto. Sorteio próprio da seed, depois de
+        /// tudo: não muda a planta nem o hash. Luz pontual vermelha sem sombra, desligada fora do
+        /// alarme; caixa de aço e lente, sem colisor (ficam no alto, como a sanca).
+        /// </summary>
+        void BuildTideAlarms()
+        {
+            if (poolAlarmMaterial == null) return;
+            var rng = new System.Random(Data.Seed * 4099 + 71);
+            var housing = new MeshBuilder(1f);
+            var lens = new MeshBuilder(1f);
+            var lights = new List<Light>();
+            Transform root = CreateChild(PoolAlarm.RootName).transform;
+
+            foreach (PoolRoom room in Data.Rooms)
+            {
+                var faces = new List<(int x, int z, WallSide side)>();
+                int cells = 0;
+                for (int z = room.Z0; z < room.Z0 + room.Height; z++)
+                    for (int x = room.X0; x < room.X0 + room.Width; x++)
+                    {
+                        if (x < 0 || z < 0 || x >= Data.Width || z >= Data.Height) continue;
+                        if (!OpenCell(x, z) || Data.Room[x, z] != room.Id) continue;
+                        cells++;
+                        foreach (WallSide side in PoolSides)
+                            if (HasWallBox(x, z, side) && PlainWall(x, z, side) && ClearHeight(x, z, side) >= 2.4f) faces.Add((x, z, side));
+                    }
+                if (faces.Count == 0) continue;
+                int count = cells > 6 ? 2 : 1;
+                for (int n = 0; n < count && faces.Count > 0; n++)
+                {
+                    int pick = rng.Next(faces.Count);
+                    var chosen = faces[pick];
+                    faces.RemoveAt(pick);
+
+                    Vector3 dir = SideDir(chosen.side);
+                    Vector3 normal = -dir;
+                    float y = Mathf.Min(2.7f, ClearHeight(chosen.x, chosen.z, chosen.side) - 0.45f);
+                    Vector3 face = new Vector3((chosen.x + 0.5f) * Cell, y, (chosen.z + 0.5f) * Cell) + dir * (Cell * 0.5f - HalfWall);
+                    Vector3 across = Abs(Vector3.Cross(Vector3.up, normal));
+                    Vector3 depthAxis = Abs(normal);
+
+                    // Base de aço rente à parede e a lente (cúpula quadrada) saindo dela.
+                    housing.AddBox(face + normal * 0.03f, across * 0.3f + Vector3.up * 0.24f + depthAxis * 0.06f, true);
+                    lens.AddBox(face + normal * 0.12f, across * 0.18f + Vector3.up * 0.18f + depthAxis * 0.12f, true);
+
+                    HDAdditionalLightData hd = CreateLightObject("Alarme", root, LightType.Point, face + normal * 0.35f, out Light source);
+                    source.useColorTemperature = false;
+                    source.color = PoolAlarm.LightColor;
+                    source.intensity = 0f;
+                    source.range = 12f;
+                    source.shadows = LightShadows.None;
+                    source.enabled = false;
+                    hd.affectsVolumetric = false;
+                    hd.fadeDistance = 60f;
+                    lights.Add(source);
+                    _kit.Lights++;
+                }
+            }
+
+            MeshRenderer lensRenderer = null;
+            if (!housing.IsEmpty && poolRailMaterial != null)
+                CreateRenderer(PoolAlarm.HousingName, housing.ToMesh(PoolAlarm.HousingName), poolRailMaterial, ShadowCastingMode.Off, root);
+            if (!lens.IsEmpty)
+                lensRenderer = CreateRenderer(PoolAlarm.LensName, lens.ToMesh(PoolAlarm.LensName), poolAlarmMaterial, ShadowCastingMode.Off, root);
+            root.gameObject.AddComponent<PoolAlarm>().Init(lights.ToArray(), lensRenderer);
         }
     }
 }

@@ -47,6 +47,9 @@ namespace BackRooms.UI
         const int Height = 720;
         // A dica HOLD SPACE aparece nestes primeiros segundos de cada mergulho onde não dá pé.
         const float SwimHintSeconds = 4f;
+        // No começo de cada fase, o pé do painel lembra onde estão as tarefas (menu de pausa).
+        const float PauseHintSeconds = 8f;
+        const string PauseHint = "ESC: TASKS";
         const int Margin = 54;
 
         // Tamanhos de letra, em pontos da grade por ponto da fonte 5x7. Numa tela de 1080
@@ -217,6 +220,8 @@ namespace BackRooms.UI
                 else if (ExitLock.Prompt != null) prompt = ExitLock.Prompt;
                 else if (SwitchObjective.Prompt != null) prompt = SwitchObjective.Prompt;
                 else if (BatteryPickups.Prompt != null) prompt = BatteryPickups.Prompt;
+                else if (ElevatorControl.Prompt != null) prompt = ElevatorControl.Prompt;
+                else if (BackRooms.Entities.LightSwitches.Prompt != null) prompt = BackRooms.Entities.LightSwitches.Prompt;
                 else if (exit.LocalInReach && SwitchObjective.Locked) prompt = SwitchObjective.Instance.LockedText;
                 else if (exit.LocalInReach && LevelExit.Locked) prompt = "LOCKED\nCODE ON KEYPAD";
                 else if (exit.LocalInReach) prompt = waiting > 0 ? $"E - OPEN DOOR\n{waiting}/{total} WAITING" : "E - OPEN DOOR";
@@ -224,6 +229,7 @@ namespace BackRooms.UI
 
                 // Objetivo comum com pontos valendo: quantos e quanto falta da janela.
                 if (footer == null && SwitchObjective.Instance != null) footer = SwitchObjective.Instance.Footer;
+                if (footer == null && _recordSeconds < PauseHintSeconds && !PauseMenu.IsOpen) footer = PauseHint;
             }
 
             // Água (Piscinas): aviso e barra do fôlego.
@@ -246,8 +252,15 @@ namespace BackRooms.UI
             // Dentro do guarda-roupa só se vê pela fresta da porta.
             bool slit = body != null && body.Hiding == HideKind.Wardrobe && !body.IsReturning;
 
+            // Maré das Piscinas (PoolTide): a fase no alto da tela, em vermelho, piscando se ela pede.
+            string tideText = BackRooms.World.PoolTide.HudText;
+            TideText = tideText != null && (!BackRooms.World.PoolTide.HudBlink || Mathf.FloorToInt(Time.unscaledTime * 2f) % 2 == 0) ? tideText : null;
+
             Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f, tape, prompt, footer, cover, underwater, air, swimHint, slit);
         }
+
+        /// <summary>Aviso da maré desenhado no alto da tela (já piscando); nulo = nada. Público para testes e prévias.</summary>
+        public string TideText { get; set; }
 
         /// <summary>
         /// Desenha um quadro do painel e o publica para o shader. Público para a ferramenta
@@ -288,7 +301,7 @@ namespace BackRooms.UI
             int bars = battery > 0.66f ? 3 : battery > 0.33f ? 2 : battery > 0.05f ? 1 : 0;
             int airStep = air < 0.999f ? Mathf.RoundToInt(Mathf.Clamp01(air) * 40f) : -1;
             bool airBlink = air < 0.25f && Mathf.FloorToInt(clockSeconds * 4f) % 2 == 0;
-            string state = $"{recording}|{blink}|{bars}|{battery < 0.15f}|{lightOn}|{tool}|{noSignal}|{tape}|{prompt}|{footer}|{cover}|{time}|{date}|{underwater}|{airStep}|{airBlink}|{swimHint}|{slit}";
+            string state = $"{recording}|{blink}|{bars}|{battery < 0.15f}|{lightOn}|{tool}|{noSignal}|{tape}|{prompt}|{footer}|{cover}|{time}|{date}|{underwater}|{airStep}|{airBlink}|{swimHint}|{slit}|{TideText}";
 
             if (state != _drawn)
             {
@@ -406,6 +419,10 @@ namespace BackRooms.UI
                 if (!string.IsNullOrEmpty(swimHint))
                     Text((Width - MeasureText(swimHint, Small)) / 2, Margin + 66, swimHint, Small, White);
             }
+
+            // Maré (Piscinas): abaixo do fôlego, em vermelho.
+            if (!covered && !string.IsNullOrEmpty(TideText))
+                Text((Width - MeasureText(TideText, Medium)) / 2, Margin + 96, TideText, Medium, Red);
         }
 
         void EnsureTexture()

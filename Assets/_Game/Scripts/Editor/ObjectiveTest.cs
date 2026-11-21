@@ -6,6 +6,8 @@ using BackRooms.World;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 
 namespace BackRooms.EditorTools
 {
@@ -19,7 +21,10 @@ namespace BackRooms.EditorTools
     /// (<see cref="SwitchObjective.PlayersForTest"/>) um ponto que passou da janela deixa de valer e
     /// dois armados fora da janela não cumprem; dois dentro da janela cumprem; sozinho de verdade, o
     /// ponto armado não expira; cumprido, a porta abre e a fase acaba. No Level 2, cumprido, a água
-    /// desce (a drenagem).
+    /// desce (a drenagem). No Level 2 a última válvula é a da água: o jogador de teste vai até ela
+    /// nadando, com o teclado virtual, da última célula a pé (W e Espaço, maré parada), e a gira à
+    /// tona segurando Espaço (ou de pé, se é numa ilha); o tempo da travessia e o de girar vão para o
+    /// relato.
     ///
     /// Linha de comando: -executeMethod BackRooms.EditorTools.ObjectiveTest.BatchRun (Level 0),
     /// BatchRunLevel2, BatchRunLevel3. Sai com 0 se passou, 3 se falhou. Linha
@@ -52,6 +57,14 @@ namespace BackRooms.EditorTools
         static Vector3 _entityFrom;
         static float _entityAt;
         static bool _entityHeard, _entityChecked;
+        // A travessia a nado até a válvula da água (Level 2).
+        static List<Vector3> _swimRoute;
+        static int _swimIndex;
+        static float _swimBest, _swimProgress, _swimStart, _swimLimit;
+        static int _swimSplashes = -1;
+        static Keyboard _keyboard;
+        static InputSettings.BackgroundBehavior _backgroundBefore;
+        static InputSettings.EditorInputBehaviorInPlayMode _editorInputBefore;
 
         [MenuItem("BackRooms/Testar objetivo (Level 0)")]
         public static void RunFromMenu()
@@ -136,7 +149,7 @@ namespace BackRooms.EditorTools
             {
                 case 0:
                     EntityDirector.Paused = true;
-                    session.fixedSeed = 1998;
+                    session.fixedSeed = SeedArg();
                     session.Host(localOnly: true);
                     Next();
                     break;
@@ -181,9 +194,14 @@ namespace BackRooms.EditorTools
                     if (exit.Rattles < 1) { Finish(false, "a porta trancada não chacoalhou com o E"); return; }
                     string locked = _objective.LockedText;
                     // Sozinho de verdade: o último ponto, armado, não expira.
+                    // Se ele exige nadar (a válvula da água), o jogador vai até lá nadando.
                     SwitchObjective.PlayersForTest = 0;
-                    GoTo(_objective.Count - 1);
-                    SwitchObjective.HoldForTest = true;
+                    if (_objective.PointSwim(_objective.Count - 1) > 0) StartSwim(_objective.Count - 1);
+                    else
+                    {
+                        GoTo(_objective.Count - 1);
+                        SwitchObjective.HoldForTest = true;
+                    }
                     Next($"trancada, a porta não abre (\"{locked.Replace('\n', ' ')}\")");
                     break;
                 }
@@ -191,9 +209,23 @@ namespace BackRooms.EditorTools
                 case 3:
                 {
                     int last = _objective.Count - 1;
+                    if (_swimRoute != null)
+                    {
+                        if (!SwimStep(last)) break;
+                        _swimRoute = null;
+                        int splashes = _local.footsteps != null && _swimSplashes >= 0 ? _local.footsteps.Splashes - _swimSplashes : -1;
+                        Notes.Add($"nadou até a válvula da água ({_objective.PointSpot(last)}, {_objective.PointSwim(last)} célula(s) d'água) em {Now - _swimStart:F1} s, maré parada, {splashes} espirro(s) (o Undertow ouve espirro de longe, pelos canos)");
+                        SwitchObjective.HoldForTest = true;
+                        PoolTide.Paused = false; // a maré volta a valer: drenando, ela não pode tocar o alarme
+                        _stageStart = Now;
+                        break;
+                    }
+                    KeepUp(last);
                     Aim(last);
                     if (_objective.ActiveNow < 1) { if (InStage > _objective.HoldSeconds + 3f) Finish(false, $"sozinho, segurou E no ponto {last} e ele não armou (aviso \"{SwitchObjective.Prompt}\")"); break; }
                     SwitchObjective.HoldForTest = false;
+                    if (_objective.PointInWater(last)) Notes.Add($"girou a válvula à tona, segurando Espaço e E, em {InStage:F1} s");
+                    KeepUp(-1);
                     if (_objective.PointArmedAt(last) < SwitchObjective.Permanent) { Finish(false, "sozinho, o ponto armado ganhou janela (devia ficar armado)"); return; }
                     if (_objective.Complete) { Finish(false, "sozinho, um ponto só cumpriu o objetivo"); return; }
                     // Daqui em diante o host conta dois jogadores: vale a janela.
@@ -248,9 +280,11 @@ namespace BackRooms.EditorTools
                     break;
 
                 case 7:
+                    KeepUp(1);
                     Aim(1);
                     if (_objective.ActiveNow < 1) { if (InStage > _objective.HoldSeconds + 3f) Finish(false, "o ponto 1 não armou"); break; }
                     SwitchObjective.HoldForTest = false;
+                    KeepUp(-1);
                     if (_objective.Complete) { Finish(false, "o ponto 0 vencido e o 1 cumpriram o objetivo (fora da janela)"); return; }
                     if (_objective.Arms != 3) { Finish(false, $"{_objective.Arms} armações contadas (eram 3: a de sozinho, a do 0 e a do 1)"); return; }
                     // O outro jogador arma o ponto 0 agora, dentro da janela do 1 (o host recebe o
@@ -277,7 +311,9 @@ namespace BackRooms.EditorTools
                         if (InStage < 6f) break;
                         float drop = _waterBefore - PoolWater.Current.SurfaceY;
                         if (drop < 0.2f) { Finish(false, $"cumprido nas Piscinas, a água desceu só {drop:F2} m em 6 s"); return; }
-                        Notes.Add($"a água desceu {drop:F2} m em 6 s");
+                        // A maré não pode continuar: drenando, o alarme dela cala (PoolTide).
+                        if (PoolTide.Current != null && PoolTide.Current.AlarmOn) { Finish(false, "cumprido nas Piscinas, o alarme da maré continuou ligado"); return; }
+                        Notes.Add($"a água desceu {drop:F2} m em 6 s" + (PoolTide.Current != null ? $" (maré: {PoolTide.Current.Phase})" : ""));
                     }
                     // Level 3: a entidade mora no Escritório e o alarme a chama.
                     if (_objective.Kind == SwitchKind.FireAlarm && !_entityChecked)
@@ -327,6 +363,8 @@ namespace BackRooms.EditorTools
                 return false;
             }
             if (Now - _entityAt < 0.5f) return false;
+            // No Escritório o inimigo é o Ascensorista (escondido num poço até chegar de elevador).
+            if (_entity is AttendantBrain attendant) return CheckAttendant(attendant);
             if (!_entityHeard)
             {
                 _entityHeard = true;
@@ -343,6 +381,45 @@ namespace BackRooms.EditorTools
                 return true;
             }
             if (Now - _entityAt > 12f) Finish(false, $"a entidade não andou no Escritório ({_entity.State}, {moved.magnitude:F1} m em 12 s)");
+            return false;
+        }
+
+        // O Ascensorista fora do andar: a sirene (o barulho do alarme pelo WorldNoise) o faz chegar logo
+        // de elevador e ir direto ao acionador. Verdadeiro quando ele saiu da cabine e andou para lá.
+        static bool CheckAttendant(AttendantBrain attendant)
+        {
+            Vector3 alarm = _objective.PointPosition(0) + _objective.PointFacing(0) * 1.2f;
+            if (!_entityHeard)
+            {
+                if (attendant.Phase != AttendantPhase.Away) { Finish(false, $"posto pelo diretor, o Ascensorista não foi se esconder num poço ({attendant.Phase})"); return false; }
+                EntityDirector.Paused = false; // ele só chega de elevador com o diretor ligado
+                int heard = attendant.WorldNoisesHeard;
+                WorldNoise.Emit(alarm, SwitchObjective.CompleteNoiseRadius);
+                if (attendant.WorldNoisesHeard == heard) { Finish(false, "a sirene (WorldNoise) não chegou ao Ascensorista"); return false; }
+                if (attendant.NextArrival > OfficeElevators.Clock() + 6.5) { Finish(false, $"a sirene não adiantou a chegada do Ascensorista (daqui a {attendant.NextArrival - OfficeElevators.Clock():F0} s)"); return false; }
+                _entityHeard = true;
+                _entityAt = Now;
+                return false;
+            }
+            if (attendant.Phase != AttendantPhase.Out)
+            {
+                if (Now - _entityAt > 30f) Finish(false, $"chamado pela sirene, o Ascensorista não saiu do elevador em 30 s ({attendant.Phase})");
+                return false;
+            }
+            if (_entityFrom == Vector3.zero || attendant.Shaft >= 0 && (_entityFrom - attendant.FrontPoint(attendant.Shaft)).sqrMagnitude > 0.01f)
+                _entityFrom = attendant.FrontPoint(attendant.Shaft);
+            Vector3 toAlarm = attendant.Goal - alarm;
+            toAlarm.y = 0f;
+            if (toAlarm.magnitude > 4.5f) { Finish(false, $"chamado pela sirene, o Ascensorista vai para outro lugar (destino a {toAlarm.magnitude:F1} m do acionador)"); return false; }
+            Vector3 moved = attendant.transform.position - _entityFrom;
+            moved.y = 0f;
+            if (moved.magnitude >= 2f)
+            {
+                EntityDirector.Paused = true;
+                Notes.Add($"o Ascensorista ouviu a sirene fora do andar, chegou de elevador e andou {moved.magnitude:F1} m para o acionador");
+                return true;
+            }
+            if (Now - _entityAt > 45f) Finish(false, $"o Ascensorista saiu do elevador e não andou para o acionador ({attendant.State}, {moved.magnitude:F1} m)");
             return false;
         }
 
@@ -431,15 +508,119 @@ namespace BackRooms.EditorTools
             }
         }
 
-        // Põe o jogador de frente para o ponto, a 1,1 m, e mira nele.
+        // Põe o jogador de frente para o ponto, a 1,1 m (de pé), ou à tona a 0,8 m se o ponto fica
+        // sobre a água funda, e mira nele.
         static void GoTo(int index)
+        {
+            _local.controller.Teleport(StandSpot(index), Yaw(-_objective.PointFacing(index)));
+            Aim(index);
+        }
+
+        static Vector3 StandSpot(int index)
         {
             Vector3 at = _objective.PointPosition(index);
             Vector3 facing = _objective.PointFacing(index);
+            if (_objective.PointInWater(index) && PoolWater.Current != null)
+            {
+                Vector3 spot = at + facing * 0.8f;
+                return new Vector3(spot.x, PoolWater.Current.SurfaceY - _local.controller.floatDepth, spot.z);
+            }
             Vector3 stand = at + facing * 1.1f;
-            float floor = at.y - _objective.MountHeight;
-            _local.controller.Teleport(new Vector3(stand.x, floor + 0.05f, stand.z), Yaw(-facing));
-            Aim(index);
+            return new Vector3(stand.x, _objective.PointFloor(index) + 0.05f, stand.z);
+        }
+
+        // ---------------------------------------------------------------- A nado (Level 2)
+
+        // Da última célula a pé da rota de menos nado até a válvula: pelo meio das divisas e das
+        // células, e por fim até a frente dela. Maré parada (o ralo da vazante não entra na conta).
+        static void StartSwim(int index)
+        {
+            IReadOnlyList<Vector2Int> cells = _objective.PointApproach(index);
+            _swimRoute = new List<Vector3>();
+            for (int k = 1; k < cells.Count; k++)
+            {
+                Vector3 a = _level.CellCenter(cells[k - 1].x, cells[k - 1].y), b = _level.CellCenter(cells[k].x, cells[k].y);
+                _swimRoute.Add((a + b) * 0.5f);
+                _swimRoute.Add(b);
+            }
+            _swimRoute.Add(StandSpot(index));
+            PoolTide.Paused = true;
+            StartKeyboard();
+            Vector3 shore = _level.CellCenter(cells[0].x, cells[0].y);
+            _local.controller.Teleport(shore + Vector3.up * 0.05f, Yaw(Flat(_swimRoute[0] - shore)));
+            _local.controller.SetPitch(0f);
+            _swimIndex = 0;
+            _swimBest = float.MaxValue;
+            _swimStart = _swimProgress = Now;
+            _swimLimit = cells.Count * LevelBuilder.Cell / 0.9f + 20f;
+            _swimSplashes = -1; // contados a partir do primeiro quadro depois do teleporte
+        }
+
+        // Um quadro da travessia: verdadeiro ao chegar à frente da válvula.
+        static bool SwimStep(int index)
+        {
+            PlayerController body = _local.controller;
+            Vector3 position = _local.transform.position;
+            if (_swimSplashes < 0 && _local.footsteps != null) _swimSplashes = _local.footsteps.Splashes;
+            if (body.IsReturning) { Finish(false, $"nadando até a válvula da água, o jogador voltou ao início ({position})"); return false; }
+            while (_swimIndex < _swimRoute.Count - 1 && Flat(_swimRoute[_swimIndex] - position).magnitude < 0.45f)
+            {
+                _swimIndex++;
+                _swimBest = float.MaxValue;
+                _swimProgress = Now;
+            }
+            Vector3 to = Flat(_swimRoute[_swimIndex] - position);
+            if (_swimIndex == _swimRoute.Count - 1 && to.magnitude < 0.35f)
+            {
+                KeepUp(index);
+                return true;
+            }
+            if (to.magnitude < _swimBest - 0.05f) { _swimBest = to.magnitude; _swimProgress = Now; }
+            Vector3 local = _level.transform.InverseTransformPoint(position);
+            var cell = new Vector2Int(Mathf.FloorToInt(local.x / LevelBuilder.Cell), Mathf.FloorToInt(local.z / LevelBuilder.Cell));
+            string where = $"pés em {position}, célula {cell}, ponto {_swimIndex + 1}/{_swimRoute.Count} a {to.magnitude:F2} m, nadando={body.IsSwimming}";
+            if (Now - _swimProgress > 8f) { Finish(false, "nadando até a válvula da água, parou de avançar: " + where); return false; }
+            if (Now - _swimStart > _swimLimit) { Finish(false, $"nadando até a válvula da água, tempo esgotado ({_swimLimit:F0} s): " + where); return false; }
+            if (to.sqrMagnitude > 0.0025f) _local.transform.rotation = Quaternion.Euler(0f, Yaw(to), 0f);
+            body.SetPitch(0f);
+            if (body.IsSwimming) Press(Key.W, Key.Space);
+            else Press(Key.W);
+            return false;
+        }
+
+        // Na água funda, segura Espaço (fica à tona); fora dela (ou com -1), solta tudo.
+        static void KeepUp(int index)
+        {
+            bool water = index >= 0 && _objective.PointInWater(index);
+            if (water) StartKeyboard();
+            if (water) Press(Key.Space);
+            else Press();
+        }
+
+        static Vector3 Flat(Vector3 v) => new Vector3(v.x, 0f, v.z);
+
+        static void StartKeyboard()
+        {
+            if (_keyboard != null) return;
+            _backgroundBefore = InputSystem.settings.backgroundBehavior;
+            _editorInputBefore = InputSystem.settings.editorInputBehaviorInPlayMode;
+            InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            _keyboard = InputSystem.AddDevice<Keyboard>();
+        }
+
+        static void Press(params Key[] keys)
+        {
+            if (_keyboard != null) InputSystem.QueueStateEvent(_keyboard, new KeyboardState(keys));
+        }
+
+        static void ReleaseKeyboard()
+        {
+            if (_keyboard == null) return;
+            InputSystem.RemoveDevice(_keyboard);
+            _keyboard = null;
+            InputSystem.settings.backgroundBehavior = _backgroundBefore;
+            InputSystem.settings.editorInputBehaviorInPlayMode = _editorInputBefore;
         }
 
         static void Aim(int index)
@@ -453,6 +634,15 @@ namespace BackRooms.EditorTools
             _local.controller.SetPitch(-Mathf.Atan2(to.y, flat.magnitude) * Mathf.Rad2Deg);
         }
 
+        // -seed N na linha de comando (padrão 1998): no Level 2, para escolher ilha ou parede sobre a funda.
+        static int SeedArg()
+        {
+            string[] args = System.Environment.GetCommandLineArgs();
+            for (int i = 0; i + 1 < args.Length; i++)
+                if (args[i] == "-seed" && int.TryParse(args[i + 1], out int seed)) return seed;
+            return 1998;
+        }
+
         static float Yaw(Vector3 direction) => Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
 
         static void Finish(bool ok, string report)
@@ -463,6 +653,8 @@ namespace BackRooms.EditorTools
             SwitchObjective.HoldForTest = false;
             SwitchObjective.PlayersForTest = 0;
             EntityDirector.Paused = false;
+            PoolTide.Paused = false;
+            ReleaseKeyboard();
             EditorApplication.update -= Tick;
             Application.logMessageReceived -= OnLog;
             SessionState.SetBool(ActiveKey, false);

@@ -63,10 +63,19 @@ namespace BackRooms.World
                         {
                             float mid = start + 0.6f + m * 1.2f;
                             OBox(office.lockerBody, back + along * mid + Vector3.up * 0.675f, Abs(along) * 1.18f + Abs(n) * 0.45f + Vector3.up * 1.35f);
+                            // Uma porta por módulo fica solta, numa dobradiça, para bater (LockerBangs).
+                            // A escolha é pela posição, sem sortear: não mexe no sorteio da fase.
+                            int looseCol = (x * 3 + z * 5 + m + (int)side) % 3 - 1;
+                            int looseRow = (x + z + m) % 2 == 0 ? 2 : 1;
                             for (int col = -1; col <= 1; col++)
                                 for (int row = 0; row < 3; row++)
                                 {
                                     Vector3 door = front + along * (mid + col * 0.39f) + Vector3.up * (0.275f + row * 0.43f) - n * 0.006f;
+                                    if (col == looseCol && row == looseRow)
+                                    {
+                                        LooseLockerDoor(door, along, n, x, z);
+                                        continue;
+                                    }
                                     OBox(office.lockerYellow, door, Abs(along) * 0.37f + Abs(n) * 0.012f + Vector3.up * 0.41f);
                                     OBox(office.darkMetal, door + along * 0.13f + Vector3.up * 0.1f - n * 0.008f, Abs(along) * 0.03f + Abs(n) * 0.006f + Vector3.up * 0.05f);
                                 }
@@ -76,6 +85,30 @@ namespace BackRooms.World
                                     Abs(along) * (modules * 1.2f) + Abs(n) * 0.45f + Vector3.up * 1.35f);
                     }
                 }
+        }
+
+        // Porta de armário solta: a dobradiça fica do lado oposto ao puxador; a folha e o puxador
+        // são filhos dela. Sem colisor próprio: fechada, está dentro do colisor do armário.
+        void LooseLockerDoor(Vector3 center, Vector3 along, Vector3 n, int x, int z)
+        {
+            if (_ok.Lockers == null) _ok.Lockers = CreateChild("PortasDeArmario").transform;
+
+            Vector3 hinge = center - along * 0.185f;
+            var root = new GameObject($"PortaDeArmario_{x}_{z}_{_ok.LockerDoors.Count}");
+            root.transform.SetParent(_ok.Lockers, false);
+            root.transform.localPosition = hinge;
+            Quaternion turn = Quaternion.LookRotation(-n, Vector3.up);
+            root.transform.localRotation = turn;
+            Quaternion back = Quaternion.Inverse(turn);
+
+            MeshRenderer leaf = CreateRenderer("Folha", _ok.LockerLeafMesh, office.lockerYellow, ShadowCastingMode.On, root.transform);
+            leaf.transform.localPosition = back * (center - hinge);
+            MeshRenderer handle = CreateRenderer("Puxador", _ok.LockerHandleMesh, office.darkMetal, ShadowCastingMode.Off, root.transform);
+            handle.transform.localPosition = back * (center + along * 0.13f + Vector3.up * 0.1f - n * 0.008f - hinge);
+
+            LockerDoor locker = root.AddComponent<LockerDoor>();
+            locker.Init(x, z, back * (center - hinge));
+            _ok.LockerDoors.Add(locker);
         }
 
         // Quadros elétricos, extintores e câmeras de segurança.
@@ -554,7 +587,8 @@ namespace BackRooms.World
                     OTube(office.steel, c + lateral * (s * (CabHalf - 0.06f)) - toLobby * 1.0f + rail, c + lateral * (s * (CabHalf - 0.06f)) + toLobby * 0.8f + rail, 0.02f, 8);
                 Vector3 panel = c + toLobby * (CabHalf - 0.012f) + lateral * 0.9f + Vector3.up * 1.2f;
                 OBox(office.steel, panel, Abs(lateral) * 0.24f + Abs(toLobby) * 0.02f + Vector3.up * 0.6f);
-                for (int i = 0; i < 6; i++)
+                // Os dois de baixo (abrir e fechar) se apertam: saem depois da porta, como objetos.
+                for (int i = 0; i < 4; i++)
                     OBox(i == 2 ? office.buttonAmber : office.darkMetal, panel - toLobby * 0.012f + Vector3.up * (0.2f - i * 0.075f),
                          Abs(lateral) * 0.035f + Abs(toLobby) * 0.006f + Vector3.up * 0.035f);
 
@@ -582,7 +616,27 @@ namespace BackRooms.World
                 var doors = rig.AddComponent<ElevatorDoors>();
                 doors.Init(left, right, lateral * 0.55f, e.IsCab, e.IsCab ? null : light, e.IsCab ? null : spots, office.tubeOn, office.tubeOff);
                 _ok.Elevators.Add(doors);
+                _ok.ElevatorLobby.Add(transform.TransformDirection(toLobby));
+
+                // Botões: abrir e fechar no painel de dentro; chamar no espelho do saguão.
+                Vector3 inner = panel - toLobby * 0.018f;
+                ElevatorButton(doors, ElevatorButtonKind.Open, inner + Vector3.up * (0.2f - 4 * 0.075f), -toLobby, e);
+                ElevatorButton(doors, ElevatorButtonKind.Close, inner + Vector3.up * (0.2f - 5 * 0.075f), -toLobby, e);
+                Vector3 call = c + toLobby * (Cell * 0.5f + OfficeWallThickness * 0.5f + 0.021f) + lateral * 0.98f + Vector3.up * 1.12f;
+                ElevatorButton(doors, ElevatorButtonKind.Call, call, toLobby, e);
             }
+        }
+
+        // Botão que se aperta (mira + E): malha pequena com um colisor um pouco maior, para a mira.
+        void ElevatorButton(ElevatorDoors doors, ElevatorButtonKind kind, Vector3 position, Vector3 facing, OfficeElevator e)
+        {
+            MeshRenderer button = CreateRenderer($"Botao{kind}_{e.X}_{e.Z}", _ok.ButtonMesh, office.darkMetal, ShadowCastingMode.Off, _ok.Moving);
+            button.transform.localPosition = position;
+            button.transform.localRotation = Quaternion.LookRotation(facing, Vector3.up);
+            button.gameObject.AddComponent<BoxCollider>().size = new Vector3(0.07f, 0.07f, 0.03f);
+            var control = button.gameObject.AddComponent<ElevatorButton>();
+            control.Init(doors, kind, button, office.darkMetal, office.buttonAmber);
+            _ok.ElevatorButtons.Add(control);
         }
 
         Transform Leaf(Transform rig, Vector3 offset, Vector3 toLobby)

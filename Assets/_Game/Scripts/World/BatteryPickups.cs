@@ -171,7 +171,7 @@ namespace BackRooms.World
         {
             Prompt = null;
             PlayerNetwork local = PlayerNetwork.Local;
-            bool pressed = (_use != null && _use.WasPressedThisFrame()) || PressForTest;
+            bool pressed = (_use != null && _use.WasPressedThisFrame() && !BackRooms.UI.PauseMenu.IsOpen) || PressForTest;
             PressForTest = false;
             if (local == null || !local.InGame || local.controller.IsReturning || local.controller.InFurniture) return;
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using BackRooms.Audio;
 using BackRooms.World;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -59,6 +60,10 @@ namespace BackRooms.EditorTools
         {
             LevelBuilder.OfficeLook look = EnsureMaterials();
             VolumeProfile profile = EnsureVolumeProfile();
+            // O Zelador, o inimigo do escuro (prefab regravado a cada montagem, como o do Capitão).
+            GameObject janitorPrefab = JanitorPreview.CreatePrefab();
+            // O Ascensorista, o inimigo cego que chega de elevador: é ele que o EntityDirector põe aqui.
+            GameObject attendantPrefab = AttendantPreview.CreatePrefab();
 
             Level0Setup.BuildScene(false, new Level0Setup.SceneOptions
             {
@@ -67,8 +72,12 @@ namespace BackRooms.EditorTools
                 size = Width,
                 pits = false,
                 alcoves = false,
-                // A entidade do Level 0 caça também aqui (decisão D6 de plano-de-acao.md, 19/11/2026).
+                // O diretor de inimigos põe o Ascensorista no lugar da entidade do Level 0 (que sai
+                // desta fase, 20/11/2026). Ele aparece logo que alguém sai da cabine e fica escondido
+                // num poço até a hora de chegar (AttendantBrain); o Zelador tem diretor próprio.
                 entity = true,
+                enemyPrefab = attendantPrefab,
+                enemyWakeCells = 1,
                 paintedArrows = false,
                 // O alarme de incêndio destrava a porta corta-fogo (decisão D7).
                 objective = SwitchKind.FireAlarm,
@@ -88,6 +97,21 @@ namespace BackRooms.EditorTools
                     // A onda de luzes (OfficeLightWave) toma o lugar do apagão do Level 0.
                     foreach (LightsOut lightsOut in Object.FindObjectsByType<LightsOut>(FindObjectsInactive.Include))
                         lightsOut.eventEnabled = false;
+
+                    // Sem o zumbido 2D das outras fases: aqui os reatores soam em cada luminária
+                    // (OfficeAmbience, montado com a planta) e calam onde a onda apaga.
+                    foreach (FluorescentHum hum in Object.FindObjectsByType<FluorescentHum>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                        Object.DestroyImmediate(hum);
+
+                    // O Zelador tem diretor próprio na sessão (só aparece no escuro e faz o corte de
+                    // energia do alarme); o EntityDirector fica com o inimigo do elevador.
+                    var session = Object.FindFirstObjectByType<BackRooms.Net.GameSession>();
+                    if (session != null)
+                    {
+                        var janitor = session.gameObject.AddComponent<BackRooms.Entities.JanitorDirector>();
+                        janitor.session = session;
+                        janitor.janitorPrefab = janitorPrefab;
+                    }
                 },
             });
             Debug.Log($"[BackRooms] Level 3 de teste montado em {ScenePath}: abra a cena, aperte Play e hospede (H).");
@@ -614,6 +638,13 @@ namespace BackRooms.EditorTools
                     if (builder.OfficeExitRoute.Count != 4) problems.Add($"seed {seed}: caminho da escada com {builder.OfficeExitRoute.Count} pontos");
                     if (Object.FindObjectsByType<LevelExit>().Length != 1) problems.Add($"seed {seed}: não há uma porta de saída só");
                     if (Object.FindObjectsByType<ElevatorDoors>().Length != 3) problems.Add($"seed {seed}: o saguão não tem 3 elevadores");
+                    if (Object.FindObjectsByType<ElevatorButton>().Length != 9) problems.Add($"seed {seed}: os elevadores não têm 9 botões (abrir, fechar e chamar em cada um)");
+                    if (Object.FindFirstObjectByType<FluorescentHum>() != null) problems.Add($"seed {seed}: a cena tem o zumbido 2D das outras fases");
+                    var ambience = Object.FindFirstObjectByType<OfficeAmbience>();
+                    if (ambience == null || ambience.LightCount == 0) problems.Add($"seed {seed}: sem som ambiente (ou sem luminárias nele)");
+                    var bangs = Object.FindFirstObjectByType<LockerBangs>();
+                    if (bangs == null || bangs.RowCount == 0) problems.Add($"seed {seed}: nenhum corredor com armários que batem");
+                    else Debug.Log($"[BackRooms] Level 3 seed {seed}: {bangs.DoorCount} portas de armário soltas em {bangs.RowCount} corredores, {ambience?.LightCount} luminárias e {ambience?.VentCount} difusores no som ambiente");
                     if (!d.InRoom(d.SpawnX, d.SpawnZ) || d.Office[d.SpawnX, d.SpawnZ] != OfficeCell.Cab) problems.Add($"seed {seed}: o início não é a cabine");
 
                     List<string> blocked = BlockedPath(builder);

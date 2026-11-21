@@ -124,7 +124,7 @@ namespace BackRooms.World
             Prompt = null;
             if (body == null || !local.InGame || body.IsReturning) return;
 
-            bool pressed = _use.WasPressedThisFrame() || PressForTest;
+            bool pressed = (_use.WasPressedThisFrame() && !BackRooms.UI.PauseMenu.IsOpen) || PressForTest;
             PressForTest = false;
 
             if (body.InFurniture)

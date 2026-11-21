@@ -119,7 +119,7 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &152129997
+--- !u!1 &696926178
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -127,196 +127,39 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 152130001}
-  - component: {fileID: 152130000}
-  - component: {fileID: 152129999}
-  - component: {fileID: 152129998}
+  - component: {fileID: 696926181}
+  - component: {fileID: 696926180}
+  - component: {fileID: 696926179}
   m_Layer: 0
-  m_Name: Filmadora
+  m_Name: MusicaDoMenu
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &152129998
+--- !u!114 &696926179
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 152129997}
+  m_GameObject: {fileID: 696926178}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 26d6499a6bd256e47b859377446493a1, type: 3}
+  m_Script: {fileID: 11500000, guid: defa749779a3d994a8e74c58a78759ca, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Unity.RenderPipelines.HighDefinition.Runtime::UnityEngine.Rendering.HighDefinition.CustomPassVolume
-  m_IsGlobal: 1
-  fadeRadius: 0
-  priority: 0
-  customPasses:
-  - rid: 3758726029727498240
-  injectionPoint: 3
-  m_TargetCamera: {fileID: 0}
-  useTargetCamera: 0
-  references:
-    version: 2
-    RefIds:
-    - rid: 3758726029727498240
-      type: {class: CamcorderPass, ns: BackRooms.UI, asm: Assembly-CSharp}
-      data:
-        m_Name: VHS
-        enabled: 1
-        targetColorBuffer: 0
-        targetDepthBuffer: 0
-        clearFlags: 0
-        passFoldout: 0
-        m_Version: 0
-        material: {fileID: 2100000, guid: 970fa29984c4636429cfa5d625a63651, type: 2}
---- !u!114 &152129999
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 152129997}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4be187c2a98715a43ab1f157c8deccea, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.UI.ScreenRecorder
-  width: 854
-  height: 480
-  framesPerSecond: 20
-  quality: 78
-  maxMinutes: 15
---- !u!114 &152130000
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 152129997}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a7663cf0a4f82364aaba1a49ef8c524d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.UI.Camcorder
-  startYear: 1998
-  startMonth: 11
-  startDay: 10
-  startHour: 2
-  startMinute: 13
-  startGlitchSeconds: 0.9
-  noSignalHold: 0.35
-  entityNoiseRange: 16
-  underwaterNoise: 0.45
-  entityNoiseMax: 0.6
---- !u!4 &152130001
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 152129997}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &211606995
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 211606997}
-  - component: {fileID: 211606996}
-  m_Layer: 0
-  m_Name: Rabiscos
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &211606996
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 211606995}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9d1be381e453e2843abba9a3ec16ffa7, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Items.DrawingBoard
-  inkMaterials:
-  - {fileID: 2100000, guid: a46ffc5abc2290f4fbb4b14735b0ba20, type: 2}
-  - {fileID: 2100000, guid: ae5bfce0ffa6b7f44935c5d70de2d81c, type: 2}
-  - {fileID: 2100000, guid: 2dc6e743c81d19146b5b3cd33a214682, type: 2}
-  lineWidth: 0.024
-  maxStrokes: 1500
---- !u!4 &211606997
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 211606995}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &237401257
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 237401260}
-  - component: {fileID: 237401259}
-  - component: {fileID: 237401258}
-  m_Layer: 0
-  m_Name: Ambiencia
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &237401258
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 237401257}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 37a394b53e66e994eb7478027f621aaa, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Audio.FluorescentHum
-  volume: 0.22
-  harmonics: 36
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Audio.MenuMusic
+  clip: {fileID: 8300000, guid: c44743c1a38fa664bac69dac0efdb9f2, type: 3}
+  volume: 0.4
   fadeInSeconds: 1.5
   fadeOutSeconds: 1.5
---- !u!82 &237401259
+--- !u!82 &696926180
 AudioSource:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 237401257}
+  m_GameObject: {fileID: 696926178}
   m_Enabled: 1
   serializedVersion: 4
   OutputAudioMixerGroup: {fileID: 0}
@@ -407,13 +250,13 @@ AudioSource:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
---- !u!4 &237401260
+--- !u!4 &696926181
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 237401257}
+  m_GameObject: {fileID: 696926178}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -422,7 +265,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &454508863
+--- !u!1 &812585390
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -430,39 +273,156 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 454508865}
-  - component: {fileID: 454508864}
+  - component: {fileID: 812585396}
+  - component: {fileID: 812585395}
+  - component: {fileID: 812585394}
+  - component: {fileID: 812585391}
+  - component: {fileID: 812585393}
+  - component: {fileID: 812585392}
   m_Layer: 0
-  m_Name: Global Volume
+  m_Name: Sessao
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &454508864
+--- !u!114 &812585391
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 454508863}
+  m_GameObject: {fileID: 812585390}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 172515602e62fb746b5d573b38a5fe58, type: 3}
+  m_Script: {fileID: 11500000, guid: ce454518bacc40c4294fcee3d986551a, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Unity.RenderPipelines.Core.Runtime::UnityEngine.Rendering.Volume
-  m_IsGlobal: 1
-  priority: 1
-  blendDistance: 0
-  weight: 1
-  sharedProfile: {fileID: 11400000, guid: fdb58efe92c5d514598f05414df3c6db, type: 2}
---- !u!4 &454508865
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Net.GameSession
+  level: {fileID: 1059699355}
+  menuCamera: {fileID: 1340829291}
+  menuListener: {fileID: 1340829290}
+  port: 7777
+  fixedSeed: 0
+  menuSeed: 1998
+  menuSpin: 3
+--- !u!114 &812585392
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 812585390}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b2d0b7ecc9ce5da4eb725bc9ab8a6265, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.World.LightsOut
+  session: {fileID: 812585391}
+  firstDarkAt: 60
+  darkSeconds: 10
+  litSeconds: 30
+  warningSeconds: 10
+  hurrySeconds: 2
+  ambientLeft: 0.012
+  eventEnabled: 1
+--- !u!114 &812585393
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 812585390}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b873e14d1b821b94399e3c20a91dc680, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Entities.EntityDirector
+  session: {fileID: 812585391}
+  entityPrefab: {fileID: 3807740957045527313, guid: ef6b1c19fbc1e2f44b6ecbd3ecb067af, type: 3}
+  entityEnabled: 1
+  wakeCells: 8
+  minSeconds: 15
+  minCellsFromPlayers: 4
+--- !u!114 &812585394
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 812585390}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6960e84d07fb87f47956e7a81d71c4e6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.Transports.UTP.UnityTransport
+  m_ProtocolType: 0
+  m_UseWebSockets: 0
+  m_UseEncryption: 0
+  m_MaxPacketQueueSize: 128
+  m_MaxPayloadSize: 6144
+  m_HeartbeatTimeoutMS: 500
+  m_ConnectTimeoutMS: 1000
+  m_MaxConnectAttempts: 60
+  m_DisconnectTimeoutMS: 30000
+  ConnectionData:
+    Address: 127.0.0.1
+    Port: 7777
+    WebSocketPath: /
+    ServerListenAddress: 127.0.0.1
+    ClientBindPort: 0
+  DebugSimulator:
+    PacketDelayMS: 0
+    PacketJitterMS: 0
+    PacketDropRate: 0
+--- !u!114 &812585395
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 812585390}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 593a2fe42fa9d37498c96f9a383b6521, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkManager
+  NetworkManagerExpanded: 0
+  NetworkConfig:
+    ProtocolVersion: 0
+    NetworkTransport: {fileID: 812585394}
+    PlayerPrefab: {fileID: 5776794574773400324, guid: efaadefa582438d40813cc2d6e2adf88, type: 3}
+    Prefabs:
+      NetworkPrefabsLists:
+      - {fileID: 11400000, guid: 8c05a5ad719be104e9f3d3809e6702a0, type: 2}
+    TickRate: 30
+    ClientConnectionBufferTimeout: 10
+    ConnectionApproval: 0
+    ConnectionData: 
+    EnableTimeResync: 0
+    TimeResyncInterval: 30
+    EnsureNetworkVariableLengthSafety: 0
+    EnableSceneManagement: 0
+    ForceSamePrefabs: 1
+    RecycleNetworkIds: 1
+    NetworkIdRecycleDelay: 120
+    RpcHashSize: 0
+    LoadSceneTimeOut: 120
+    SpawnTimeout: 10
+    EnableNetworkLogs: 1
+    NetworkTopology: 0
+    UseCMBService: 0
+    AutoSpawnPlayerPrefabClientSide: 1
+    NetworkProfilingMetrics: 1
+    OldPrefabList: []
+  RunInBackground: 1
+  LogLevel: 1
+--- !u!4 &812585396
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 454508863}
+  m_GameObject: {fileID: 812585390}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -471,7 +431,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &564564050
+--- !u!1 &896094808
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -479,10 +439,426 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 564564054}
-  - component: {fileID: 564564052}
-  - component: {fileID: 564564053}
-  - component: {fileID: 564564051}
+  - component: {fileID: 896094812}
+  - component: {fileID: 896094811}
+  - component: {fileID: 896094810}
+  - component: {fileID: 896094809}
+  m_Layer: 0
+  m_Name: Filmadora
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &896094809
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 896094808}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26d6499a6bd256e47b859377446493a1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.HighDefinition.Runtime::UnityEngine.Rendering.HighDefinition.CustomPassVolume
+  m_IsGlobal: 1
+  fadeRadius: 0
+  priority: 0
+  customPasses:
+  - rid: 822683670404661248
+  injectionPoint: 3
+  m_TargetCamera: {fileID: 0}
+  useTargetCamera: 0
+  references:
+    version: 2
+    RefIds:
+    - rid: 822683670404661248
+      type: {class: CamcorderPass, ns: BackRooms.UI, asm: Assembly-CSharp}
+      data:
+        m_Name: VHS
+        enabled: 1
+        targetColorBuffer: 0
+        targetDepthBuffer: 0
+        clearFlags: 0
+        passFoldout: 0
+        m_Version: 0
+        material: {fileID: 2100000, guid: 970fa29984c4636429cfa5d625a63651, type: 2}
+--- !u!114 &896094810
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 896094808}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4be187c2a98715a43ab1f157c8deccea, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.UI.ScreenRecorder
+  width: 854
+  height: 480
+  framesPerSecond: 20
+  quality: 78
+  maxMinutes: 15
+--- !u!114 &896094811
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 896094808}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7663cf0a4f82364aaba1a49ef8c524d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.UI.Camcorder
+  startYear: 1998
+  startMonth: 11
+  startDay: 10
+  startHour: 2
+  startMinute: 13
+  startGlitchSeconds: 0.9
+  noSignalHold: 0.35
+  entityNoiseRange: 16
+  underwaterNoise: 0.45
+  entityNoiseMax: 0.6
+--- !u!4 &896094812
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 896094808}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1057617777
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1057617780}
+  - component: {fileID: 1057617779}
+  - component: {fileID: 1057617778}
+  m_Layer: 0
+  m_Name: EventSystem
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1057617778
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1057617777}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 01614664b831546d2ae94a42149d80ac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.UI.InputSystemUIInputModule
+  m_SendPointerHoverToParent: 1
+  m_MoveRepeatDelay: 0.5
+  m_MoveRepeatRate: 0.1
+  m_XRTrackingOrigin: {fileID: 0}
+  m_ActionsAsset: {fileID: -944628639613478452, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_PointAction: {fileID: -1654692200621890270, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_MoveAction: {fileID: -8784545083839296357, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_SubmitAction: {fileID: 392368643174621059, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_CancelAction: {fileID: 7727032971491509709, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_LeftClickAction: {fileID: 3001919216989983466, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_MiddleClickAction: {fileID: -2185481485913320682, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_RightClickAction: {fileID: -4090225696740746782, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_ScrollWheelAction: {fileID: 6240969308177333660, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_TrackedDevicePositionAction: {fileID: 6564999863303420839, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_TrackedDeviceOrientationAction: {fileID: 7970375526676320489, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_DeselectOnBackgroundClick: 1
+  m_PointerBehavior: 0
+  m_CursorLockBehavior: 0
+  m_ScrollDeltaPerTick: 6
+--- !u!114 &1057617779
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1057617777}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 76c392e42b5098c458856cdf6ecaaaa1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.EventSystems.EventSystem
+  m_FirstSelected: {fileID: 0}
+  m_sendNavigationEvents: 1
+  m_DragThreshold: 10
+--- !u!4 &1057617780
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1057617777}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1059699354
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1059699356}
+  - component: {fileID: 1059699355}
+  m_Layer: 0
+  m_Name: Level0
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1059699355
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1059699354}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9c0deb09d1ea37e47a9a612752e0419f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.World.LevelBuilder
+  objective: 1
+  switchBodyMaterial: {fileID: 2100000, guid: d44600c1feedfb74ca1e6d166d8d3dc5, type: 2}
+  switchLampMaterial: {fileID: 2100000, guid: 0031e3b92cf3fa440a03a3a1622420a9, type: 2}
+  batteriesEnabled: 1
+  waterValve: 1
+  officeEnabled: 0
+  office:
+    wall: {fileID: 0}
+    floorTile: {fileID: 0}
+    floorWood: {fileID: 0}
+    slab: {fileID: 0}
+    ceilingTile: {fileID: 0}
+    slats: {fileID: 0}
+    baseboard: {fileID: 0}
+    steel: {fileID: 0}
+    galvanized: {fileID: 0}
+    pipeRed: {fileID: 0}
+    frameWhite: {fileID: 0}
+    glass: {fileID: 0}
+    windowDay: {fileID: 0}
+    lockerYellow: {fileID: 0}
+    lockerBody: {fileID: 0}
+    darkMetal: {fileID: 0}
+    blackPlastic: {fileID: 0}
+    granite: {fileID: 0}
+    osb: {fileID: 0}
+    fabric: {fileID: 0}
+    plant: {fileID: 0}
+    concrete: {fileID: 0}
+    tubeOn: {fileID: 0}
+    tubeOff: {fileID: 0}
+    panelOn: {fileID: 0}
+    panelOff: {fileID: 0}
+    domeOn: {fileID: 0}
+    domeOff: {fileID: 0}
+    signGreen: {fileID: 0}
+    ledRed: {fileID: 0}
+    ledGreen: {fileID: 0}
+    screenOff: {fileID: 0}
+    whiteboard: {fileID: 0}
+    buttonAmber: {fileID: 0}
+    skylight: {fileID: 0}
+    voidBlack: {fileID: 0}
+    fridgeGlass: {fileID: 0}
+    exitDoor: {fileID: 0}
+  officeTubeCandela: 1900
+  officeRoomCandela: 1700
+  officePendantCandela: 1500
+  officeWindowCandela: 600
+  officeCabCandela: 260
+  officeAtriumCandela: 60000
+  poolWetMaterial: {fileID: 0}
+  poolTideLineMaterial: {fileID: 0}
+  poolAlarmMaterial: {fileID: 0}
+  seed: 1998
+  pitsEnabled: 1
+  alcovesEnabled: 1
+  paintedArrows: 1
+  poolsEnabled: 0
+  width: 20
+  height: 20
+  ceilingHeight: 4.05
+  wallMaterial: {fileID: 2100000, guid: 5d59c245b5fd55c4a9288726faff8fc5, type: 2}
+  floorMaterial: {fileID: 2100000, guid: b914b9d326000534599b9c33e969e841, type: 2}
+  ceilingMaterial: {fileID: 2100000, guid: 8f88bc619fbbef04eaceb02dc76950d1, type: 2}
+  baseboardMaterial: {fileID: 2100000, guid: 3af4249077abb21428795bc0bbfd4ddd, type: 2}
+  panelOnMaterial: {fileID: 2100000, guid: a82e6a790ef10334ea42fb0e33d97501, type: 2}
+  panelOffMaterial: {fileID: 2100000, guid: e274b1bee8383614fb837fd57390d38d, type: 2}
+  lightHousingMaterial: {fileID: 2100000, guid: daf309537d059bc4ab1819cc95d8a19d, type: 2}
+  cleanWallMaterial: {fileID: 2100000, guid: 38d1f851ac03bd94d908974140bb49dc, type: 2}
+  cleanFloorMaterial: {fileID: 2100000, guid: 133ec91f00b99a047b882dff282ff098, type: 2}
+  pitMaterial: {fileID: 2100000, guid: 936722f120fd13d42b3a94a22eedce21, type: 2}
+  pitSmokeMaterial: {fileID: 2100000, guid: 0bf890f3fefc95348ba87f8888353adb, type: 2}
+  pitVoidMaterial: {fileID: 2100000, guid: 42375da61a3d82c4d9f9d8c4a9be770a, type: 2}
+  poolBottomMaterial: {fileID: 0}
+  copingMaterial: {fileID: 0}
+  waterMaterial: {fileID: 0}
+  poolTileMeters: 1.2
+  poolMosaicMeters: 0.7
+  poolWornTileMaterial: {fileID: 0}
+  poolAccentMaterial: {fileID: 0}
+  poolWindowMaterial: {fileID: 0}
+  poolGlassBlockMaterial: {fileID: 0}
+  poolLampMaterial: {fileID: 0}
+  poolCausticsMaterial: {fileID: 0}
+  poolRailMaterial: {fileID: 0}
+  poolSkyLux: 900
+  poolSkyTemperature: 5600
+  poolSkyCookie: {fileID: 0}
+  poolSkyBeams: 1
+  poolSunTilt: 28
+  poolSunHeading: 35
+  poolWindowCandela: 900
+  poolLampCandela: 260
+  poolLampColor: {r: 0.55, g: 0.95, b: 1, a: 1}
+  poolStainDecals: []
+  poolMarkDecals: []
+  lightCandela: 2300
+  lightRange: 15
+  lightTemperature: 6000
+  panelScale: 1
+  ceilingShadows: 1
+  maxShadowResolution: 256
+  lampsLightFog: 0
+  lightFadeDistance: 25
+  decalDrawDistance: 25
+  arrowDrawDistance: 40
+  bloodDecals:
+  - {fileID: 2100000, guid: dbbc92c7bd601da408d7b78610c1b3bd, type: 2}
+  - {fileID: 2100000, guid: 2ec571168e831f94f9feb1ce5041cb21, type: 2}
+  - {fileID: 2100000, guid: 5da7b7a1ed9a93749b6db312b19bb03c, type: 2}
+  textDecals:
+  - {fileID: 2100000, guid: eda07d24751f161488aae4aa606446a4, type: 2}
+  - {fileID: 2100000, guid: 9d3ccdccb93945641a8a7976de9ed642, type: 2}
+  - {fileID: 2100000, guid: d932dc5c5de418943a9b97d36ca762b6, type: 2}
+  poolDecals:
+  - {fileID: 2100000, guid: 75a906b4b0d41cf47a6cf5add86d2658, type: 2}
+  - {fileID: 2100000, guid: cc240ce982a202a41a35a8077c02f84d, type: 2}
+  arrowDecal: {fileID: 2100000, guid: 8ba8dbbf645f3c24982a818855659bc3, type: 2}
+  wallStainDecals:
+  - {fileID: 2100000, guid: 170642a31bef5984ebbd47f635574221, type: 2}
+  - {fileID: 2100000, guid: bd927c4ffe1994640888954c1fa85125, type: 2}
+  - {fileID: 2100000, guid: 6bcfd51e3afc4904a95422fa44f91597, type: 2}
+  wallScuffDecal: {fileID: 2100000, guid: 7b1e0311d58ad794f9f18a610b37c3f0, type: 2}
+  floorWetDecals:
+  - {fileID: 2100000, guid: c78b7005d98f9a04db0724c0c33c3429, type: 2}
+  - {fileID: 2100000, guid: 020511cca30994741bb3d2a24b6f21b9, type: 2}
+  floorWearDecal: {fileID: 2100000, guid: d07d6040cc148724aa795508dfb5bd0e, type: 2}
+  ventMaterial: {fileID: 2100000, guid: 953554d5e07e1d546973487ed68326e9, type: 2}
+  ventHeight: 3.45
+  exitDoorMaterial: {fileID: 2100000, guid: 7a2445cab5b01f942afa5039cc3dc673, type: 2}
+  exitSignMaterial: {fileID: 2100000, guid: 12a2784b079c4cb49996a3ac58d8abf7, type: 2}
+  exitDoorModel: {fileID: 4300000, guid: 261c02ea27c048241b356f7cbfea8ee0, type: 2}
+  exitDoorModelMaterial: {fileID: 2100000, guid: 74586da25b3e8114199dc24a01a29656, type: 2}
+  contentVersion: 23
+  buildOnAwake: 0
+--- !u!4 &1059699356
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1059699354}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1301350139
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1301350141}
+  - component: {fileID: 1301350140}
+  m_Layer: 0
+  m_Name: Rabiscos
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1301350140
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1301350139}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9d1be381e453e2843abba9a3ec16ffa7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Items.DrawingBoard
+  inkMaterials:
+  - {fileID: 2100000, guid: a46ffc5abc2290f4fbb4b14735b0ba20, type: 2}
+  - {fileID: 2100000, guid: ae5bfce0ffa6b7f44935c5d70de2d81c, type: 2}
+  - {fileID: 2100000, guid: 2dc6e743c81d19146b5b3cd33a214682, type: 2}
+  lineWidth: 0.024
+  maxStrokes: 1500
+--- !u!4 &1301350141
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1301350139}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1340829289
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1340829293}
+  - component: {fileID: 1340829291}
+  - component: {fileID: 1340829292}
+  - component: {fileID: 1340829290}
   m_Layer: 0
   m_Name: CameraDoMenu
   m_TagString: Untagged
@@ -490,21 +866,21 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!81 &564564051
+--- !u!81 &1340829290
 AudioListener:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 564564050}
+  m_GameObject: {fileID: 1340829289}
   m_Enabled: 1
---- !u!20 &564564052
+--- !u!20 &1340829291
 Camera:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 564564050}
+  m_GameObject: {fileID: 1340829289}
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 1
@@ -549,13 +925,13 @@ Camera:
   m_OcclusionCulling: 1
   m_StereoConvergence: 10
   m_StereoSeparation: 0.022
---- !u!114 &564564053
+--- !u!114 &1340829292
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 564564050}
+  m_GameObject: {fileID: 1340829289}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 23c1ce4fb46143f46bc5cb5224c934f6, type: 3}
@@ -688,13 +1064,13 @@ MonoBehaviour:
       data1: 0
       data2: 0
   defaultFrameSettings: 0
---- !u!4 &564564054
+--- !u!4 &1340829293
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 564564050}
+  m_GameObject: {fileID: 1340829289}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 1.65, z: 0}
@@ -703,7 +1079,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &574239457
+--- !u!1 &1637923100
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -711,529 +1087,39 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 574239463}
-  - component: {fileID: 574239462}
-  - component: {fileID: 574239461}
-  - component: {fileID: 574239458}
-  - component: {fileID: 574239460}
-  - component: {fileID: 574239459}
+  - component: {fileID: 1637923103}
+  - component: {fileID: 1637923102}
+  - component: {fileID: 1637923101}
   m_Layer: 0
-  m_Name: Sessao
+  m_Name: Ambiencia
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &574239458
+--- !u!114 &1637923101
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 574239457}
+  m_GameObject: {fileID: 1637923100}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ce454518bacc40c4294fcee3d986551a, type: 3}
+  m_Script: {fileID: 11500000, guid: 37a394b53e66e994eb7478027f621aaa, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Net.GameSession
-  level: {fileID: 635550983}
-  menuCamera: {fileID: 564564052}
-  menuListener: {fileID: 564564051}
-  port: 7777
-  fixedSeed: 0
-  menuSeed: 1998
-  menuSpin: 3
---- !u!114 &574239459
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 574239457}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b2d0b7ecc9ce5da4eb725bc9ab8a6265, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.World.LightsOut
-  session: {fileID: 574239458}
-  firstDarkAt: 60
-  darkSeconds: 10
-  litSeconds: 30
-  warningSeconds: 10
-  hurrySeconds: 2
-  ambientLeft: 0.012
-  eventEnabled: 1
---- !u!114 &574239460
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 574239457}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b873e14d1b821b94399e3c20a91dc680, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Entities.EntityDirector
-  session: {fileID: 574239458}
-  entityPrefab: {fileID: 3807740957045527313, guid: ef6b1c19fbc1e2f44b6ecbd3ecb067af, type: 3}
-  entityEnabled: 1
-  wakeCells: 8
-  minSeconds: 15
-  minCellsFromPlayers: 4
---- !u!114 &574239461
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 574239457}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6960e84d07fb87f47956e7a81d71c4e6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.Transports.UTP.UnityTransport
-  m_ProtocolType: 0
-  m_UseWebSockets: 0
-  m_UseEncryption: 0
-  m_MaxPacketQueueSize: 128
-  m_MaxPayloadSize: 6144
-  m_HeartbeatTimeoutMS: 500
-  m_ConnectTimeoutMS: 1000
-  m_MaxConnectAttempts: 60
-  m_DisconnectTimeoutMS: 30000
-  ConnectionData:
-    Address: 127.0.0.1
-    Port: 7777
-    WebSocketPath: /
-    ServerListenAddress: 127.0.0.1
-    ClientBindPort: 0
-  DebugSimulator:
-    PacketDelayMS: 0
-    PacketJitterMS: 0
-    PacketDropRate: 0
---- !u!114 &574239462
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 574239457}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 593a2fe42fa9d37498c96f9a383b6521, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkManager
-  NetworkManagerExpanded: 0
-  NetworkConfig:
-    ProtocolVersion: 0
-    NetworkTransport: {fileID: 574239461}
-    PlayerPrefab: {fileID: 5776794574773400324, guid: efaadefa582438d40813cc2d6e2adf88, type: 3}
-    Prefabs:
-      NetworkPrefabsLists:
-      - {fileID: 11400000, guid: 8c05a5ad719be104e9f3d3809e6702a0, type: 2}
-    TickRate: 30
-    ClientConnectionBufferTimeout: 10
-    ConnectionApproval: 0
-    ConnectionData: 
-    EnableTimeResync: 0
-    TimeResyncInterval: 30
-    EnsureNetworkVariableLengthSafety: 0
-    EnableSceneManagement: 0
-    ForceSamePrefabs: 1
-    RecycleNetworkIds: 1
-    NetworkIdRecycleDelay: 120
-    RpcHashSize: 0
-    LoadSceneTimeOut: 120
-    SpawnTimeout: 10
-    EnableNetworkLogs: 1
-    NetworkTopology: 0
-    UseCMBService: 0
-    AutoSpawnPlayerPrefabClientSide: 1
-    NetworkProfilingMetrics: 1
-    OldPrefabList: []
-  RunInBackground: 1
-  LogLevel: 1
---- !u!4 &574239463
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 574239457}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &635550982
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 635550984}
-  - component: {fileID: 635550983}
-  m_Layer: 0
-  m_Name: Level0
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &635550983
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 635550982}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9c0deb09d1ea37e47a9a612752e0419f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.World.LevelBuilder
-  objective: 1
-  switchBodyMaterial: {fileID: 2100000, guid: d44600c1feedfb74ca1e6d166d8d3dc5, type: 2}
-  switchLampMaterial: {fileID: 2100000, guid: 0031e3b92cf3fa440a03a3a1622420a9, type: 2}
-  batteriesEnabled: 1
-  officeEnabled: 0
-  office:
-    wall: {fileID: 0}
-    floorTile: {fileID: 0}
-    floorWood: {fileID: 0}
-    slab: {fileID: 0}
-    ceilingTile: {fileID: 0}
-    slats: {fileID: 0}
-    baseboard: {fileID: 0}
-    steel: {fileID: 0}
-    galvanized: {fileID: 0}
-    pipeRed: {fileID: 0}
-    frameWhite: {fileID: 0}
-    glass: {fileID: 0}
-    windowDay: {fileID: 0}
-    lockerYellow: {fileID: 0}
-    lockerBody: {fileID: 0}
-    darkMetal: {fileID: 0}
-    blackPlastic: {fileID: 0}
-    granite: {fileID: 0}
-    osb: {fileID: 0}
-    fabric: {fileID: 0}
-    plant: {fileID: 0}
-    concrete: {fileID: 0}
-    tubeOn: {fileID: 0}
-    tubeOff: {fileID: 0}
-    panelOn: {fileID: 0}
-    panelOff: {fileID: 0}
-    domeOn: {fileID: 0}
-    domeOff: {fileID: 0}
-    signGreen: {fileID: 0}
-    ledRed: {fileID: 0}
-    ledGreen: {fileID: 0}
-    screenOff: {fileID: 0}
-    whiteboard: {fileID: 0}
-    buttonAmber: {fileID: 0}
-    skylight: {fileID: 0}
-    voidBlack: {fileID: 0}
-    fridgeGlass: {fileID: 0}
-    exitDoor: {fileID: 0}
-  officeTubeCandela: 1900
-  officeRoomCandela: 1700
-  officePendantCandela: 1500
-  officeWindowCandela: 600
-  officeCabCandela: 260
-  officeAtriumCandela: 60000
-  seed: 1998
-  pitsEnabled: 1
-  alcovesEnabled: 1
-  paintedArrows: 1
-  poolsEnabled: 0
-  width: 20
-  height: 20
-  ceilingHeight: 4.05
-  wallMaterial: {fileID: 2100000, guid: 5d59c245b5fd55c4a9288726faff8fc5, type: 2}
-  floorMaterial: {fileID: 2100000, guid: b914b9d326000534599b9c33e969e841, type: 2}
-  ceilingMaterial: {fileID: 2100000, guid: 8f88bc619fbbef04eaceb02dc76950d1, type: 2}
-  baseboardMaterial: {fileID: 2100000, guid: 3af4249077abb21428795bc0bbfd4ddd, type: 2}
-  panelOnMaterial: {fileID: 2100000, guid: a82e6a790ef10334ea42fb0e33d97501, type: 2}
-  panelOffMaterial: {fileID: 2100000, guid: e274b1bee8383614fb837fd57390d38d, type: 2}
-  lightHousingMaterial: {fileID: 2100000, guid: daf309537d059bc4ab1819cc95d8a19d, type: 2}
-  cleanWallMaterial: {fileID: 2100000, guid: 38d1f851ac03bd94d908974140bb49dc, type: 2}
-  cleanFloorMaterial: {fileID: 2100000, guid: 133ec91f00b99a047b882dff282ff098, type: 2}
-  pitMaterial: {fileID: 2100000, guid: 936722f120fd13d42b3a94a22eedce21, type: 2}
-  pitSmokeMaterial: {fileID: 2100000, guid: 0bf890f3fefc95348ba87f8888353adb, type: 2}
-  pitVoidMaterial: {fileID: 2100000, guid: 42375da61a3d82c4d9f9d8c4a9be770a, type: 2}
-  poolBottomMaterial: {fileID: 0}
-  copingMaterial: {fileID: 0}
-  waterMaterial: {fileID: 0}
-  poolTileMeters: 1.2
-  poolMosaicMeters: 0.7
-  poolWornTileMaterial: {fileID: 0}
-  poolAccentMaterial: {fileID: 0}
-  poolWindowMaterial: {fileID: 0}
-  poolGlassBlockMaterial: {fileID: 0}
-  poolLampMaterial: {fileID: 0}
-  poolCausticsMaterial: {fileID: 0}
-  poolRailMaterial: {fileID: 0}
-  poolSkyLux: 900
-  poolSkyTemperature: 5600
-  poolSkyCookie: {fileID: 0}
-  poolSkyBeams: 1
-  poolSunTilt: 28
-  poolSunHeading: 35
-  poolWindowCandela: 900
-  poolLampCandela: 260
-  poolLampColor: {r: 0.55, g: 0.95, b: 1, a: 1}
-  poolStainDecals: []
-  poolMarkDecals: []
-  lightCandela: 2300
-  lightRange: 15
-  lightTemperature: 6000
-  panelScale: 1
-  ceilingShadows: 1
-  maxShadowResolution: 256
-  lampsLightFog: 0
-  lightFadeDistance: 25
-  decalDrawDistance: 25
-  arrowDrawDistance: 40
-  bloodDecals:
-  - {fileID: 2100000, guid: dbbc92c7bd601da408d7b78610c1b3bd, type: 2}
-  - {fileID: 2100000, guid: 2ec571168e831f94f9feb1ce5041cb21, type: 2}
-  - {fileID: 2100000, guid: 5da7b7a1ed9a93749b6db312b19bb03c, type: 2}
-  textDecals:
-  - {fileID: 2100000, guid: eda07d24751f161488aae4aa606446a4, type: 2}
-  - {fileID: 2100000, guid: 9d3ccdccb93945641a8a7976de9ed642, type: 2}
-  - {fileID: 2100000, guid: d932dc5c5de418943a9b97d36ca762b6, type: 2}
-  poolDecals:
-  - {fileID: 2100000, guid: 75a906b4b0d41cf47a6cf5add86d2658, type: 2}
-  - {fileID: 2100000, guid: cc240ce982a202a41a35a8077c02f84d, type: 2}
-  arrowDecal: {fileID: 2100000, guid: 8ba8dbbf645f3c24982a818855659bc3, type: 2}
-  wallStainDecals:
-  - {fileID: 2100000, guid: 170642a31bef5984ebbd47f635574221, type: 2}
-  - {fileID: 2100000, guid: bd927c4ffe1994640888954c1fa85125, type: 2}
-  - {fileID: 2100000, guid: 6bcfd51e3afc4904a95422fa44f91597, type: 2}
-  wallScuffDecal: {fileID: 2100000, guid: 7b1e0311d58ad794f9f18a610b37c3f0, type: 2}
-  floorWetDecals:
-  - {fileID: 2100000, guid: c78b7005d98f9a04db0724c0c33c3429, type: 2}
-  - {fileID: 2100000, guid: 020511cca30994741bb3d2a24b6f21b9, type: 2}
-  floorWearDecal: {fileID: 2100000, guid: d07d6040cc148724aa795508dfb5bd0e, type: 2}
-  ventMaterial: {fileID: 2100000, guid: 953554d5e07e1d546973487ed68326e9, type: 2}
-  ventHeight: 3.45
-  exitDoorMaterial: {fileID: 2100000, guid: 7a2445cab5b01f942afa5039cc3dc673, type: 2}
-  exitSignMaterial: {fileID: 2100000, guid: 12a2784b079c4cb49996a3ac58d8abf7, type: 2}
-  exitDoorModel: {fileID: 4300000, guid: 261c02ea27c048241b356f7cbfea8ee0, type: 2}
-  exitDoorModelMaterial: {fileID: 2100000, guid: 74586da25b3e8114199dc24a01a29656, type: 2}
-  contentVersion: 22
-  buildOnAwake: 0
---- !u!4 &635550984
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 635550982}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &957856394
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 957856397}
-  - component: {fileID: 957856396}
-  - component: {fileID: 957856395}
-  m_Layer: 0
-  m_Name: EventSystem
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &957856395
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 957856394}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 01614664b831546d2ae94a42149d80ac, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.UI.InputSystemUIInputModule
-  m_SendPointerHoverToParent: 1
-  m_MoveRepeatDelay: 0.5
-  m_MoveRepeatRate: 0.1
-  m_XRTrackingOrigin: {fileID: 0}
-  m_ActionsAsset: {fileID: -944628639613478452, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_PointAction: {fileID: -1654692200621890270, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_MoveAction: {fileID: -8784545083839296357, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_SubmitAction: {fileID: 392368643174621059, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_CancelAction: {fileID: 7727032971491509709, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_LeftClickAction: {fileID: 3001919216989983466, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_MiddleClickAction: {fileID: -2185481485913320682, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_RightClickAction: {fileID: -4090225696740746782, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_ScrollWheelAction: {fileID: 6240969308177333660, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_TrackedDevicePositionAction: {fileID: 6564999863303420839, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_TrackedDeviceOrientationAction: {fileID: 7970375526676320489, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_DeselectOnBackgroundClick: 1
-  m_PointerBehavior: 0
-  m_CursorLockBehavior: 0
-  m_ScrollDeltaPerTick: 6
---- !u!114 &957856396
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 957856394}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 76c392e42b5098c458856cdf6ecaaaa1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.EventSystems.EventSystem
-  m_FirstSelected: {fileID: 0}
-  m_sendNavigationEvents: 1
-  m_DragThreshold: 10
---- !u!4 &957856397
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 957856394}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1218583651
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1218583654}
-  - component: {fileID: 1218583653}
-  - component: {fileID: 1218583652}
-  m_Layer: 0
-  m_Name: Menu
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1218583652
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1218583651}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f25a0361417b7684b9358bca9480334b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.UI.ConnectionMenu
-  session: {fileID: 574239458}
---- !u!114 &1218583653
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1218583651}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
-  m_PanelSettings: {fileID: 11400000, guid: 862fa50ff1c034148ae692169cca8ec6, type: 2}
-  m_ParentUI: {fileID: 0}
-  sourceAsset: {fileID: 0}
-  m_SortingOrder: 0
-  m_Position: 0
-  m_WorldSpaceSizeMode: 1
-  m_WorldSpaceWidth: 1920
-  m_WorldSpaceHeight: 1080
-  m_PivotReferenceSize: 0
-  m_Pivot: 0
-  m_WorldSpaceCollider: {fileID: 0}
---- !u!4 &1218583654
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1218583651}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &2105076957
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2105076960}
-  - component: {fileID: 2105076959}
-  - component: {fileID: 2105076958}
-  m_Layer: 0
-  m_Name: MusicaDoMenu
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &2105076958
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2105076957}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: defa749779a3d994a8e74c58a78759ca, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Audio.MenuMusic
-  clip: {fileID: 8300000, guid: c44743c1a38fa664bac69dac0efdb9f2, type: 3}
-  volume: 0.4
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Audio.FluorescentHum
+  volume: 0.22
+  harmonics: 36
   fadeInSeconds: 1.5
   fadeOutSeconds: 1.5
---- !u!82 &2105076959
+--- !u!82 &1637923102
 AudioSource:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2105076957}
+  m_GameObject: {fileID: 1637923100}
   m_Enabled: 1
   serializedVersion: 4
   OutputAudioMixerGroup: {fileID: 0}
@@ -1324,13 +1210,131 @@ AudioSource:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
---- !u!4 &2105076960
+--- !u!4 &1637923103
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2105076957}
+  m_GameObject: {fileID: 1637923100}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1972139834
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1972139837}
+  - component: {fileID: 1972139836}
+  - component: {fileID: 1972139835}
+  m_Layer: 0
+  m_Name: Menu
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1972139835
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1972139834}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f25a0361417b7684b9358bca9480334b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.UI.ConnectionMenu
+  session: {fileID: 812585391}
+--- !u!114 &1972139836
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1972139834}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
+  m_PanelSettings: {fileID: 11400000, guid: 862fa50ff1c034148ae692169cca8ec6, type: 2}
+  m_ParentUI: {fileID: 0}
+  sourceAsset: {fileID: 0}
+  m_SortingOrder: 0
+  m_Position: 0
+  m_WorldSpaceSizeMode: 1
+  m_WorldSpaceWidth: 1920
+  m_WorldSpaceHeight: 1080
+  m_PivotReferenceSize: 0
+  m_Pivot: 0
+  m_WorldSpaceCollider: {fileID: 0}
+--- !u!4 &1972139837
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1972139834}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1974213479
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1974213481}
+  - component: {fileID: 1974213480}
+  m_Layer: 0
+  m_Name: Global Volume
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1974213480
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1974213479}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 172515602e62fb746b5d573b38a5fe58, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Core.Runtime::UnityEngine.Rendering.Volume
+  m_IsGlobal: 1
+  priority: 1
+  blendDistance: 0
+  weight: 1
+  sharedProfile: {fileID: 11400000, guid: fdb58efe92c5d514598f05414df3c6db, type: 2}
+--- !u!4 &1974213481
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1974213479}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -1343,13 +1347,13 @@ Transform:
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
-  - {fileID: 454508865}
-  - {fileID: 237401260}
-  - {fileID: 2105076960}
-  - {fileID: 635550984}
-  - {fileID: 564564054}
-  - {fileID: 574239463}
-  - {fileID: 1218583654}
-  - {fileID: 957856397}
-  - {fileID: 152130001}
-  - {fileID: 211606997}
+  - {fileID: 1974213481}
+  - {fileID: 1637923103}
+  - {fileID: 696926181}
+  - {fileID: 1059699356}
+  - {fileID: 1340829293}
+  - {fileID: 812585396}
+  - {fileID: 1972139837}
+  - {fileID: 1057617780}
+  - {fileID: 896094812}
+  - {fileID: 1301350141}

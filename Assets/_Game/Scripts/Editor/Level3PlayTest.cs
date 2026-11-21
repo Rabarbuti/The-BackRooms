@@ -158,6 +158,9 @@ namespace BackRooms.EditorTools
                         return;
                     }
                     Notes.Add($"a porta da cabine abriu aos {session.SessionSeconds:F1} s de partida");
+                    // O som ambiente (ar-condicionado e reatores) entra ao jogar; o teste dele é o Level3SoundTest.
+                    var ambience = BackRooms.Audio.OfficeAmbience.Instance;
+                    if (ambience == null || !ambience.Wanted) { Finish(false, "jogando, o som ambiente do Escritório não quer soar"); return; }
                     _target = 0;
                     _best = float.MaxValue;
                     _lastProgress = Now;

@@ -286,8 +286,8 @@ BUILDERS = [
     lambda: estante_aco("EstanteDeAcoCheia", filled=True),
     caixa,
     pilha_caixas,
-    lambda: placa("PlacaOferta", "OFERTA", "R$ 199"),
-    lambda: placa("PlacaLiquidacao", "LIQUIDAÇÃO", "R$ 49", card="Papel_Vermelho", ink="Tinta_Branca"),
+    lambda: placa("PlacaOferta", "SALE", "$199"),  # textos em inglês (a língua do jogo)
+    lambda: placa("PlacaLiquidacao", "CLEARANCE", "$49", card="Papel_Vermelho", ink="Tinta_Branca"),
 ]
 
 if __name__ == "__main__":

@@ -110,7 +110,15 @@ namespace BackRooms.World
             public int ShadowResolution = 128;
             public readonly Dictionary<int, CeilingLight> CorridorLights = new Dictionary<int, CeilingLight>();
             public readonly List<ElevatorDoors> Elevators = new List<ElevatorDoors>();
-            public Mesh TubeMesh, PanelMesh, DomeMesh, SpotsMesh, LeafMesh;
+            /// <summary>Direção do saguão de cada elevador (na ordem de <see cref="Elevators"/>).</summary>
+            public readonly List<Vector3> ElevatorLobby = new List<Vector3>();
+            public readonly List<ElevatorButton> ElevatorButtons = new List<ElevatorButton>();
+            /// <summary>Grelhas de ar-condicionado do forro (para o som do difusor).</summary>
+            public readonly List<Vector3> Vents = new List<Vector3>();
+            /// <summary>As portas de armário soltas (uma por módulo), que batem.</summary>
+            public readonly List<LockerDoor> LockerDoors = new List<LockerDoor>();
+            public Transform Lockers;
+            public Mesh TubeMesh, PanelMesh, DomeMesh, SpotsMesh, LeafMesh, LockerLeafMesh, LockerHandleMesh, ButtonMesh;
         }
 
         OfficeKit _ok;
@@ -138,6 +146,9 @@ namespace BackRooms.World
             _ok.PanelMesh = RecessedPanelMesh();
             _ok.DomeMesh = DiscMesh("Pendente", 0.28f);
             _ok.SpotsMesh = CabSpotsMesh();
+            _ok.LockerLeafMesh = BoxMesh("PortaDeArmario", new Vector3(0.37f, 0.41f, 0.012f));
+            _ok.LockerHandleMesh = BoxMesh("Puxador", new Vector3(0.03f, 0.05f, 0.006f));
+            _ok.ButtonMesh = BoxMesh("BotaoDoElevador", new Vector3(0.04f, 0.04f, 0.012f));
 
             BuildOfficeFloors();
             BuildOfficeCeilings();
@@ -438,6 +449,7 @@ namespace BackRooms.World
                     {
                         float gx = c.x + (_ok.Rng.Next(2) == 0 ? -1.2f : 1.2f);
                         OBox(office.darkMetal, new Vector3(gx, h - 0.01f, c.z + 1.2f), new Vector3(0.6f, 0.02f, 0.6f));
+                        _ok.Vents.Add(new Vector3(gx, h - 0.05f, c.z + 1.2f));
                     }
                     break;
                 }
@@ -613,9 +625,8 @@ namespace BackRooms.World
                     OEdgeBox(office.steel, o, along, across, -0.72f, -ElevatorHalf, face, face + lobby * 0.025f, 0f, ElevatorTop + 0.15f, false);
                     OEdgeBox(office.steel, o, along, across, ElevatorHalf, 0.72f, face, face + lobby * 0.025f, 0f, ElevatorTop + 0.15f, false);
                     OEdgeBox(office.steel, o, along, across, -0.72f, 0.72f, face, face + lobby * 0.025f, ElevatorTop, ElevatorTop + 0.15f, false);
-                    // Botão de chamada, com a luz âmbar.
+                    // Espelho do botão de chamada; o botão (que se aperta) sai em BuildOfficeElevators.
                     OEdgeBox(office.steel, o, along, across, 0.92f, 1.04f, face, face + lobby * 0.015f, 1.0f, 1.25f, false);
-                    OEdgeBox(office.buttonAmber, o, along, across, 0.96f, 1.0f, face, face + lobby * 0.022f, 1.1f, 1.14f, false);
                     // Laterais de inox do vão até a cabine (0,7 m de fundo), do lado do poço.
                     float shaft = -lobby;
                     float depth = Cell * 0.5f - CabHalf;
@@ -798,6 +809,101 @@ namespace BackRooms.World
                 CollectRuns(runs, h, (i) => (x, i));
 
             events.AddComponent<OfficeLightWave>().Init(Data.Seed, runs);
+
+            // Botões dos elevadores.
+            events.AddComponent<ElevatorControl>().Init(_ok.Elevators, _ok.ElevatorLobby, _ok.ElevatorButtons);
+
+            // Armários que batem: fileiras retas de corredor com 3 portas soltas ou mais.
+            events.AddComponent<LockerBangs>().Init(Data.Seed, LockerRows());
+
+            // Som ambiente: reatores de todas as luminárias, difusores do forro e o sopro dos dutos.
+            var lights = new List<CeilingLight>(_ok.Fixtures.GetComponentsInChildren<CeilingLight>(true));
+            Transform root = transform;
+            LevelData data = Data;
+            events.AddComponent<BackRooms.Audio.OfficeAmbience>().Init(lights, ToWorld(_ok.Vents), position =>
+            {
+                Vector3 local = root.InverseTransformPoint(position);
+                int x = Mathf.FloorToInt(local.x / Cell), z = Mathf.FloorToInt(local.z / Cell);
+                return x >= 0 && z >= 0 && x < data.Width && z < data.Height && data.Office[x, z] == OfficeCell.Corridor;
+            });
+        }
+
+        List<Vector3> ToWorld(List<Vector3> points)
+        {
+            var list = new List<Vector3>(points.Count);
+            foreach (Vector3 p in points) list.Add(transform.TransformPoint(p));
+            return list;
+        }
+
+        // Fileiras de armários por corredor reto: as portas soltas em ordem ao longo dele.
+        List<LockerBangs.Row> LockerRows()
+        {
+            var byCell = new Dictionary<int, List<LockerDoor>>();
+            foreach (LockerDoor door in _ok.LockerDoors)
+            {
+                int key = door.X + door.Z * Data.Width;
+                if (!byCell.TryGetValue(key, out List<LockerDoor> list)) byCell[key] = list = new List<LockerDoor>();
+                list.Add(door);
+            }
+
+            var rows = new List<LockerBangs.Row>();
+            int w = Data.Width, h = Data.Height;
+            for (int z = 0; z < h; z++)
+                CollectLockerRow(rows, byCell, w, i => (i, z), Vector3.right);
+            for (int x = 0; x < w; x++)
+                CollectLockerRow(rows, byCell, h, i => (x, i), Vector3.forward);
+            return rows;
+        }
+
+        void CollectLockerRow(List<LockerBangs.Row> rows, Dictionary<int, List<LockerDoor>> byCell, int length, Func<int, (int x, int z)> cellAt, Vector3 axis)
+        {
+            var cells = new List<int>();
+            for (int i = 0; i <= length; i++)
+            {
+                bool corridor = false;
+                int key = -1;
+                if (i < length)
+                {
+                    (int x, int z) = cellAt(i);
+                    key = x + z * Data.Width;
+                    corridor = Data.Office[x, z] == OfficeCell.Corridor;
+                    if (corridor && cells.Count > 0)
+                    {
+                        (int px, int pz) = cellAt(i - 1);
+                        WallSide toward = px < x ? WallSide.West : px > x ? WallSide.East : pz < z ? WallSide.South : WallSide.North;
+                        if (!CorridorLink(x, z, toward)) corridor = false;
+                    }
+                }
+
+                if (corridor)
+                {
+                    cells.Add(key);
+                    continue;
+                }
+
+                if (cells.Count >= 1)
+                {
+                    var doors = new List<LockerDoor>();
+                    foreach (int cell in cells)
+                        if (byCell.TryGetValue(cell, out List<LockerDoor> list)) doors.AddRange(list);
+                    if (doors.Count >= LockerBangs.MinBangs)
+                    {
+                        Vector3 side = Vector3.Cross(Vector3.up, axis);
+                        doors.Sort((a, b) =>
+                        {
+                            int c = Vector3.Dot(a.Center, axis).CompareTo(Vector3.Dot(b.Center, axis));
+                            return c != 0 ? c : Vector3.Dot(a.Center, side).CompareTo(Vector3.Dot(b.Center, side));
+                        });
+                        // Célula solta aparece na fileira de X e na de Z com as mesmas portas: uma vez só.
+                        bool repeated = false;
+                        foreach (LockerBangs.Row row in rows)
+                            if (row.Doors.Length == doors.Count && new HashSet<LockerDoor>(row.Doors).SetEquals(doors)) repeated = true;
+                        if (!repeated) rows.Add(new LockerBangs.Row { Doors = doors.ToArray() });
+                    }
+                }
+                cells.Clear();
+                if (i < length && Data.Office[cellAt(i).x, cellAt(i).z] == OfficeCell.Corridor) cells.Add(key);
+            }
         }
 
         void CollectRuns(List<CeilingLight[]> runs, int length, Func<int, (int x, int z)> cellAt)

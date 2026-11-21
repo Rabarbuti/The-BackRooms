@@ -23,7 +23,11 @@ namespace BackRooms.EditorTools
     /// • Buracos: todos os papéis andam sobre uma faixa e depois se jogam no vazio, para
     ///   conferir que a faixa segura o jogador e que a queda devolve à sala inicial.
     /// • Apagão: o primeiro é adiantado para os 20 s. O teste confere que as luminárias avisam
-    ///   (piscando, depois piscando depressa), apagam todas e voltam.
+    ///   (piscando, depois piscando depressa), apagam todas e voltam. Vale o que cabe na janela
+    ///   de tempo da sessão que o papel viu: quem entra atrasado pode chegar já no escuro.
+    /// • Quem entra atrasado: "-atraso N" na linha de comando faz o cliente esperar N s antes de
+    ///   conectar. O host manda a hora da sessão pela sonda dos testes (<see cref="NetProbe"/>) e o
+    ///   cliente confere que o relógio dele bate com o do host e que a fase das luzes é a da hora.
     /// • Gravação: grava 3 s de vídeo e confere que o arquivo saiu com quadros.
     /// • Traje e mão: o corpo do outro jogador é a figura nova, mostra o item que ele pegou,
     ///   e a mão em primeira pessoa aparece com a caneta.
@@ -42,7 +46,12 @@ namespace BackRooms.EditorTools
         const string HostRole = "host";
         const string ClientRole = "client";
 
-        const double Timeout = 210.0;
+        const double BaseTimeout = 210.0;
+
+        // Cliente: segundos de espera antes de conectar (-atraso N). O host não sabe do atraso e
+        // ganha folga fixa para esperar.
+        static float Delay => NetProbe.Arg("-atraso", 0f);
+        static double Timeout => BaseTimeout + Delay + (_role == HostRole ? 60.0 : 0.0);
 
         static readonly List<string> Errors = new List<string>();
         static string _role;
@@ -90,6 +99,15 @@ namespace BackRooms.EditorTools
         static bool _sawWarning, _sawHurry, _sawDark, _sawLightBack;
         static int _litBeforeDark;
         static int _litInDark;
+        // Janela da sessão que este papel viu e as fases que ela devia mostrar.
+        static double _secMin = double.MaxValue, _secMax = -1.0, _secPrev = -1.0;
+        static int _phaseMismatch;
+        // Tempo de cada fase coberto por passadas do teste a menos de 0,5 s uma da outra: um quadro
+        // travado (shader compilando, gravação) pode pular uma fase curta inteira sem defeito nenhum.
+        static float _covWarning, _covHurry, _covDark, _covBack;
+        static bool _covDarkSeen;
+        static string _phaseMismatchNote = "";
+        static double _probeAt;
         static int _recordStep;
         static double _recordStart;
         static bool _recordOk;
@@ -187,7 +205,15 @@ namespace BackRooms.EditorTools
             }
 
             if (_stage >= 2) AuditPenRay();
-            if (_stage >= 2) WatchLights();
+            if (_stage >= 2) WatchLights(session);
+            if (_role == ClientRole) NetProbe.Watch(session);
+
+            // Host: a hora da sessão para o cliente conferir o relógio dele.
+            if (_role == HostRole && session.IsHosting && session.SessionSeconds >= 0.0 && Now - _probeAt > 0.5)
+            {
+                _probeAt = Now;
+                NetProbe.Send(session);
+            }
             if (_stage >= 3 && _local != null) RecordStage();
 
             switch (_stage)
@@ -212,8 +238,14 @@ namespace BackRooms.EditorTools
 
                     // Na variante de quem entra depois, o cliente espera o host acabar de riscar.
                     if (_role == ClientRole && LateJoin && Now - _began < 35.0) break;
+                    // Quem entra atrasado (-atraso N): o host já está jogando há N s.
+                    if (_role == ClientRole && Now - _began < Delay) break;
 
-                    if (_role == ClientRole) session.Join("127.0.0.1");
+                    if (_role == ClientRole)
+                    {
+                        session.Join("127.0.0.1");
+                        NetProbe.Listen(session);
+                    }
                     else session.Host(localOnly: true);
                     Next();
                     break;
@@ -223,6 +255,7 @@ namespace BackRooms.EditorTools
                     if (_role == ClientRole && session.Phase == SessionPhase.Menu && Now - _phaseStart > 2.0)
                     {
                         session.Join("127.0.0.1");
+                        NetProbe.Listen(session);
                         _phaseStart = Now;
                     }
 
@@ -809,13 +842,44 @@ namespace BackRooms.EditorTools
         }
 
         // Acompanha as fases da energia do andar e conta as luminárias acesas em cada uma.
-        static void WatchLights()
+        static void WatchLights(GameSession session)
         {
             LightsOut lightsOut = LightsOut.Instance;
             if (lightsOut == null || CeilingLight.All.Count == 0) return;
 
             int lit = 0;
             foreach (CeilingLight light in CeilingLight.All) if (light.IsLit) lit++;
+
+            // A fase é a da hora da sessão (a de agora ou a do quadro anterior: o LightsOut conta
+            // no quadro do jogo e o teste entre um quadro e outro).
+            double seconds = session.SessionSeconds;
+            if (seconds >= 0.0)
+            {
+                PowerPhase now = lightsOut.PhaseAt(seconds, out _);
+                PowerPhase before = _secPrev >= 0.0 ? lightsOut.PhaseAt(_secPrev, out _) : now;
+                if (lightsOut.Phase != now && lightsOut.Phase != before)
+                {
+                    _phaseMismatch++;
+                    if (_phaseMismatchNote.Length == 0) _phaseMismatchNote = $" (aos {seconds:F1} s a fase era {lightsOut.Phase}, a hora diz {now})";
+                }
+                _secMin = System.Math.Min(_secMin, seconds);
+                _secMax = System.Math.Max(_secMax, seconds);
+                if (_secPrev >= 0.0 && seconds > _secPrev && seconds - _secPrev < 0.5)
+                {
+                    const double Step = 0.02;
+                    for (double t = _secPrev; t < seconds; t += Step)
+                    {
+                        switch (lightsOut.PhaseAt(t, out _))
+                        {
+                            case PowerPhase.Warning: _covWarning += (float)Step; break;
+                            case PowerPhase.Hurry: _covHurry += (float)Step; break;
+                            case PowerPhase.Dark: _covDark += (float)Step; _covDarkSeen = true; break;
+                            default: if (_covDarkSeen) _covBack += (float)Step; break;
+                        }
+                    }
+                }
+                _secPrev = seconds;
+            }
 
             switch (lightsOut.Phase)
             {
@@ -834,8 +898,9 @@ namespace BackRooms.EditorTools
                     break;
 
                 default:
-                    if (!_sawDark) _litBeforeDark = Mathf.Max(_litBeforeDark, lit);
-                    else if (lit > 0) _sawLightBack = true;
+                    // Luz normal em qualquer momento (antes do primeiro apagão visto ou depois).
+                    _litBeforeDark = Mathf.Max(_litBeforeDark, lit);
+                    if (_sawDark && lit > 0) _sawLightBack = true;
                     break;
             }
         }
@@ -1060,12 +1125,27 @@ namespace BackRooms.EditorTools
                           $"caminho_direto={(level.PathCells.Count - 1) * 4}m caminho_seguro={(level.SafePathCells.Count - 1) * 4}m setas={arrows}";
             }
 
-            // Apagão. Quem entrou depois fica poucos segundos e pode não ver o ciclo inteiro.
+            // Apagão. Quem entrou depois fica poucos segundos e pode não ver o ciclo inteiro. Cada
+            // fase é cobrada se as passadas do teste a cobriram por 0,6 s ou mais (ExpectedPhases):
+            // quem entra atrasado pode chegar com as luzes já apagadas, e um quadro travado pode
+            // pular os 2 s do aviso rápido.
             if (!(_role == ClientRole && LateJoin))
             {
-                ok &= _sawWarning && _sawHurry && _sawDark && _sawLightBack && _litBeforeDark > 0 && _litInDark == 0;
-                report += $" apagao: aviso={_sawWarning} aviso_rapido={_sawHurry} escuro={_sawDark} voltou={_sawLightBack} " +
-                          $"acesas_antes={_litBeforeDark} acesas_no_escuro={_litInDark}";
+                ExpectedPhases(out bool wantWarning, out bool wantHurry, out bool wantDark, out bool wantBack);
+                bool blackout = (_sawWarning || !wantWarning) && (_sawHurry || !wantHurry) && (_sawDark || !wantDark) &&
+                              (_sawLightBack || !wantBack) && wantDark && _litBeforeDark > 0 && _litInDark == 0 && _phaseMismatch == 0;
+                ok &= blackout;
+                report += $" apagao={blackout}: janela={_secMin:F1}-{_secMax:F1}s aviso={_sawWarning}/{wantWarning} aviso_rapido={_sawHurry}/{wantHurry} " +
+                          $"escuro={_sawDark}/{wantDark} voltou={_sawLightBack}/{wantBack} acesas_com_luz={_litBeforeDark} acesas_no_escuro={_litInDark} " +
+                          $"fase_fora_da_hora={_phaseMismatch}{_phaseMismatchNote}";
+            }
+
+            // Cliente: o relógio da sessão dele bate com o do host (a sonda manda a hora do host).
+            if (_role == ClientRole && !LateJoin)
+            {
+                bool clock = NetProbe.ClockOk(out string clockReport);
+                ok &= clock;
+                report += $" {clockReport} atraso_pedido={Delay:F0}s";
             }
 
             if (_recordStep >= 2)
@@ -1166,6 +1246,16 @@ namespace BackRooms.EditorTools
 
             if (Errors.Count > 0) report += "\nPrimeiro erro: " + Errors[0];
             Finish(ok, report);
+        }
+
+        // Quais fases do apagão este papel tinha de ver: as que as passadas do teste cobriram por
+        // 0,6 s ou mais (com passadas a menos de 0,5 s, pelo menos uma caiu dentro).
+        static void ExpectedPhases(out bool warning, out bool hurry, out bool dark, out bool back)
+        {
+            warning = _covWarning >= 0.6f;
+            hurry = _covHurry >= 0.6f;
+            dark = _covDark >= 0.6f;
+            back = _covBack >= 0.6f;
         }
 
         // Resumo do mapa gerado: se host e cliente imprimem o mesmo valor, o labirinto é igual.

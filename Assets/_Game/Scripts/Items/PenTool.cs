@@ -102,7 +102,7 @@ namespace BackRooms.Items
 
             for (int i = 0; i < _keys.Length; i++)
             {
-                if (!_keys[i].WasPressedThisFrame()) continue;
+                if (!_keys[i].WasPressedThisFrame() || BackRooms.UI.PauseMenu.IsOpen) continue;
                 Select(KeyColors[i]);
                 break;
             }

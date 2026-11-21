@@ -1,0 +1,254 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &7399449506362128025
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2966930345786432055}
+  - component: {fileID: 8266973175566435133}
+  - component: {fileID: 5010767706178847946}
+  - component: {fileID: 1860377548266127466}
+  - component: {fileID: 834430877870245786}
+  - component: {fileID: 8308390818198281214}
+  - component: {fileID: 4980119156575035090}
+  - component: {fileID: 3150852717879079416}
+  m_Layer: 0
+  m_Name: Janitor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2966930345786432055
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7399449506362128025}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!136 &8266973175566435133
+CapsuleCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7399449506362128025}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Radius: 0.34
+  m_Height: 2.1
+  m_Direction: 1
+  m_Center: {x: 0, y: 1.05, z: 0}
+--- !u!54 &5010767706178847946
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7399449506362128025}
+  serializedVersion: 5
+  m_Mass: 1
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 0
+  m_IsKinematic: 1
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
+--- !u!114 &1860377548266127466
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7399449506362128025}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 29ddbebbc11839c4596b20d21968d871, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Entities.JanitorBody
+  skinMaterial: {fileID: 2100000, guid: b0299f88cd0a369409317289a96f1d97, type: 2}
+  coverallMaterial: {fileID: 2100000, guid: 07c5028d003c0fa46956fbe44cb75ac2, type: 2}
+  wetMaterial: {fileID: 2100000, guid: 0f5c1dce9fe91044294559de68ecd7b6, type: 2}
+  rubberMaterial: {fileID: 2100000, guid: 0546adb460d7f7e428a4dba49d8e3ccc, type: 2}
+  capMaterial: {fileID: 2100000, guid: cc58b5450e08d624c9aa1a1dbd28fa22, type: 2}
+  metalMaterial: {fileID: 2100000, guid: f7eca21e66809794ab9672bbceb25b4e, type: 2}
+  handleMaterial: {fileID: 2100000, guid: 6dcdf893d267b124c831490f2f4b87b3, type: 2}
+  mawMaterial: {fileID: 2100000, guid: 66b958827a5f430418fa21df2b40a810, type: 2}
+  toothMaterial: {fileID: 2100000, guid: a33525760c326db43b0d07694aded037, type: 2}
+  strideLength: 1.6
+  riseSeconds: 1.1
+  sinkSeconds: 0.7
+  model: {fileID: 4900000, guid: 82a097c6092e4a44a95b88e70ff0fe34, type: 3}
+  modelMaterials:
+  - {fileID: 2100000, guid: dab0e1682f112de488333ee009226f04, type: 2}
+  - {fileID: 2100000, guid: 9687ea30d15d60540a6c74fb048ab203, type: 2}
+  - {fileID: 2100000, guid: a011181d6fea49b44917ff1cdfeed9ca, type: 2}
+  - {fileID: 2100000, guid: aee5ac228b6b640478511f151d78caf0, type: 2}
+  - {fileID: 2100000, guid: 07deb081019eddb47ae8663d8880c51e, type: 2}
+  - {fileID: 2100000, guid: 0806eca6d1a79a242aeb0ca4bbedd4cd, type: 2}
+  - {fileID: 2100000, guid: 685d26ed2703bdf46be6cde1f97af369, type: 2}
+--- !u!114 &834430877870245786
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7399449506362128025}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 83bdf200d556639418b915e7bcdb526a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Entities.JanitorAudio
+  volume: 0.9
+  keysRange: 22
+  dragRange: 16
+--- !u!114 &8308390818198281214
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7399449506362128025}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
+  GlobalObjectIdHash: 1123403015
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  m_InScenePlacedDisabledByDefault: 0
+  DeferredDespawnTick: 0
+  Ownership: 1
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  m_InScenePlaced: 0
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 1
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
+  SyncOwnerTransformWhenParented: 1
+  AllowOwnerToParent: 0
+--- !u!114 &4980119156575035090
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7399449506362128025}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e96cb6065543e43c4a752faaa1468eb1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.Components.NetworkTransform
+  ShowTopMostFoldoutHeaderGroup: 1
+  NetworkTransformExpanded: 0
+  AutoOwnerAuthorityTickOffset: 1
+  PositionInterpolationType: 0
+  RotationInterpolationType: 0
+  ScaleInterpolationType: 0
+  PositionLerpSmoothing: 1
+  PositionMaxInterpolationTime: 0.1
+  RotationLerpSmoothing: 1
+  RotationMaxInterpolationTime: 0.1
+  ScaleLerpSmoothing: 1
+  ScaleMaxInterpolationTime: 0.1
+  AuthorityMode: 0
+  TickSyncChildren: 0
+  UseUnreliableDeltas: 0
+  SyncPositionX: 1
+  SyncPositionY: 1
+  SyncPositionZ: 1
+  SyncRotAngleX: 0
+  SyncRotAngleY: 1
+  SyncRotAngleZ: 0
+  SyncScaleX: 0
+  SyncScaleY: 0
+  SyncScaleZ: 0
+  PositionThreshold: 0.001
+  RotAngleThreshold: 0.01
+  ScaleThreshold: 0.01
+  UseQuaternionSynchronization: 0
+  UseQuaternionCompression: 0
+  UseHalfFloatPrecision: 0
+  InLocalSpace: 0
+  SwitchTransformSpaceWhenParented: 0
+  Interpolate: 1
+  SlerpPosition: 0
+--- !u!114 &3150852717879079416
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7399449506362128025}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 96ac11478dc22ce4faca95a0eeef9424, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Entities.JanitorBrain
+  ShowTopMostFoldoutHeaderGroup: 1
+  roamSpeed: 1.4
+  searchSpeed: 2
+  investigateSpeed: 2.6
+  chaseSpeed: 4.4
+  acceleration: 10
+  chaseBurstSeconds: 5
+  chaseTiredSeconds: 4
+  chaseTiredFactor: 0.55
+  unseenSpeedFactor: 1.3
+  turnSpeed: 420
+  sightRange: 20
+  sightHalfAngle: 60
+  hearCells: 4
+  tableSightRange: 6
+  catchRadius: 1.3
+  feedSeconds: 2.5
+  mercySeconds: 8
+  searchSeconds: 8
+  eyeHeight: 1.9
+  bodyRadius: 0.38
+  fairCells: 3
+  switchRechargeSeconds: 25
+  switchNoiseRadius: 45
+  waveJitter: 6
+  emergeMinCells: 4
+  emergeCooldown: 5
+  lingerCells: 7
+  lingerSeconds: 25
+  hesitateSeconds: 0.6
+  hesitateCooldown: 4

@@ -261,10 +261,13 @@ namespace BackRooms.EditorTools
                 Timeout = 4000.0;
             }
 
-            // -benchQuick: só a primeira passada e as duas medidas de base (sem e com lanterna),
+            // -benchQuick: só a primeira passada e as duas medidas de base (sem e com lanterna) e, no
+            // Level 0 e no Level 1, a sem luz ambiente,
             // para comparar uma fase antes e depois de uma mudança sem esperar as outras.
-            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-benchQuick") >= 0 && _setups.Count > 3)
-                _setups.RemoveRange(3, _setups.Count - 3);
+            // No Level 0 e no Level 1 (o perfil com o céu de luz ambiente) entra também a medida sem ele.
+            int quick = level.Data.HasPools || level.Data.HasOffice ? 3 : 4;
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-benchQuick") >= 0 && _setups.Count > quick)
+                _setups.RemoveRange(quick, _setups.Count - quick);
         }
 
         // Um punhado de quadros por passada do editor, até acabar a configuração da vez.
@@ -339,6 +342,24 @@ namespace BackRooms.EditorTools
 
         // ---------------------------------------------------------------- Configurações
 
+        // Tira o céu de luz ambiente com um Volume de prioridade alta (o perfil da cena não muda).
+        static Action NoAmbient()
+        {
+            var go = new GameObject("MedidaSemLuzAmbiente") { hideFlags = HideFlags.DontSave };
+            var profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            var environment = profile.Add<VisualEnvironment>(false);
+            environment.skyType.Override(0);
+            var volume = go.AddComponent<Volume>();
+            volume.isGlobal = true;
+            volume.priority = 40f;
+            volume.sharedProfile = profile;
+            return () =>
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+                UnityEngine.Object.DestroyImmediate(profile);
+            };
+        }
+
         static List<Setup> Setups()
         {
             var setups = new List<Setup>();
@@ -351,6 +372,15 @@ namespace BackRooms.EditorTools
 
             setups.Add(new Setup { Name = "1 Atual, sem lanterna", Note = "Como o jogo está hoje, com as sombras já prontas." });
             setups.Add(new Setup { Name = "2 Atual, com lanterna", Torch = true, Note = "Base de comparação: as outras usam a lanterna." });
+
+            // Medida também no -benchQuick: o céu de luz ambiente foi religado em 20/11/2026.
+            setups.Add(new Setup
+            {
+                Name = "2b Sem luz ambiente (como de 12/11 a 20/11/2026), com lanterna",
+                Torch = true,
+                Note = "Um Volume por cima tira o céu (tipo de céu: nenhum), como era antes de religar a luz ambiente.",
+                Apply = NoAmbient
+            });
 
             // Hipótese A: só as luminárias a até 20 m do jogador, pelo corte de distância do próprio HDRP.
             setups.Add(new Setup

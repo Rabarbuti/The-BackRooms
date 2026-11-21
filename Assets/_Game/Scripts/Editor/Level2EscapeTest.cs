@@ -40,6 +40,8 @@ namespace BackRooms.EditorTools
         const string StairOkKey = "BackRooms.Level2EscapeTest.StairOk";
         const string EdgeOkKey = "BackRooms.Level2EscapeTest.EdgeOk";
         const string ErrorsKey = "BackRooms.Level2EscapeTest.Errors";
+        // Com -undertow: tentativas em que o Undertow pegou o jogador (não contam como saída nem como presas).
+        const string CaughtKey = "BackRooms.Level2EscapeTest.Caught";
         const float Reach = 0.35f;
         const float Step = 1f / 30f;   // tempo de jogo por quadro: o teste anda mais rápido que o relógio
 
@@ -76,6 +78,7 @@ namespace BackRooms.EditorTools
             SessionState.SetInt(StairOkKey, 0);
             SessionState.SetInt(EdgeOkKey, 0);
             SessionState.SetInt(ErrorsKey, 0);
+            SessionState.SetInt(CaughtKey, 0);
             SessionState.SetBool(BetweenKey, false);
             SessionState.SetBool(ActiveKey, true);
             SessionState.SetBool(BatchKey, batch);
@@ -157,7 +160,7 @@ namespace BackRooms.EditorTools
         static int _trial, _phase, _routeIndex, _photos;
         static float _trialStart, _phaseStart, _best, _lastProgress, _stageStart;
         static int _regionCount, _climbsBefore;
-        static bool _climbSeen;
+        static bool _climbSeen, _caught;
         static float _climbStart, _climbEnd;
         static readonly List<string> SeedLines = new List<string>();
         static readonly List<string> _regionLines = new List<string>();
@@ -178,6 +181,8 @@ namespace BackRooms.EditorTools
                     session.fixedSeed = CurrentSeed;
                     // A maré tem teste próprio (Level2TideTest): aqui a água fica parada.
                     PoolTide.Paused = true;
+                    // O Undertow fica pausado, a não ser com -undertow (para medir quantas fugas ele impede).
+                    BackRooms.Entities.UndertowDirector.Paused = !System.Array.Exists(System.Environment.GetCommandLineArgs(), a => a == "-undertow");
                     session.Host(localOnly: true);
                     _stageStart = Now;
                     _stage = 1;
@@ -448,6 +453,7 @@ namespace BackRooms.EditorTools
                     _trialStart = _phaseStart = Now;
                     _climbsBefore = _controller.Climbs;
                     _climbSeen = false;
+                    _caught = false;
                     _climbEnd = -1f;
                     _routeIndex = 0;
                     _best = float.MaxValue;
@@ -470,6 +476,17 @@ namespace BackRooms.EditorTools
                     return;
 
                 case 2:
+                    // Pego pelo Undertow (-undertow): espera a volta ao início e conta à parte.
+                    if (_controller.IsCaught) _caught = true;
+                    if (_controller.IsReturning) return;
+                    if (_caught)
+                    {
+                        SessionState.SetInt(CaughtKey, SessionState.GetInt(CaughtKey, 0) + 1);
+                        SessionState.SetInt(TotalKey, SessionState.GetInt(TotalKey, 0) + 1);
+                        Append($"  PEGO  região {t.Region} ({t.Room}), partida {t.StartKind} ({t.Start.x},{t.Start.y}): o Undertow pegou em {Now - _trialStart:F1} s");
+                        NextTrial();
+                        return;
+                    }
                     if (_controller.IsClimbing && !_climbSeen)
                     {
                         _climbSeen = true;
@@ -649,6 +666,12 @@ namespace BackRooms.EditorTools
                 Append($"  {Errors.Count} erro(s) no console, o primeiro: {Errors[0]}");
                 Errors.Clear();
             }
+            if (!BackRooms.Entities.UndertowDirector.Paused)
+            {
+                var undertow = BackRooms.Entities.UndertowBrain.Instance;
+                Append(undertow == null ? "  Undertow: não apareceu"
+                                        : $"  Undertow: ouviu {undertow.NoisesHeard} barulho(s), ignorou {undertow.NoisesIgnored}, pegou {undertow.Catches}, canos {undertow.Travels}, estado no fim {undertow.State}");
+            }
             Debug.Log($"[BackRooms] Fuga seed {seed}: {_regionCount} regiões, {_seedOk} tentativas saíram, {_seedFailed} presas" + (problem != null ? $" ({problem})" : ""));
 
             int index = SessionState.GetInt(IndexKey, 0) + 1;
@@ -668,6 +691,7 @@ namespace BackRooms.EditorTools
         static void Finish()
         {
             PoolTide.Paused = false;
+            BackRooms.Entities.UndertowDirector.Paused = false;
             EditorApplication.update -= Tick;
             Application.logMessageReceived -= OnLog;
             EditorApplication.playModeStateChanged -= OnPlayMode;
@@ -675,8 +699,9 @@ namespace BackRooms.EditorTools
 
             int total = SessionState.GetInt(TotalKey, 0), failed = SessionState.GetInt(FailedKey, 0), errors = SessionState.GetInt(ErrorsKey, 0);
             int stairs = SessionState.GetInt(StairOkKey, 0), edges = SessionState.GetInt(EdgeOkKey, 0);
+            int caught = SessionState.GetInt(CaughtKey, 0);
             bool ok = failed == 0 && errors == 0 && total > 0 && stairs > 0 && edges > 0;
-            string report = $"seeds {string.Join(", ", Seeds)}: {total} tentativas, {total - failed} saíram ({stairs} pela escada, {edges} pela borda), {failed} presas, {errors} erro(s) no console; detalhes em Logs/Fuga/fuga.txt";
+            string report = $"seeds {string.Join(", ", Seeds)}: {total} tentativas, {total - failed - caught} saíram ({stairs} pela escada, {edges} pela borda), {failed} presas, {(caught > 0 ? $"{caught} pegas pelo Undertow, " : "")}{errors} erro(s) no console; detalhes em Logs/Fuga/fuga.txt";
             Append(report);
             Debug.Log("[BackRooms] Teste de fuga " + (ok ? "PASSOU" : "FALHOU") + ": " + report);
 

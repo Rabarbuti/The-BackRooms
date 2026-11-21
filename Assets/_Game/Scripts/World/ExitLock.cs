@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using BackRooms.Net;
 using BackRooms.UI;
 using UnityEngine;
@@ -18,8 +19,23 @@ namespace BackRooms.World
     /// (<see cref="GameSession"/>, mensagens nomeadas); quem entra depois recebe o aviso junto
     /// com a seed. Trancada, a porta de saída não deixa esperar nela (<see cref="LevelExit"/>).
     /// </summary>
-    public sealed class ExitLock : MonoBehaviour
+    public sealed class ExitLock : MonoBehaviour, ITaskSource
     {
+        // Textos das tarefas do menu de pausa (a língua do jogo é o inglês).
+        const string TagsTask = "Find the 3 red CLEARANCE tags (the door code)";
+        const string TagsDetail = "Each tag has one digit and its place (1/3, 2/3, 3/3). The note in the first room has the digits out of order.";
+        const string KeypadTask = "Type the code on the keypad next to the exit door";
+        const string KeypadDetail = "Aim + E on each key, then OK. X clears.";
+        const string ExitTask = "Leave through the exit door";
+        const string ExitLocked = "Locked until the code is in.";
+        const string KeypadKey = "Aim + E";
+        const string KeypadAction = "press a keypad key";
+        // Textos pintados no mundo (PixelFont: só A-Z, 0-9 e : . , / - = ( )). Etiqueta: até 10
+        // letras; bilhete: até 9 letras na linha de baixo.
+        const string TagWord = "CLEARANCE";
+        const string NoteTitle = "DOCK:";
+        const string NoteOrder = "SCRAMBLED";
+
         public static ExitLock Instance { get; private set; }
 
         /// <summary>Os três dígitos, na ordem.</summary>
@@ -77,6 +93,7 @@ namespace BackRooms.World
         void Awake()
         {
             Instance = this;
+            if (Application.isPlaying) LevelTasks.Register(this);
             _use = new InputAction("Teclado", InputActionType.Button, "<Keyboard>/e");
             _use.AddBinding("<Gamepad>/buttonWest");
         }
@@ -87,9 +104,25 @@ namespace BackRooms.World
         void OnDestroy()
         {
             _use.Dispose();
+            LevelTasks.Unregister(this);
             if (Instance == this) Instance = null;
             if (_face != null) Destroy(_face);
         }
+
+        // ---------------------------------------------------------------- Tarefas
+
+        /// <summary>
+        /// As tarefas do Level 1 para o menu de pausa. Ninguém registra as etiquetas achadas, então a
+        /// das etiquetas só se marca feita com a porta destrancada.
+        /// </summary>
+        public void AddTasks(List<LevelTask> tasks)
+        {
+            tasks.Add(new LevelTask(TagsTask, Unlocked, Unlocked ? null : TagsDetail));
+            tasks.Add(new LevelTask(KeypadTask, Unlocked, Unlocked ? null : KeypadDetail));
+            tasks.Add(LevelTasks.ExitTask(ExitTask, !Unlocked, ExitLocked));
+        }
+
+        public void AddKeys(List<(string key, string action)> keys) => keys.Add((KeypadKey, KeypadAction));
 
         // ---------------------------------------------------------------- Teclado
 
@@ -163,7 +196,7 @@ namespace BackRooms.World
             PlayerNetwork local = PlayerNetwork.Local;
             if (_keypad == null || local == null || !local.InGame || local.controller.IsReturning || local.controller.InFurniture) return;
 
-            bool pressed = _use.WasPressedThisFrame() || PressForTest;
+            bool pressed = (_use.WasPressedThisFrame() && !PauseMenu.IsOpen) || PressForTest;
             PressForTest = false;
 
             string key = Aimed(local);
@@ -311,7 +344,7 @@ namespace BackRooms.World
             for (int x = 0; x < w; x++) { pixels[x] = white; pixels[(h - 1) * w + x] = white; }
             for (int y = 0; y < h; y++) { pixels[y * w] = white; pixels[y * w + w - 1] = white; }
 
-            PixelFont.Draw(pixels, w, h, (w - PixelFont.Measure("LIQUIDACAO", 1)) / 2, 2, "LIQUIDACAO", 1, white);
+            PixelFont.Draw(pixels, w, h, (w - PixelFont.Measure(TagWord, 1)) / 2, 2, TagWord, 1, white);
             string d = digit.ToString();
             PixelFont.Draw(pixels, w, h, 8, 13, d, 3, white);
             string o = $"{order}/3";
@@ -337,10 +370,10 @@ namespace BackRooms.World
             var rng = new System.Random(seed ^ 0x4E4F5441); // "NOTA"
             for (int i = 2; i > 0; i--) { int j = rng.Next(i + 1); (order[i], order[j]) = (order[j], order[i]); }
 
-            PixelFont.Draw(pixels, w, h, 4, 4, "DOCA:", 1, ink);
+            PixelFont.Draw(pixels, w, h, 4, 4, NoteTitle, 1, ink);
             string code = $"{digits[order[0]]} {digits[order[1]]} {digits[order[2]]}";
             PixelFont.Draw(pixels, w, h, (w - PixelFont.Measure(code, 2)) / 2, 17, code, 2, ink);
-            PixelFont.Draw(pixels, w, h, 4, 36, "FORA DE ORDEM", 1, ink);
+            PixelFont.Draw(pixels, w, h, (w - PixelFont.Measure(NoteOrder, 1)) / 2, 36, NoteOrder, 1, ink);
 
             var texture = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, name = "Bilhete" };
             texture.SetPixels32(pixels);

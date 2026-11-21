@@ -113,6 +113,8 @@ namespace BackRooms.EditorTools
                     session.fixedSeed = SessionState.GetInt(SeedKey, 1998);
                     // A maré tem teste próprio (Level2TideTest): aqui a água fica parada.
                     PoolTide.Paused = true;
+                    // O Undertow tem teste próprio (UndertowTest): aqui ele não aparece.
+                    BackRooms.Entities.UndertowDirector.Paused = true;
                     session.Host(localOnly: true);
                     Next();
                     break;
@@ -400,6 +402,7 @@ namespace BackRooms.EditorTools
         static void Finish(bool ok, string report)
         {
             PoolTide.Paused = false;
+            BackRooms.Entities.UndertowDirector.Paused = false;
             EditorApplication.update -= Tick;
             Application.logMessageReceived -= OnLog;
             SessionState.SetBool(ActiveKey, false);

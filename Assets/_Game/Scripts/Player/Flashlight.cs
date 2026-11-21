@@ -57,7 +57,7 @@ namespace BackRooms.Player
 
         void Update()
         {
-            if (inputEnabled && _toggle.WasPressedThisFrame() && (_battery > 0f || infiniteBattery))
+            if (inputEnabled && _toggle.WasPressedThisFrame() && !BackRooms.UI.PauseMenu.IsOpen && (_battery > 0f || infiniteBattery))
                 _light.enabled = !_light.enabled;
 
             if (!_light.enabled) return;

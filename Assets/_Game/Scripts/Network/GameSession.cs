@@ -279,7 +279,7 @@ namespace BackRooms.Net
 
             if (next < 0)
             {
-                EndSession("Fim da fita. " + cleared + " zerado.");
+                EndSession("End of tape. " + cleared + " cleared.");
                 LevelProgress.EndTape();
                 yield break;
             }
@@ -307,15 +307,15 @@ namespace BackRooms.Net
             LevelReady = false;
             _clearedThisSession = false;
             ClearDrawings();
-            SetPhase(SessionPhase.Connecting, "Abrindo a sessão...");
+            SetPhase(SessionPhase.Connecting, "Opening the session...");
 
             if (!_net.StartHost())
             {
-                Fail("Não foi possível hospedar. A porta " + port + " pode estar em uso.");
+                Fail("Could not host. Port " + port + " may be in use.");
                 return false;
             }
 
-            Address = "esta máquina";
+            Address = "this machine";
             ExitLock.PendingUnlock = false;
             SwitchObjective.Pending = default;
             BatteryPickups.PendingTaken = 0;
@@ -341,11 +341,11 @@ namespace BackRooms.Net
             _clearedThisSession = false;
             ClearDrawings();
             Address = address;
-            SetPhase(SessionPhase.Connecting, "Conectando a " + address + ":" + port + "...");
+            SetPhase(SessionPhase.Connecting, "Connecting to " + address + ":" + port + "...");
 
             if (!_net.StartClient())
             {
-                Fail("Endereço inválido: " + address);
+                Fail("Invalid address: " + address);
                 return false;
             }
 
@@ -590,7 +590,7 @@ namespace BackRooms.Net
             if (levelIndex != LevelIndex && LevelCatalog.IsValid(levelIndex))
             {
                 // A troca destrói esta sessão: não dá para fazer de dentro do tratamento da mensagem.
-                Status = "O host está no " + LevelCatalog.Get(levelIndex).Name + ". Trocando de fase...";
+                Status = "The host is on " + LevelCatalog.Get(levelIndex).Name + ". Switching level...";
                 _switchTo = levelIndex;
                 return;
             }
@@ -609,7 +609,7 @@ namespace BackRooms.Net
 
             string reason = _net != null ? _net.DisconnectReason : "";
             if (string.IsNullOrEmpty(reason))
-                reason = Phase == SessionPhase.Connecting ? "Não foi possível conectar a " + Address + "." : "A sessão foi encerrada.";
+                reason = Phase == SessionPhase.Connecting ? "Could not connect to " + Address + "." : "The session ended.";
 
             EndSession(reason);
         }

@@ -32,6 +32,16 @@ namespace BackRooms.World
 
         public bool WantsOpen => _target > 0.5f;
 
+        /// <summary>
+        /// Mantida aberta por outro sistema (o inimigo que chega de elevador, enquanto está fora da
+        /// cabine): nem o relógio nem o botão de fechar a fecham. Ligar e desligar em todas as
+        /// máquinas (a porta anda em cada uma).
+        /// </summary>
+        public bool HeldOpen { get; set; }
+
+        /// <summary>Luz da cabine acesa agora (só nos poços).</summary>
+        public bool CabLit => _lit;
+
         public void Init(Transform left, Transform right, Vector3 slide, bool isCab, HDAdditionalLightData cabLight, MeshRenderer spots,
                          Material on, Material off)
         {
@@ -129,9 +139,20 @@ namespace BackRooms.World
             if (Instance == this) Instance = null;
         }
 
+        /// <summary>Testes: relógio forçado dos eventos do Escritório (negativo = o relógio da sessão).</summary>
+        public static double ForceSeconds = -1.0;
+
+        /// <summary>
+        /// A fase tem o inimigo do elevador (o Ascensorista, <c>AttendantBrain</c>, liga em todas as
+        /// máquinas): o relógio deixa de mandar elevadores vazios, porque todo plim passa a ser ele. A
+        /// porta da cabine em que ele chega é dele (<see cref="ElevatorDoors.HeldOpen"/>).
+        /// </summary>
+        public static bool VisitsByEnemy;
+
         /// <summary>Segundos de partida; sem sessão na cena (prévia, teste solto), o tempo da cena.</summary>
         public static double Clock()
         {
+            if (ForceSeconds >= 0.0) return ForceSeconds;
             GameSession session = GameSession.Instance;
             if (session == null) return Application.isPlaying ? Time.timeSinceLevelLoad : -1.0;
             return session.SessionSeconds;
@@ -143,7 +164,7 @@ namespace BackRooms.World
             int visiting = -1;
             bool open = false, lit = false;
 
-            if (t >= FirstVisit && _shafts.Count > 0)
+            if (t >= FirstVisit && _shafts.Count > 0 && !VisitsByEnemy)
             {
                 long k = (long)((t - FirstVisit) / VisitEvery);
                 double into = t - FirstVisit - k * VisitEvery;
@@ -154,15 +175,17 @@ namespace BackRooms.World
 
             foreach (ElevatorDoors door in _doors)
             {
+                // Os botões (ElevatorControl) e a trava (HeldOpen) mandam por cima do relógio.
                 if (door.IsCab)
                 {
-                    door.SetWanted(t >= CabOpensAt);
+                    door.SetWanted(ElevatorControl.Resolve(door, t >= CabOpensAt, t, out _));
                     continue;
                 }
 
                 bool chosen = _shafts.IndexOf(door) == visiting;
-                door.SetCabLight(chosen && lit);
-                door.SetWanted(chosen && open);
+                bool wanted = ElevatorControl.Resolve(door, chosen && open, t, out bool called);
+                door.SetCabLight((chosen && lit) || called || wanted);
+                door.SetWanted(wanted);
             }
         }
 
@@ -182,48 +205,178 @@ namespace BackRooms.World
     }
 
     /// <summary>
-    /// A onda de luzes do Escritório, no lugar do apagão do Level 0: de tempos em tempos as
-    /// luminárias de um trecho reto de corredor apagam uma a uma, em fila, com o estalo do
-    /// reator; quando a fila termina, todas acendem de volta de uma vez. O trecho e o sentido
-    /// saem da seed e do número da onda; o momento, do relógio da sessão.
+    /// Um trecho apagado pela onda de luzes: qual trecho (<see cref="Run"/>, índice em
+    /// <see cref="OfficeLightWave"/>), quando começa (<see cref="Start"/>, segundos de sessão), o
+    /// sentido em que as luminárias apagam e, se alguém religou o interruptor do trecho, quando
+    /// (<see cref="Cut"/>; sem interruptor, <see cref="Never"/>). Vai pela rede (o host escolhe).
+    /// </summary>
+    public struct WavePlan : Unity.Netcode.INetworkSerializable, System.IEquatable<WavePlan>
+    {
+        public const double Never = 1e12;
+
+        public short Run;
+        public bool Reverse;
+        public double Start;
+        public double Cut;
+
+        public void NetworkSerialize<T>(Unity.Netcode.BufferSerializer<T> serializer) where T : Unity.Netcode.IReaderWriter
+        {
+            serializer.SerializeValue(ref Run);
+            serializer.SerializeValue(ref Reverse);
+            serializer.SerializeValue(ref Start);
+            serializer.SerializeValue(ref Cut);
+        }
+
+        public bool Equals(WavePlan other) => Run == other.Run && Reverse == other.Reverse && Start == other.Start && Cut == other.Cut;
+    }
+
+    /// <summary>
+    /// A onda de luzes do Escritório, no lugar do apagão do Level 0, e o caminho do Zelador
+    /// (<c>JanitorBrain</c>), que só existe no escuro. Cada passagem (<see cref="WavePlan"/>) num
+    /// trecho reto de corredor: as luminárias <b>piscam</b> por <see cref="WarnSeconds"/> (o reator
+    /// falha no som: é o tempo de sair), apagam em cascata, ficam apagadas <see cref="HoldSeconds"/> e
+    /// voltam uma a uma na mesma ordem; o interruptor do trecho (<c>LightSwitches</c>) religa tudo na
+    /// hora.
+    ///
+    /// Quem escolhe os trechos é o host, perto de onde há jogador (<see cref="Planner"/>, posto pelo
+    /// cérebro do Zelador e sincronizado pela rede); sem ele (prévia, Zelador desligado), a onda segue
+    /// o relógio da sessão e a seed, como antes. Cada máquina faz a mesma conta sobre a hora da sessão;
+    /// só o pisca-pisca do aviso é sorteado em cada uma.
     /// </summary>
     public sealed class OfficeLightWave : MonoBehaviour
     {
-        public const float FirstWave = 45f;
-        public const float WaveEvery = 60f;
-        public const float StepSeconds = 0.45f;
-        public const float HoldSeconds = 2.5f;
+        // Até 20/11/2026: a cada 60 s desde os 45 s, um trecho só, 2,5 s de escuro e sem aviso (o
+        // Zelador mal existia). Depois: escolhida perto dos jogadores, com aviso e escuro longo.
+        public const float FirstWave = 25f;
+        public const float WaveEvery = 40f;
+        /// <summary>Segundos piscando antes de apagar.</summary>
+        public const float WarnSeconds = 2.5f;
+        /// <summary>Intervalo entre uma luminária e a seguinte apagando (a cascata).</summary>
+        public const float StepSeconds = 0.12f;
+        /// <summary>Segundos com o trecho inteiro apagado, depois da última luminária apagar.</summary>
+        public const float HoldSeconds = 16f;
+        /// <summary>Intervalo entre uma luminária e a seguinte voltando a acender.</summary>
+        public const float RelightSeconds = 0.7f;
+        /// <summary>Quantos trechos cada onda apaga, sem planejador (diferentes, se a fase tem mais de um).</summary>
+        public const int RunsPerWave = 2;
+
+        /// <summary>Para os testes: parada, a onda não apaga nada (e devolve o que apagou).</summary>
+        public static bool Paused;
+
+        /// <summary>
+        /// Os trechos a apagar, escolhidos pelo host e iguais em todas as máquinas (o cérebro do
+        /// Zelador põe e tira). Nulo: a onda segue o relógio e a seed.
+        /// </summary>
+        public static System.Func<IReadOnlyList<WavePlan>> Planner;
+
+        /// <summary>
+        /// Para os testes que forçam o relógio (<see cref="OfficeElevators.ForceSeconds"/>): ignora o
+        /// <see cref="Planner"/> e segue o relógio e a seed (cada passagem começa pelo aviso).
+        /// </summary>
+        public static bool UseClock;
 
         readonly List<CeilingLight[]> _runs = new List<CeilingLight[]>();
+        readonly List<WavePlan> _clockPlans = new List<WavePlan>();
+        readonly HashSet<CeilingLight> _want = new HashSet<CeilingLight>();
+        readonly HashSet<CeilingLight> _warn = new HashSet<CeilingLight>();
+        readonly HashSet<CeilingLight> _touched = new HashSet<CeilingLight>();
+        readonly HashSet<CeilingLight> _wasDark = new HashSet<CeilingLight>();
+        readonly HashSet<CeilingLight> _wasWarn = new HashSet<CeilingLight>();
+        readonly List<CeilingLight> _gone = new List<CeilingLight>();
+        readonly Dictionary<CeilingLight, float> _blink = new Dictionary<CeilingLight, float>();
+        readonly Dictionary<CeilingLight, int> _runOf = new Dictionary<CeilingLight, int>();
         int _seed;
-        long _event = -1;
-        CeilingLight[] _active;
-        bool[] _dark;
-        bool _reverse;
 
         public static OfficeLightWave Instance { get; private set; }
 
         /// <summary>Quantos trechos de corredor a onda pode percorrer.</summary>
         public int RunCount => _runs.Count;
 
-        /// <summary>Luminárias apagadas pela onda neste instante.</summary>
-        public int DarkCount
-        {
-            get
-            {
-                if (_dark == null) return 0;
-                int n = 0;
-                foreach (bool d in _dark) if (d) n++;
-                return n;
-            }
-        }
+        /// <summary>Luminárias apagadas pela onda neste instante (fora as que só piscam).</summary>
+        public int DarkCount => _want.Count;
+
+        /// <summary>Luminárias piscando no aviso neste instante.</summary>
+        public int WarningCount => _warn.Count;
 
         public void Init(int seed, List<CeilingLight[]> runs)
         {
             _seed = seed;
             _runs.Clear();
             _runs.AddRange(runs);
+            _runOf.Clear();
+            for (int r = 0; r < _runs.Count; r++)
+                foreach (CeilingLight lamp in _runs[r])
+                    if (lamp != null && !_runOf.ContainsKey(lamp)) _runOf[lamp] = r;
         }
+
+        /// <summary>As luminárias do trecho <paramref name="run"/>, na ordem do corredor.</summary>
+        public IReadOnlyList<CeilingLight> RunLamps(int run) => run >= 0 && run < _runs.Count ? _runs[run] : System.Array.Empty<CeilingLight>();
+
+        /// <summary>O trecho da luminária (o primeiro, se for de cruzamento), ou -1.</summary>
+        public int RunIndexOf(CeilingLight lamp) => lamp != null && _runOf.TryGetValue(lamp, out int r) ? r : -1;
+
+        /// <summary>A luminária está piscando no aviso (ainda não apagou)? O Zelador a conta como acesa.</summary>
+        public bool InWarning(CeilingLight lamp) => _warn.Contains(lamp) && !_want.Contains(lamp);
+
+        /// <summary>O primeiro trecho que a onda número <paramref name="k"/> percorre, sem planejador.</summary>
+        public CeilingLight[] RunFor(long k) => RunFor(k, 0);
+
+        /// <summary>O trecho <paramref name="which"/> (0 ou 1) da onda <paramref name="k"/>, sem planejador.</summary>
+        public CeilingLight[] RunFor(long k, int which)
+        {
+            int i = RunIndexFor(k, which);
+            return i < 0 ? null : _runs[i];
+        }
+
+        int RunIndexFor(long k, int which)
+        {
+            if (_runs.Count == 0) return -1;
+            int first = (int)(OfficeElevators.Hash(_seed + 17, (int)k) % (uint)_runs.Count);
+            if (which == 0 || _runs.Count == 1) return first;
+            int step = 1 + (int)(OfficeElevators.Hash(_seed + 41, (int)k) % (uint)(_runs.Count - 1));
+            return (first + step) % _runs.Count;
+        }
+
+        /// <summary>O (primeiro) trecho que a onda está apagando agora (nulo fora de uma onda).</summary>
+        public CeilingLight[] ActiveRun
+        {
+            get
+            {
+                foreach (CeilingLight lamp in _want)
+                {
+                    int r = RunIndexOf(lamp);
+                    if (r >= 0) return _runs[r];
+                }
+                return null;
+            }
+        }
+
+        // ---------------------------------------------------------------- Tempo de cada passagem
+
+        /// <summary>Quando acaba o aviso (o trecho começa a apagar).</summary>
+        public static double DarkStart(WavePlan p) => p.Start + WarnSeconds;
+
+        /// <summary>Quando a luminária de ordem <paramref name="i"/> apaga.</summary>
+        public static double LampDark(WavePlan p, int i) => DarkStart(p) + i * StepSeconds;
+
+        /// <summary>Quando a luminária de ordem <paramref name="i"/> volta, num trecho de <paramref name="n"/>.</summary>
+        public static double LampRelit(WavePlan p, int n, int i) => System.Math.Min(p.Cut, DarkStart(p) + n * StepSeconds + HoldSeconds + i * RelightSeconds);
+
+        /// <summary>Quando a passagem termina (tudo aceso de volta).</summary>
+        public double End(WavePlan p)
+        {
+            int n = p.Run >= 0 && p.Run < _runs.Count ? _runs[p.Run].Length : 0;
+            return System.Math.Min(p.Cut, DarkStart(p) + n * StepSeconds + HoldSeconds + n * RelightSeconds);
+        }
+
+        /// <summary>Segundos que dura a passagem num trecho de <paramref name="length"/> luminárias (sem interruptor).</summary>
+        public static double Duration(int length) => WarnSeconds + length * StepSeconds + HoldSeconds + length * RelightSeconds;
+
+        /// <summary>A passagem está no aviso (piscando) na hora <paramref name="t"/>?</summary>
+        public static bool Warning(WavePlan p, double t) => t >= p.Start && t < DarkStart(p) && t < p.Cut;
+
+        /// <summary>A passagem tem luminária apagada na hora <paramref name="t"/>?</summary>
+        public bool Dark(WavePlan p, double t) => t >= DarkStart(p) && t < End(p);
 
         void OnEnable() => Instance = this;
 
@@ -233,53 +386,111 @@ namespace BackRooms.World
             Release();
         }
 
+        IReadOnlyList<WavePlan> ClockPlans(double t)
+        {
+            _clockPlans.Clear();
+            if (t < FirstWave || _runs.Count == 0) return _clockPlans;
+            long k = (long)((t - FirstWave) / WaveEvery);
+            for (int r = 0; r < Mathf.Min(RunsPerWave, _runs.Count); r++)
+                _clockPlans.Add(new WavePlan
+                {
+                    Run = (short)RunIndexFor(k, r),
+                    Reverse = (OfficeElevators.Hash(_seed + 29 + r * 13, (int)k) & 1u) == 1u,
+                    Start = FirstWave + k * (double)WaveEvery,
+                    Cut = WavePlan.Never,
+                });
+            return _clockPlans;
+        }
+
         void Update()
         {
             double t = OfficeElevators.Clock();
-            if (t < FirstWave || _runs.Count == 0)
+            if (Paused || _runs.Count == 0 || t < 0)
             {
                 Release();
                 return;
             }
 
-            long k = (long)((t - FirstWave) / WaveEvery);
-            double into = t - FirstWave - k * WaveEvery;
-            CeilingLight[] run = _runs[(int)(OfficeElevators.Hash(_seed + 17, (int)k) % (uint)_runs.Count)];
-            double duration = run.Length * StepSeconds + HoldSeconds;
-            if (into >= duration)
-            {
-                Release();
-                return;
-            }
+            IReadOnlyList<WavePlan> plans = Planner != null && !UseClock ? Planner() : ClockPlans(t);
 
-            if (k != _event)
-            {
-                Release();
-                _event = k;
-                _active = run;
-                _dark = new bool[run.Length];
-                _reverse = (OfficeElevators.Hash(_seed + 29, (int)k) & 1u) == 1u;
-            }
+            // Dois trechos podem dividir a luminária do cruzamento: apagada se algum a quer apagada.
+            _want.Clear();
+            _warn.Clear();
+            if (plans != null)
+                foreach (WavePlan p in plans)
+                {
+                    if (p.Run < 0 || p.Run >= _runs.Count || t < p.Start || t >= p.Cut) continue;
+                    CeilingLight[] run = _runs[p.Run];
+                    if (Warning(p, t))
+                    {
+                        foreach (CeilingLight lamp in run) if (lamp != null) _warn.Add(lamp);
+                        continue;
+                    }
+                    for (int i = 0; i < run.Length; i++)
+                    {
+                        CeilingLight lamp = run[p.Reverse ? run.Length - 1 - i : i];
+                        // Apaga em cascata e volta na mesma ordem: o escuro anda pelo corredor e some na ponta.
+                        if (lamp != null && t >= LampDark(p, i) && t < LampRelit(p, run.Length, i)) _want.Add(lamp);
+                    }
+                }
 
-            for (int i = 0; i < _active.Length; i++)
+            foreach (CeilingLight lamp in _want) _touched.Add(lamp);
+            foreach (CeilingLight lamp in _warn) _touched.Add(lamp);
+
+            _gone.Clear();
+            foreach (CeilingLight lamp in _touched)
             {
-                CeilingLight light = _active[_reverse ? _active.Length - 1 - i : i];
-                bool dark = into >= i * StepSeconds;
-                if (dark && !_dark[i] && light != null && light.IsLit && Application.isPlaying)
-                    AudioSource.PlayClipAtPoint(OfficeSounds.Clack, light.transform.position, 0.7f);
-                _dark[i] = dark;
-                if (light != null) light.SetForcedDark(dark);
+                if (lamp == null)
+                {
+                    _gone.Add(lamp);
+                    continue;
+                }
+                bool dark = _want.Contains(lamp);
+                bool warn = !dark && _warn.Contains(lamp);
+
+                // Começou a piscar: o reator falha no som. Apagou: o estalo.
+                if (warn && !_wasWarn.Contains(lamp) && Application.isPlaying)
+                    AudioSource.PlayClipAtPoint(OfficeSounds.Sputter, lamp.transform.position, 0.45f);
+                if (dark && !_wasDark.Contains(lamp) && Application.isPlaying)
+                    AudioSource.PlayClipAtPoint(OfficeSounds.Clack, lamp.transform.position, 0.7f);
+
+                if (warn)
+                {
+                    // Pisca: rajadas curtas de apagado (só visual: cada máquina sorteia as suas).
+                    _blink.TryGetValue(lamp, out float next);
+                    if (Time.time >= next)
+                    {
+                        bool off = !lamp.ForcedDark;
+                        lamp.SetForcedDark(off);
+                        _blink[lamp] = Time.time + (off ? Random.Range(0.04f, 0.16f) : Random.Range(0.05f, 0.35f));
+                    }
+                }
+                else
+                {
+                    lamp.SetForcedDark(dark);
+                    if (!dark) _gone.Add(lamp);
+                }
+
+                if (dark) _wasDark.Add(lamp); else _wasDark.Remove(lamp);
+                if (warn) _wasWarn.Add(lamp); else _wasWarn.Remove(lamp);
+            }
+            foreach (CeilingLight lamp in _gone)
+            {
+                _touched.Remove(lamp);
+                _blink.Remove(lamp);
             }
         }
 
         void Release()
         {
-            if (_active != null)
-                foreach (CeilingLight light in _active)
-                    if (light != null) light.SetForcedDark(false);
-            _active = null;
-            _dark = null;
-            _event = -1;
+            foreach (CeilingLight lamp in _touched)
+                if (lamp != null) lamp.SetForcedDark(false);
+            _touched.Clear();
+            _want.Clear();
+            _warn.Clear();
+            _wasDark.Clear();
+            _wasWarn.Clear();
+            _blink.Clear();
         }
     }
 
@@ -287,11 +498,12 @@ namespace BackRooms.World
     public static class OfficeSounds
     {
         const int Rate = 44100;
-        static AudioClip _chime, _rumble, _clack;
+        static AudioClip _chime, _rumble, _clack, _sputter;
 
         public static AudioClip Chime => _chime != null ? _chime : (_chime = Make("Elevador_Plim", 1.2f, ChimeSample));
         public static AudioClip Rumble => _rumble != null ? _rumble : (_rumble = Make("Elevador_Motor", 1.6f, RumbleSample()));
         public static AudioClip Clack => _clack != null ? _clack : (_clack = Make("Reator_Estalo", 0.3f, ClackSample()));
+        public static AudioClip Sputter => _sputter != null ? _sputter : (_sputter = Make("Reator_Falhando", 1.4f, SputterSample()));
 
         static AudioClip Make(string name, float seconds, System.Func<float, float> sample)
         {
@@ -336,6 +548,25 @@ namespace BackRooms.World
                 low += ((float)rng.NextDouble() * 2f - 1f - low) * alpha;
                 float env = Mathf.Min(1f, t / 0.25f) * Mathf.Min(1f, (1.6f - t) / 0.5f);
                 return env * (low * 3f + 0.15f * Mathf.Sin(2f * Mathf.PI * 60f * t));
+            };
+        }
+
+        // Reator falhando (o aviso da onda): o zumbido de 120 Hz engasgando, com estalos e cortes.
+        static System.Func<float, float> SputterSample()
+        {
+            var rng = new System.Random(13);
+            float gate = 1f, until = 0f;
+            return t =>
+            {
+                if (t >= until)
+                {
+                    gate = rng.NextDouble() < 0.45 ? 0f : 1f;
+                    until = t + 0.02f + (float)rng.NextDouble() * 0.12f;
+                }
+                float hum = Mathf.Sin(2f * Mathf.PI * 120f * t) + 0.5f * Mathf.Sin(2f * Mathf.PI * 240f * t + 0.3f) + 0.25f * Mathf.Sign(Mathf.Sin(2f * Mathf.PI * 360f * t));
+                float crackle = rng.NextDouble() < 0.004 ? ((float)rng.NextDouble() * 2f - 1f) * 3f : 0f;
+                float env = Mathf.Min(1f, t / 0.05f) * Mathf.Min(1f, (1.4f - t) / 0.2f);
+                return env * (hum * 0.35f * gate + crackle);
             };
         }
 
