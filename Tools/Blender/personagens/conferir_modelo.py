@@ -53,6 +53,13 @@ def main():
     pb.clear_scene()
     pb.stage(ceiling=3.9)
     V, T, UV = load()
+    # Corpo deitado (o Undertow nada de bruços, com a barriga abaixo de zero): sobe acima do piso.
+    # De pé (Capitão, Entidade), nada muda.
+    ext = V.max(0) - V.min(0)
+    lying = ext[2] < 0.5 * max(ext[0], ext[1])
+    if lying and V[:, 2].min() < 0.0:
+        V = V.copy()
+        V[:, 2] += 0.6 - V[:, 2].min()
     me = bpy.data.meshes.new(NAME)
     me.vertices.add(len(V))
     me.vertices.foreach_set("co", V.astype(np.float32).ravel())
@@ -86,7 +93,8 @@ def main():
 
     lo, hi = V.min(0), V.max(0)
     c = (lo + hi) * 0.5
-    h = hi[2] - lo[2]
+    # De pé, a altura enquadra; deitado, o comprimento.
+    h = max(hi[2] - lo[2], 0.45 * float(max(hi[0] - lo[0], hi[1] - lo[1]))) if lying else hi[2] - lo[2]
     out = pb.PHOTO_DIR
     for tag, d in (("frente", (0.25, -1.0, 0.05)), ("lado", (-1.0, -0.1, 0.05)), ("costas", (-0.3, 1.0, 0.1)),
                    ("34", (0.8, -0.8, 0.12))):
@@ -94,6 +102,10 @@ def main():
         eye[2] = min(eye[2], 3.6)
         pb.shoot(os.path.join(out, f"jogo_{NAME.lower()}_{tag}.png"), eye, c, 35, (800, 1000), samples=32)
     top = lo + (hi - lo) * np.array((0.5, 0.5, 0.86))
+    if lying:
+        # Deitado: o rosto fica na frente (−Y), não no alto; e uma foto de cima.
+        top = np.array((c[0], lo[1] + 0.22, c[2] + 0.03))
+        pb.shoot(os.path.join(out, f"jogo_{NAME.lower()}_cima.png"), c + np.array((0.1, 0.2, 2.8)), c, 24, (800, 1000), samples=32)
     pb.shoot(os.path.join(out, f"jogo_{NAME.lower()}_rosto.png"), top + np.array((0.2, -1.1, 0.0)), top, 50, (800, 800), samples=32)
 
 

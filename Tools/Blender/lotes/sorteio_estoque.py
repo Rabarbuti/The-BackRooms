@@ -303,6 +303,11 @@ def carro(name="Carro"):
     return p.to_object()
 
 
+# Texto da faixa do sorteio (a língua do jogo é o inglês; era "CONCORRA!", 0,31 m).
+FAIXA_TEXTO = "ENTER TO WIN!"
+FAIXA_TAMANHO = 0.24
+
+
 def faixa_concorra(name="FaixaConcorra"):
     """Faixa de tecido amarelo de 2,4 x 0,5 m com "CONCORRA!" em vermelho nas duas faces,
     amarrada entre dois postes finos de 2,2 m. Ocupa 2,4 x 0,1 x 2,2 m."""
@@ -325,9 +330,9 @@ def faixa_concorra(name="FaixaConcorra"):
             p.cylinder((sx * xp, 0, z), 0.02, 0.016, "Sorteio_Cromado", segments=10)
     # Letras em relevo, nas duas faces (a de trás girada para ler certo por trás).
     zc = (z0 + z1) / 2 - 0.01
-    p.text("CONCORRA!", (0, -0.0045, zc), 0.31, "Sorteio_Letra_Vermelha", depth=0.0015,
+    p.text(FAIXA_TEXTO, (0, -0.0045, zc), FAIXA_TAMANHO, "Sorteio_Letra_Vermelha", depth=0.0015,
            resolution=3)
-    p.text("CONCORRA!", (0, 0.0045, zc), 0.31, "Sorteio_Letra_Vermelha", depth=0.0015,
+    p.text(FAIXA_TEXTO, (0, 0.0045, zc), FAIXA_TAMANHO, "Sorteio_Letra_Vermelha", depth=0.0015,
            rot=(90.0, 0.0, 180.0), resolution=3)
     return p.to_object()
 

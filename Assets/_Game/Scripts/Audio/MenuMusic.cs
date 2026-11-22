@@ -88,6 +88,9 @@ namespace BackRooms.Audio
             _source.bypassReverbZones = true;
             _source.dopplerLevel = 0f;
             _source.volume = 0f;
+            // No menu o ouvinte fica mudo (GameOptions.MenuSilence) e só esta fonte passa; o volume
+            // geral entra na conta dela.
+            _source.ignoreListenerVolume = true;
         }
 
         void OnDestroy()
@@ -125,7 +128,7 @@ namespace BackRooms.Audio
 
             if (clip == null || _source == null) return;
 
-            _source.volume = volume * Level * Level;
+            _source.volume = volume * Level * Level * GameOptions.Volume;
 
             // O estado é a conta deste componente, não o isPlaying da fonte: sem dispositivo de
             // áudio a fonte nunca diz que está tocando, e a música recomeçaria a cada quadro.

@@ -192,6 +192,168 @@ namespace BackRooms.EditorTools
             return $"{names.Count} fotos em {folder}; {string.Join("; ", stats)}";
         }
 
+        /// <summary>
+        /// Linha de comando: -executeMethod BackRooms.EditorTools.Level2Preview.BatchTide [-seed N]
+        /// (sem -seed: 1998 e 7). A maré vista do mesmo ponto em quatro momentos: água baixa, o
+        /// alarme (a água começando a subir, lâmpadas vermelhas no clarão, sirene), maré alta e depois
+        /// (água baixa de novo, com a marca molhada nas paredes e no seco). Dois pontos por seed: do
+        /// seco olhando a borda da água e de frente para uma lâmpada de alarme. Com a filmadora (o
+        /// aviso no painel). Em Logs/Previews/mare/mare_s{seed}_*.png; apaga antes as da mesma seed.
+        /// </summary>
+        public static void BatchTide()
+        {
+            int code = 1;
+            try
+            {
+                var seeds = new List<int>();
+                int given = SeedArgument(-1);
+                if (given >= 0) seeds.Add(given);
+                else seeds.AddRange(new[] { 1998, 7 });
+                bool ok = true;
+                foreach (int seed in seeds)
+                {
+                    string report = Tide(seed, out bool one);
+                    ok &= one;
+                    Debug.Log("[BackRooms] Fotos da maré: " + report);
+                }
+                code = ok ? 0 : 3;
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+            Level1Setup.ExitWithLevel0Open(code);
+        }
+
+        static string Tide(int seed, out bool ok)
+        {
+            ok = false;
+            Level2Setup.BuildScene();
+            EditorSceneManager.OpenScene(Level2Setup.ScenePath, OpenSceneMode.Single);
+            var builder = Object.FindFirstObjectByType<LevelBuilder>();
+            if (builder == null || !builder.poolsEnabled) return "a cena não tem LevelBuilder com as Piscinas ligadas";
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
+            if (prefab == null) return "sem o prefab do jogador";
+
+            builder.seed = seed;
+            builder.Rebuild();
+            LevelData d = builder.Data;
+            WakeWater(builder);
+            foreach (HDAdditionalLightData light in builder.GetComponentsInChildren<HDAdditionalLightData>(true))
+                light.shadowUpdateMode = ShadowUpdateMode.EveryFrame;
+            var water = builder.GetComponentInChildren<PoolWater>();
+            var alarm = builder.GetComponentInChildren<PoolAlarm>(true);
+            if (water == null) return "sem água";
+
+            string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Logs", "Previews", "mare"));
+            Directory.CreateDirectory(folder);
+            foreach (string old in Directory.GetFiles(folder, $"mare_s{seed}_*.png")) File.Delete(old);
+
+            // Os pontos de vista: (nome, pé, para onde olha, inclinação).
+            var views = new List<(string name, Vector3 foot, Vector3 look, float pitch)>();
+            WallSide[] sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
+
+            // Do seco, recuado 1,2 m, olhando a água vizinha (raso ou funda), um pouco para baixo.
+            bool edge = false;
+            for (int z = 0; z < d.Height && !edge; z++)
+                for (int x = 0; x < d.Width && !edge; x++)
+                {
+                    if (!OpenCell(d, x, z) || d.Depth[x, z] != PoolDepth.Dry || d.Room[x, z] < 0 || d.Rooms[d.Room[x, z]].Kind == PoolRoomKind.Start) continue;
+                    foreach (WallSide side in sides)
+                    {
+                        if (!d.IsOpen(x, z, side) || !d.Neighbor(x, z, side, out int nx, out int nz) || !OpenCell(d, nx, nz)) continue;
+                        if (d.Depth[nx, nz] != PoolDepth.Shallow && d.Depth[nx, nz] != PoolDepth.Deep) continue;
+                        Vector3 dir = Dir(side);
+                        views.Add(("borda", CellCenter(d, x, z) - dir * 1.2f, dir, 18f));
+                        edge = true;
+                        break;
+                    }
+                }
+
+            // De frente para a lâmpada de alarme mais perto do início.
+            Light lamp = null;
+            Vector3 spawn = CellCenter(d, d.SpawnX, d.SpawnZ);
+            foreach (Light light in builder.GetComponentsInChildren<Light>(true))
+                if (light.gameObject.name == "Alarme" && (lamp == null || (light.transform.position - spawn).sqrMagnitude < (lamp.transform.position - spawn).sqrMagnitude))
+                    lamp = light;
+            if (lamp != null)
+            {
+                Vector3 at = builder.transform.InverseTransformPoint(lamp.transform.position);
+                int cx = Mathf.Clamp(Mathf.FloorToInt(at.x / LevelBuilder.Cell), 0, d.Width - 1), cz = Mathf.Clamp(Mathf.FloorToInt(at.z / LevelBuilder.Cell), 0, d.Height - 1);
+                Vector3 center = CellCenter(d, cx, cz);
+                Vector3 away = center - at;
+                away.y = 0f;
+                if (away.sqrMagnitude < 0.01f) away = Vector3.forward;
+                away.Normalize();
+                // 3,5 m, olhando só um pouco para cima: a lâmpada, a parede e o chão no quadro.
+                Vector3 foot = new Vector3(at.x, StandHeight(d, cx, cz), at.z) + away * 3.5f;
+                float pitch = -Mathf.Atan2(at.y - (foot.y + Eye), 3.5f) * Mathf.Rad2Deg * 0.35f;
+                views.Add(("alarme", foot, -away, pitch));
+            }
+
+            GameObject rig = Level0Preview.CreateCameraRig(prefab, out Camera camera);
+            bool asyncBefore = ShaderUtil.allowAsyncCompilation;
+            ShaderUtil.allowAsyncCompilation = false;
+            var target = new RenderTexture(1280, 720, 24, RenderTextureFormat.ARGB32);
+            var readback = new Texture2D(target.width, target.height, TextureFormat.RGBA32, false);
+            var camcorder = Object.FindFirstObjectByType<BackRooms.UI.Camcorder>();
+            var names = new List<string>();
+
+            // Os quatro momentos: (nome, altura da água, até onde está molhado, alarme, agitação, painel).
+            var moments = new (string name, float offset, float wet, bool alarm, float chop, string hud)[]
+            {
+                ("1_baixa", 0f, 0f, false, 0f, null),
+                ("2_alarme", 0.25f, 0.25f, true, 1f, PoolTide.TextRising),
+                ("3_alta", PoolTide.Amplitude, PoolTide.Amplitude, false, 0f, PoolTide.TextHigh),
+                ("4_depois", 0f, PoolTide.Amplitude * 0.65f, false, 0f, null),
+            };
+
+            try
+            {
+                camera.targetTexture = target;
+                camera.farClipPlane = Mathf.Max(camera.farClipPlane, 150f);
+                foreach (var view in views)
+                    foreach (var moment in moments)
+                    {
+                        water.Offset = moment.offset;
+                        water.WetTop = moment.wet;
+                        water.Agitation = moment.chop;
+                        if (alarm != null) alarm.Set(moment.alarm, 0.0);
+                        if (camcorder != null)
+                        {
+                            camcorder.TideText = moment.hud;
+                            camcorder.Draw(true, 61.4f, 61.4f, 0.95f, false);
+                        }
+                        Vector3 look = view.look;
+                        look.y = 0f;
+                        rig.transform.SetPositionAndRotation(builder.transform.TransformPoint(view.foot), Quaternion.LookRotation(look.normalized, Vector3.up));
+                        camera.transform.localRotation = Quaternion.Euler(view.pitch, 0f, 0f);
+                        water.Snap(camera.transform.position);
+                        string file = $"mare_s{seed}_{view.name}_{moment.name}.png";
+                        Shoot(camera, target, readback, Path.Combine(folder, file));
+                        names.Add(file);
+                    }
+            }
+            finally
+            {
+                water.Offset = 0f;
+                water.WetTop = 0f;
+                water.Agitation = 0f;
+                if (alarm != null) alarm.Set(false, 0.0);
+                if (camcorder != null) camcorder.TideText = null;
+                camera.targetTexture = null;
+                RenderTexture.active = null;
+                Object.DestroyImmediate(target);
+                Object.DestroyImmediate(readback);
+                Object.DestroyImmediate(rig);
+                ShaderUtil.allowAsyncCompilation = asyncBefore;
+            }
+
+            ok = names.Count >= 4;
+            string missing = (edge ? "" : " (sem seco ao lado de água)") + (lamp != null ? "" : " (sem lâmpada de alarme)");
+            return $"seed {seed}: {names.Count} fotos em {folder}{missing}; lâmpadas de alarme: {(alarm != null ? alarm.LampCount : 0)}; {string.Join(", ", names)}";
+        }
+
         static readonly int[] ScanSeeds = { 1998, 7, 4242, 31337, 90210, 5, 21 };
 
         static string Closeups(int seed, out bool ok)

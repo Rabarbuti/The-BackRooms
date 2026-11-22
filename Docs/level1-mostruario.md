@@ -5,19 +5,24 @@ Projeto da segunda fase. Escrito em 11/11/2026.
 **Já existe:** uma versão de teste jogável (`Scenes/Level1_Test.unity`, menu BackRooms > Montar
 Level 1 (teste)): a planta do Level 0 em 20 x 20 células, com pé-direito de 3,4 m, sem buracos nem nichos,
 mobiliada pela `PropLayer` com os 65 modelos do Blender, incluindo a sala dos sofás e placas
-de trânsito (PARE e STOP). No lugar das setas pintadas do Level 0, placas amarelas de curva
+de trânsito (STOP; a PARE saiu com a tradução). No lugar das setas pintadas do Level 0, placas amarelas de curva
 (losango com a seta dobrada) pregadas na parede apontam o caminho até a saída. A porta do Level 0
 leva até aqui. **O Capitão está na fase** (desde 17/11/2026, `CaptainBrain`): aparece quando alguém
 chega a 5 células da sala inicial, ouve, congela quando é visto e está iluminado, cansa quem o
 encara, anda em arrancadas no apagão e pega como a entidade (seção 5.4, regras 1 a 4 e 6).
 Também já existem (17/11/2026): totens com troca no apagão, guarda-roupa e mesa de esconder,
-plástico-bolha, barricadas, o objetivo (teclado, etiquetas vermelhas e bilhete), a música da loja, o
+plástico-bolha, barricadas, o objetivo (teclado com painel na tela e etiquetas vermelhas), a música da loja, o
 jingle do Capitão e o piso por zona (laminado e vinílico) com passos próprios.
 As zonas da seção 3.1 existem todas (lavanderia, festa, verão, quarto, escritório e cubículos
 com os lotes de 17/11/2026; o sorteio é um carro num beco sem saída), com placas penduradas com o
 nome da zona e anomalias longe do início (mesa no teto, móvel atravessando a parede, guarda-roupa
 de frente para a parede, batente solto). A mobília sai igual no host e no cliente (conferido em dois
 editores).
+**Texto do jogador em inglês** (21/11/2026): etiquetas vermelhas CLEARANCE, placas penduradas DO NOT
+ENTER, DINING ROOM, LIVING ROOM e STOCKROOM, placas de preço SALE (branca) e DISPLAY ONLY (amarela, também
+a da base do totem), placas de teto BIG SALE e HALF PRICE, faixa do sorteio ENTER TO WIN!, painel do
+código KEYPAD; no menu, a fase é
+"Level 1 — The Showroom". O projeto abaixo cita os textos em português, como foram pensados.
 **Falta:** jogar à mão e ajustar. A saída continua a porta corta-fogo com EXIT, não a porta da
 doca da seção 6 (decidido em 17/11/2026). O teto a 3,4 m não muda a iluminação das luminárias.
 
@@ -339,8 +344,8 @@ dela (`PegMarks`, as 60 mais novas ficam). O totem não vira a cabeça nem anda.
    *Como está feito:* caçando (investigando um barulho ou perseguindo), as arrancadas se repetem
    com 1 s mancando entre elas. Vagando, anda a 1,2 m/s; vasculhando, a 1,5.
 5. **Totens.** Há 6 a 10 estátuas de fibra de vidro do Capitão Ancoradouro espalhadas pela
-   loja, do mesmo tamanho e na mesma pose dura. De longe são iguais. As pistas para separar, ensinadas por um bilhete na sala inicial:
-   - o totem fica numa **base preta** e segura a placa de OFERTA;
+   loja, do mesmo tamanho e na mesma pose dura. De longe são iguais. As pistas para separar:
+   - o totem fica numa **base preta** e segura a placa amarela DISPLAY ONLY;
    - o Capitão **não tem base**, tem a **mancha de sangue** no casaco, os **olhos seguem** quem
      passa e a perna de pau **marca o carpete**.
    Durante um apagão ele pode **trocar de lugar com um totem**: quando a luz volta, há um totem
@@ -356,8 +361,10 @@ dela (`PegMarks`, as 60 mais novas ficam). O totem não vira a cabeça nem anda.
 
 **Fechar o caixa.** A saída é a porta da doca de carga, trancada por um teclado. O código está
 nas **etiquetas de LIQUIDAÇÃO**: entre todas as placas de preço, três são vermelhas, cada uma
-com um dígito e a sua ordem ("1º", "2º", "3º"). Uma pessoa lê, outra digita. Com 1 jogador,
-o código aparece também numa nota na sala inicial, embaralhado.
+com um dígito e a sua ordem ("1/3", "2/3", "3/3"). Uma pessoa lê, outra digita. *Como está
+feito (21/11/2026):* não há nota com o código (o bilhete embaralhado da sala inicial saiu: ficava
+fácil demais); só as três etiquetas são vermelhas com CLEARANCE, e as outras placas de preço são
+amarelas (DISPLAY ONLY). Mira + E no teclado abre o painel do código na tela (`CodePanel`).
 
 As etiquetas vermelhas são sorteadas pela seed sempre em zonas diferentes, nunca a menos de
 6 células umas das outras: o grupo precisa se separar — e quem fica sozinho perde quem vigiava

@@ -8,11 +8,14 @@ using UnityEngine;
 namespace BackRooms.UI
 {
     /// <summary>
-    /// Painel de filmadora (OSD): REC piscando, contador da fita, bateria, hora e data.
+    /// Painel de filmadora (OSD): estado da gravação de verdade (F9: STBY parado, REC verde piscando
+    /// com o tempo do clipe, SAVED e o nome do arquivo ao parar), contador da fita, bateria da
+    /// lanterna em porcentagem, hora e data.
     /// É desenhado com a PixelFont (matriz 5x7) numa textura pequena, que o shader
     /// BackRooms/CamcorderVHS sobrepõe à imagem antes de aplicar os defeitos de fita —
     /// por isso o texto treme e borra junto com o resto, como numa gravação de verdade.
-    /// No menu mostra STBY (em espera); ao entrar no mapa, começa a gravar.
+    /// Até 21/11/2026 o canto mostrava sempre REC vermelho em jogo (a filmadora de mentira) e a
+    /// gravação real era só uma linha pequena embaixo: o jogador não sabia dizer se gravava.
     /// A grade é de 1280 x 720: fina o bastante para ter três tamanhos de letra próximos um do
     /// outro (na grade antiga, de 480 x 270, só dava para dobrar ou reduzir à metade).
     /// Mandar uma textura desse tamanho para a placa de vídeo é o que custa, então: ela guarda
@@ -47,6 +50,17 @@ namespace BackRooms.UI
         const int Height = 720;
         // A dica HOLD SPACE aparece nestes primeiros segundos de cada mergulho onde não dá pé.
         const float SwimHintSeconds = 4f;
+        // No começo de cada fase, o pé do painel lembra onde estão as tarefas (menu de pausa).
+        const float PauseHintSeconds = 8f;
+        const string PauseHint = "ESC: TASKS";
+        // Gravação de verdade (F9), no canto de cima, esquerda. Texto que o jogador lê: inglês.
+        const string StandbyText = "STBY";
+        const string RecText = "REC";
+        const string RecHint = "R - REC";
+        const string SavedText = "SAVED";
+        const string FailedText = "REC FAILED";
+        // Quanto tempo o SAVED fica na tela depois de parar, em segundos.
+        const float SavedNoticeSeconds = 4f;
         const int Margin = 54;
 
         // Tamanhos de letra, em pontos da grade por ponto da fonte 5x7. Numa tela de 1080
@@ -75,6 +89,7 @@ namespace BackRooms.UI
         const byte Red = 2;
         const byte Shadow = 3;
         const byte Black = 4;
+        const byte Green = 5;
 
         static readonly string[] Months = { "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC" };
 
@@ -187,17 +202,19 @@ namespace BackRooms.UI
             var pen = PlayerNetwork.Local != null ? PlayerNetwork.Local.pen : null;
             string tool = pen != null && pen.Equipped ? "PEN " + pen.ColorName : null;
 
-            // Gravação de verdade (F9): mostra a fita rodando e, ao parar, que o vídeo foi salvo.
+            // Gravação de verdade (F9): REC com o tempo do clipe e, ao parar, SAVED e o nome do arquivo.
             string tape = null;
             ScreenRecorder recorder = ScreenRecorder.Instance;
             if (recorder != null && recorder.IsRecording)
             {
                 int seconds = Mathf.FloorToInt(recorder.RecordedSeconds);
-                tape = $"TAPE {seconds / 60}:{seconds % 60:00}";
+                tape = $"{RecText} {seconds / 60}:{seconds % 60:00}";
             }
-            else if (recorder != null && recorder.SecondsSinceSaved < 3f)
+            else if (recorder != null && recorder.SecondsSinceSaved < SavedNoticeSeconds)
             {
-                tape = string.IsNullOrEmpty(recorder.LastError) ? "SAVED" : "TAPE ERROR";
+                tape = string.IsNullOrEmpty(recorder.LastError)
+                    ? SavedText + "\n" + System.IO.Path.GetFileName(recorder.LastFile)
+                    : FailedText;
             }
 
             // Porta de saída: o que a tecla E faz agora, quem já está esperando e, quando ela
@@ -217,6 +234,8 @@ namespace BackRooms.UI
                 else if (ExitLock.Prompt != null) prompt = ExitLock.Prompt;
                 else if (SwitchObjective.Prompt != null) prompt = SwitchObjective.Prompt;
                 else if (BatteryPickups.Prompt != null) prompt = BatteryPickups.Prompt;
+                else if (ElevatorControl.Prompt != null) prompt = ElevatorControl.Prompt;
+                else if (BackRooms.Entities.LightSwitches.Prompt != null) prompt = BackRooms.Entities.LightSwitches.Prompt;
                 else if (exit.LocalInReach && SwitchObjective.Locked) prompt = SwitchObjective.Instance.LockedText;
                 else if (exit.LocalInReach && LevelExit.Locked) prompt = "LOCKED\nCODE ON KEYPAD";
                 else if (exit.LocalInReach) prompt = waiting > 0 ? $"E - OPEN DOOR\n{waiting}/{total} WAITING" : "E - OPEN DOOR";
@@ -224,6 +243,7 @@ namespace BackRooms.UI
 
                 // Objetivo comum com pontos valendo: quantos e quanto falta da janela.
                 if (footer == null && SwitchObjective.Instance != null) footer = SwitchObjective.Instance.Footer;
+                if (footer == null && _recordSeconds < PauseHintSeconds && !PauseMenu.IsOpen) footer = PauseHint;
             }
 
             // Água (Piscinas): aviso e barra do fôlego.
@@ -243,16 +263,28 @@ namespace BackRooms.UI
             // Esconderijo em móvel (Level 1): entrar, sair, agachar para a mesa.
             if (prompt == null && cover == null) prompt = HideSpotInput.Prompt;
 
+            // Carteiras das salas de aula (Escritório): sentar e levantar.
+            if (prompt == null && cover == null) prompt = ClassroomSeats.Prompt;
+
             // Dentro do guarda-roupa só se vê pela fresta da porta.
             bool slit = body != null && body.Hiding == HideKind.Wardrobe && !body.IsReturning;
+
+            // Maré das Piscinas (PoolTide): a fase no alto da tela, em vermelho, piscando se ela pede.
+            string tideText = BackRooms.World.PoolTide.HudText;
+            TideText = tideText != null && (!BackRooms.World.PoolTide.HudBlink || Mathf.FloorToInt(Time.unscaledTime * 2f) % 2 == 0) ? tideText : null;
 
             Draw(recording, _recordSeconds, Time.unscaledTime, battery, lightOn, tool, _noSignal > 0f, tape, prompt, footer, cover, underwater, air, swimHint, slit);
         }
 
+        /// <summary>Aviso da maré desenhado no alto da tela (já piscando); nulo = nada. Público para testes e prévias.</summary>
+        public string TideText { get; set; }
+
         /// <summary>
         /// Desenha um quadro do painel e o publica para o shader. Público para a ferramenta
         /// de prévia do editor, que roda fora do Play.
-        /// <paramref name="prompt"/> é o aviso no meio da tela (até duas linhas, separadas por
+        /// <paramref name="recording"/> diz que a fase está em jogo (sem gravar, STBY com a dica do F9);
+        /// <paramref name="tape"/> é a gravação de verdade: nulo (parado), "REC m:ss" (gravando),
+        /// "SAVED", quebra de linha e o arquivo, ou "REC FAILED". <paramref name="prompt"/> é o aviso no meio da tela (até duas linhas, separadas por
         /// quebra de linha), <paramref name="footer"/> o do pé, e <paramref name="cover"/>,
         /// quando informado, tapa a imagem com a tela preta e esse texto. <paramref name="swimHint"/>
         /// é a dica de tecla do nado, piscando abaixo da barra do fôlego. <paramref name="slit"/> tapa
@@ -285,10 +317,10 @@ namespace BackRooms.UI
             // O resto só é redesenhado quando muda: a bolinha do REC e a bateria fraca piscam
             // duas vezes por segundo, o relógio anda uma vez por segundo.
             bool blink = Mathf.FloorToInt(clockSeconds * 2f) % 2 == 0;
-            int bars = battery > 0.66f ? 3 : battery > 0.33f ? 2 : battery > 0.05f ? 1 : 0;
+            int percent = BatteryPercent(battery);
             int airStep = air < 0.999f ? Mathf.RoundToInt(Mathf.Clamp01(air) * 40f) : -1;
             bool airBlink = air < 0.25f && Mathf.FloorToInt(clockSeconds * 4f) % 2 == 0;
-            string state = $"{recording}|{blink}|{bars}|{battery < 0.15f}|{lightOn}|{tool}|{noSignal}|{tape}|{prompt}|{footer}|{cover}|{time}|{date}|{underwater}|{airStep}|{airBlink}|{swimHint}|{slit}";
+            string state = $"{recording}|{blink}|{percent}|{lightOn}|{tool}|{noSignal}|{tape}|{prompt}|{footer}|{cover}|{time}|{date}|{underwater}|{airStep}|{airBlink}|{swimHint}|{slit}|{TideText}";
 
             if (state != _drawn)
             {
@@ -339,28 +371,10 @@ namespace BackRooms.UI
 
             DrawCorners();
 
-            // Canto de cima, esquerda: estado da gravação.
-            if (recording)
-            {
-                bool dotOn = Mathf.FloorToInt(clockSeconds * 2f) % 2 == 0;
-                if (dotOn) Disc(Margin + 12, Margin + 14, 11, Red);
-                Text(Margin + 32, Margin, "REC", Large, Red);
-                Text(Margin + 44 + MeasureText("REC", Large), Margin + 14, "SP", Small, White);
-            }
-            else
-            {
-                Text(Margin, Margin, "STBY", Large, White);
-            }
+            // Canto de cima, esquerda: a gravação de verdade (F9). Tem de ser óbvia à primeira vista.
+            DrawRecording(recording, tape, clockSeconds);
 
-            // Logo abaixo: a fita de verdade. Bolinha vermelha fixa enquanto grava em arquivo.
-            if (!string.IsNullOrEmpty(tape))
-            {
-                bool rolling = tape.StartsWith("TAPE ") && tape != "TAPE ERROR";
-                if (rolling) Disc(Margin + 6, Margin + 49, 5, Red);
-                Text(Margin + (rolling ? 20 : 0), Margin + 42, tape, Small, White);
-            }
-
-            // Canto de cima, direita: bateria. O contador da fita, logo abaixo, é da outra textura.
+            // Canto de cima, direita: bateria da lanterna. O contador da fita, logo abaixo, é da outra textura.
             DrawBattery(Width - Margin - 66, Margin, battery, clockSeconds);
 
             // Canto de baixo, direita: hora e data.
@@ -406,6 +420,10 @@ namespace BackRooms.UI
                 if (!string.IsNullOrEmpty(swimHint))
                     Text((Width - MeasureText(swimHint, Small)) / 2, Margin + 66, swimHint, Small, White);
             }
+
+            // Maré (Piscinas): abaixo do fôlego, em vermelho.
+            if (!covered && !string.IsNullOrEmpty(TideText))
+                Text((Width - MeasureText(TideText, Medium)) / 2, Margin + 96, TideText, Medium, Red);
         }
 
         void EnsureTexture()
@@ -470,14 +488,69 @@ namespace BackRooms.UI
             Box(Width - inset - thick, Height - inset - length, thick, length, White);
         }
 
-        // Pilha com três barras. Abaixo de 15% pisca em vermelho.
+        /// <summary>Porcentagem que o painel mostra: arredonda para cima (0% só com a bateria vazia).</summary>
+        public static int BatteryPercent(float level) => Mathf.Clamp(Mathf.CeilToInt(Mathf.Clamp01(level) * 100f - 0.001f), 0, 100);
+
+        /// <summary>O que o canto da gravação mostra agora: STBY, REC, SAVED ou REC FAILED (testes).</summary>
+        public string RecIndicator { get; private set; } = StandbyText;
+
+        /// <summary>A bateria como está escrita no painel agora, "87%" (testes).</summary>
+        public string BatteryText { get; private set; } = "";
+
+        /// <summary>A bateria está piscando em vermelho (abaixo de <see cref="Flashlight.LowBattery01"/>; testes).</summary>
+        public bool BatteryLow { get; private set; }
+
+        // Parado: STBY e a dica do F9. Gravando: bolinha e REC verdes piscando e o tempo do clipe.
+        // Parou: SAVED em verde e o nome do arquivo, por alguns segundos.
+        void DrawRecording(bool inGame, string tape, float clockSeconds)
+        {
+            bool blink = Mathf.FloorToInt(clockSeconds * 2f) % 2 == 0;
+            string[] lines = string.IsNullOrEmpty(tape) ? null : tape.Split('\n');
+            string first = lines != null ? lines[0] : "";
+
+            if (first.StartsWith(RecText + " ") || first.StartsWith("TAPE "))
+            {
+                RecIndicator = RecText;
+                if (blink)
+                {
+                    Disc(Margin + 12, Margin + 14, 11, Green);
+                    Text(Margin + 32, Margin, RecText, Large, Green);
+                }
+                string clip = first.Substring(first.IndexOf(' ') + 1);
+                Text(Margin + 48 + MeasureText(RecText, Large), Margin + 4, clip, Medium, Green);
+            }
+            else if (first == SavedText)
+            {
+                RecIndicator = SavedText;
+                Text(Margin, Margin, SavedText, Large, Green);
+                if (lines.Length > 1) Text(Margin, Margin + 42, lines[1], Small, White);
+            }
+            else if (first == FailedText)
+            {
+                RecIndicator = FailedText;
+                Text(Margin, Margin, FailedText, Large, Red);
+            }
+            else
+            {
+                RecIndicator = StandbyText;
+                Text(Margin, Margin, StandbyText, Large, White);
+                if (inGame) Text(Margin, Margin + 42, RecHint, Small, White);
+            }
+        }
+
+        // Pilha com a porcentagem ao lado e a carga desenhada dentro. Abaixo de 20% pisca em vermelho.
         void DrawBattery(int x, int y, float level, float clockSeconds)
         {
-            bool low = level < 0.15f;
+            int percent = BatteryPercent(level);
+            bool low = level < Flashlight.LowBattery01;
+            BatteryText = percent + "%";
+            BatteryLow = low;
             if (low && Mathf.FloorToInt(clockSeconds * 2f) % 2 == 1) return;
 
             byte color = low ? Red : White;
             const int w = 60, h = 28, wall = 4;
+
+            TextRight(x - 12, y + 4, BatteryText, Medium, color);
 
             Box(x, y, w, wall, color);
             Box(x, y + h - wall, w, wall, color);
@@ -485,8 +558,8 @@ namespace BackRooms.UI
             Box(x + w - wall, y, wall, h, color);
             Box(x + w, y + 8, 6, 12, color);
 
-            int bars = level > 0.66f ? 3 : level > 0.33f ? 2 : level > 0.05f ? 1 : 0;
-            for (int i = 0; i < bars; i++) Box(x + 8 + i * 16, y + 8, 12, 12, color);
+            int fill = Mathf.RoundToInt((w - 2 * wall - 4) * Mathf.Clamp01(level));
+            if (fill > 0) Box(x + wall + 2, y + wall + 2, fill, h - 2 * wall - 4, color);
         }
 
         void TextRight(int right, int y, string text, int scale, byte color)

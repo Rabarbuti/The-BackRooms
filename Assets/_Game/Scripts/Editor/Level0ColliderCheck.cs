@@ -90,6 +90,9 @@ namespace BackRooms.EditorTools
                     // (1 cm à frente do azulejo), corrimãos, ralo do poço e discos das lâmpadas.
                     if (filter.name == "Sanca" || filter.name == "Causticas" || filter.name == "Corrimaos" ||
                         filter.name == "Ralo" || filter.name == "LampadasSubmersas") continue;
+                    // A marca da maré (películas a milímetros do azulejo) e as lâmpadas de alarme no alto.
+                    if (filter.name == PoolWater.WetWallsName || filter.name == PoolWater.WetFloorName || filter.name == PoolWater.TideLineName ||
+                        filter.name == PoolWater.TideCausticsName || filter.name == PoolAlarm.HousingName || filter.name == PoolAlarm.LensName) continue;
 
                     var go = new GameObject("Visual_" + filter.name) { layer = VisualLayer };
                     go.transform.SetPositionAndRotation(filter.transform.position, filter.transform.rotation);

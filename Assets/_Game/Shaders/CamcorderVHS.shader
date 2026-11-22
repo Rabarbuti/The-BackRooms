@@ -67,7 +67,7 @@ Shader "BackRooms/CamcorderVHS"
     }
 
     // As texturas do OSD guardam um índice por ponto; as cores estão aqui, já em espaço linear
-    // (o branco 236,236,226 e o vermelho 232,38,28 do painel). Mesma ordem do script Camcorder.
+    // (o branco 236,236,226, o vermelho 232,38,28 e o verde 66,224,80 do painel). Mesma ordem do script Camcorder.
     float4 OsdColor(float stored)
     {
         int index = (int)round(stored * 255.0);
@@ -75,6 +75,7 @@ Shader "BackRooms/CamcorderVHS"
         if (index == 2) return float4(0.8069, 0.0194, 0.0116, 1.0);   // vermelho
         if (index == 3) return float4(0.0, 0.0, 0.0, 0.745);          // sombra da letra
         if (index == 4) return float4(0.0, 0.0, 0.0, 1.0);            // preto (sem sinal)
+        if (index == 5) return float4(0.0545, 0.7454, 0.0802, 1.0);   // verde (gravando de verdade, F9: 66,224,80)
         return float4(0.0, 0.0, 0.0, 0.0);
     }
 

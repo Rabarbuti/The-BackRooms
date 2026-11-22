@@ -69,6 +69,8 @@ namespace BackRooms.Player
         public float swimVerticalSpeed = 1.6f;
         [Tooltip("Sem tecla, onde não dá pé o jogador afunda a esta velocidade (m/s).")]
         public float sinkSpeed = 0.5f;
+        [Tooltip("Pego nadando (pelo inimigo da água funda das Piscinas): puxado para o fundo a esta velocidade (m/s).")]
+        public float caughtSinkSpeed = 3f;
         [Tooltip("Quanto a velocidade vertical na água muda por segundo (m/s²): a inércia do nado. Uma queda rápida a água freia três vezes mais forte.")]
         public float swimAcceleration = 3f;
 
@@ -112,10 +114,19 @@ namespace BackRooms.Player
         public static bool AssumeMouseCaptured;
 
         /// <summary>
-        /// Verdadeiro quando o mouse está preso ao jogo. Com ele solto (Esc), mover o mouse
-        /// não gira a câmera e clicar não usa itens.
+        /// Verdadeiro quando o mouse está preso ao jogo. Com ele solto ou com o menu de pausa
+        /// aberto (Esc), mover o mouse não gira a câmera e clicar não usa itens.
         /// </summary>
-        public static bool MouseCaptured => AssumeMouseCaptured || Cursor.lockState == CursorLockMode.Locked;
+        public static bool MouseCaptured => !Paused && (AssumeMouseCaptured || Cursor.lockState == CursorLockMode.Locked);
+
+        /// <summary>
+        /// O menu de pausa está aberto: o jogo continua (cai, afunda, é pego), mas o jogador não
+        /// comanda nada. As leituras de tecla passam por <see cref="Held"/> e <see cref="Tapped"/>.
+        /// </summary>
+        static bool Paused => BackRooms.UI.InputGate.Blocked;
+
+        static bool Held(InputAction action) => !Paused && action.IsPressed();
+        static bool Tapped(InputAction action) => !Paused && action.WasPressedThisFrame();
 
         /// <summary>Quantas vezes este jogador caiu num buraco nesta sessão.</summary>
         public int Falls { get; private set; }
@@ -129,8 +140,14 @@ namespace BackRooms.Player
         /// <summary>Verdadeiro entre ser pego pela entidade e reaparecer.</summary>
         public bool IsCaught { get; private set; }
 
-        /// <summary>Caindo ou pego: sem controle, a caminho da sala inicial.</summary>
-        public bool IsReturning => IsFalling || IsCaught;
+        /// <summary>
+        /// Levado pelo Ascensorista do Level 3 para dentro da cabine dele: sem controle, vendo a porta
+        /// fechar; passado o tempo, cai o sinal como numa captura comum (<see cref="GetTaken"/>).
+        /// </summary>
+        public bool IsTaken { get; private set; }
+
+        /// <summary>Caindo, pego ou levado: sem controle, a caminho da sala inicial.</summary>
+        public bool IsReturning => IsFalling || IsCaught || IsTaken;
 
         /// <summary>
         /// Onde reaparece quem cai num buraco. Quem preenche é o PlayerNetwork, que conhece
@@ -150,6 +167,7 @@ namespace BackRooms.Player
             if (IsReturning || !enabled) return;
 
             IsFalling = true;
+            ClearSeat();
             _fallTimer = pitRespawnDelay;
             Falls++;
         }
@@ -164,9 +182,30 @@ namespace BackRooms.Player
 
             IsCaught = true;
             _furniture = HideKind.None;
+            ClearSeat();
             _fallTimer = captureRespawnDelay;
             _horizontalVelocity = Vector3.zero;
             Captures++;
+        }
+
+        float _takenTimer;
+
+        /// <summary>
+        /// Chamado (no dono) quando o Ascensorista pega este jogador: ele aparece dentro da cabine do
+        /// elevador, em <paramref name="into"/>, de frente para a porta, sem controle; passados
+        /// <paramref name="seconds"/> (a porta fecha), vira a captura comum (<see cref="GetCaught"/>).
+        /// </summary>
+        public void GetTaken(Vector3 into, float yaw, float seconds)
+        {
+            if (IsReturning || !enabled) return;
+
+            _furniture = HideKind.None;
+            Teleport(into, yaw);
+            _pitch = 0f;
+            IsTaken = true;
+            _takenTimer = seconds;
+            // Avisa a rede de que foi um salto (os outros não o veem deslizar até a cabine).
+            Respawned?.Invoke();
         }
 
         /// <summary>Água acima dos pés, em metros (0 fora d'água ou em nível sem água).</summary>
@@ -260,6 +299,57 @@ namespace BackRooms.Player
             _hidingSpots = Mathf.Max(0, _hidingSpots + (inside ? 1 : -1));
         }
 
+        // ---------------------------------------------------------------- Sentado (carteiras do Escritório)
+
+        /// <summary>Sentado numa cadeira (<c>ClassroomSeats</c>): parado, olhando em volta com limite. Não é esconderijo.</summary>
+        public bool IsSeated => _seat >= 0;
+
+        /// <summary>Em que cadeira (índice em <c>ClassroomSeats</c>), ou -1.</summary>
+        public int Seat => _seat;
+
+        /// <summary>Sentado, o jogador apertou andar ou pular: quer levantar (quem acha o lugar é o <c>ClassroomSeats</c>).</summary>
+        public bool WantsToStand { get; private set; }
+
+        int _seat = -1;
+        float _seatYaw, _seatTurn, _seatEye;
+        bool _seatMoveLatch;
+
+        /// <summary>
+        /// Senta na cadeira <paramref name="seat"/>: os pés em <paramref name="at"/>, de frente para
+        /// <paramref name="yaw"/>, com o olho a <paramref name="eye"/> do chão; a cabeça gira até
+        /// <paramref name="turn"/> graus para cada lado. Fica parado até <see cref="StandUp"/> ou até
+        /// qualquer salto (<see cref="Teleport"/>), queda ou captura.
+        /// </summary>
+        public void SitDown(int seat, Vector3 at, float yaw, float eye, float turn)
+        {
+            if (IsReturning || !enabled || InFurniture || seat < 0) return;
+
+            Teleport(at, yaw);
+            _seat = seat;
+            _seatYaw = yaw;
+            _seatTurn = turn;
+            _seatEye = eye;
+            _seatMoveLatch = true;
+            _pitch = 0f;
+            IsCrouching = false;
+            _eyeHeight = eye;
+        }
+
+        /// <summary>Levanta e fica de pé em <paramref name="exit"/>, olhando para onde já olhava.</summary>
+        public void StandUp(Vector3 exit)
+        {
+            if (!IsSeated) return;
+            Teleport(exit, transform.eulerAngles.y);
+            _eyeHeight = standingEyeHeight;
+        }
+
+        /// <summary>Solta a cadeira sem sair do lugar (captura, queda, a fase que acaba).</summary>
+        public void ClearSeat()
+        {
+            _seat = -1;
+            WantsToStand = false;
+        }
+
         CharacterController _controller;
         InputAction _move, _lookMouse, _lookStick, _jump, _sprint, _crouch;
 
@@ -342,6 +432,8 @@ namespace BackRooms.Player
             _verticalVelocity = 0f;
             _lastSafePosition = position;
             IsClimbing = false;
+            // Qualquer salto tira da cadeira (levado pelo Ascensorista, de volta ao início, outra fase).
+            ClearSeat();
         }
 
         void Update()
@@ -352,10 +444,14 @@ namespace BackRooms.Player
             UpdateLook(dt);
 
             // Dentro de um móvel: parado, sem gravidade nem colisão (o corpo está dentro da caixa
-            // do móvel), só olhando em volta.
-            if (InFurniture)
+            // do móvel), só olhando em volta. Sentado numa cadeira, o mesmo; andar ou pular pede para levantar.
+            // Quem chega segurando W não levanta na hora: o direcional só conta depois de solto uma vez.
+            bool moving = !Paused && _move.ReadValue<Vector2>().sqrMagnitude > 0.25f;
+            if (!moving) _seatMoveLatch = false;
+            WantsToStand = IsSeated && (Tapped(_jump) || moving && !_seatMoveLatch);
+            if (InFurniture || IsSeated)
             {
-                _eyeHeight = _furnitureEye;
+                _eyeHeight = IsSeated ? _seatEye : _furnitureEye;
                 _horizontalVelocity = Vector3.zero;
                 _verticalVelocity = 0f;
                 IsSprinting = false;
@@ -399,11 +495,11 @@ namespace BackRooms.Player
 
         void UpdateCursor()
         {
-            var keyboard = Keyboard.current;
             var mouse = Mouse.current;
 
-            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) SetCursorLocked(false);
-            else if (mouse != null && mouse.leftButton.wasPressedThisFrame && Cursor.lockState != CursorLockMode.Locked) SetCursorLocked(true);
+            // Esc abre o menu de pausa, que solta e prende o mouse (PauseMenu). Aqui só se prende de
+            // novo com um clique, fora do menu (depois de trocar de janela, por exemplo).
+            if (mouse != null && !Paused && mouse.leftButton.wasPressedThisFrame && Cursor.lockState != CursorLockMode.Locked) SetCursorLocked(true);
         }
 
         static void SetCursorLocked(bool locked)
@@ -414,19 +510,25 @@ namespace BackRooms.Player
 
         void UpdateLook(float dt)
         {
-            if (!MouseCaptured) return;
+            if (MouseCaptured)
+            {
+                // O delta do mouse já é por quadro; o analógico é uma taxa e precisa do dt.
+                Vector2 look = _lookMouse.ReadValue<Vector2>() * (mouseSensitivity * GameOptions.MouseScale)
+                             + _lookStick.ReadValue<Vector2>() * (stickSensitivity * dt);
 
-            // O delta do mouse já é por quadro; o analógico é uma taxa e precisa do dt.
-            Vector2 look = _lookMouse.ReadValue<Vector2>() * (mouseSensitivity * GameOptions.MouseScale)
-                         + _lookStick.ReadValue<Vector2>() * (stickSensitivity * dt);
+                transform.Rotate(0f, look.x, 0f, Space.Self);
+                _pitch = Mathf.Clamp(_pitch - look.y, -85f, 85f);
+            }
 
-            transform.Rotate(0f, look.x, 0f, Space.Self);
-            _pitch = Mathf.Clamp(_pitch - look.y, -85f, 85f);
+            // Sentado, a cabeça gira só até o limite para cada lado da frente da cadeira.
+            if (!IsSeated) return;
+            float off = Mathf.DeltaAngle(_seatYaw, transform.eulerAngles.y);
+            if (Mathf.Abs(off) > _seatTurn) transform.rotation = Quaternion.Euler(0f, _seatYaw + Mathf.Clamp(off, -_seatTurn, _seatTurn), 0f);
         }
 
         void UpdateCrouch(float dt)
         {
-            bool wantsCrouch = _crouch.IsPressed();
+            bool wantsCrouch = Paused ? IsCrouching : _crouch.IsPressed();
 
             // Só levanta se houver espaço acima da cabeça.
             if (!wantsCrouch && IsCrouching && !HasHeadroom()) wantsCrouch = true;
@@ -449,10 +551,21 @@ namespace BackRooms.Player
             return !Physics.SphereCast(origin, radius, Vector3.up, out _, distance, ~0, QueryTriggerInteraction.Ignore);
         }
 
+        // Água acima do joelho: não se corre (o raso parado, 0,45 m, ainda deixa).
+        const float WadeSprintLimit = 0.5f;
+
+        /// <summary>
+        /// Fração da caminhada com <paramref name="submersion"/> m de água acima dos pés: o raso parado
+        /// (0,45 m) fica em <see cref="wadeShallow"/>; daí até 0,9 m (o seco na maré alta, acima do
+        /// joelho, quase na cintura) cai até <see cref="wadeDeep"/>. Até 20/11/2026 a queda ia de 0,4
+        /// a 1,2 m e o seco alagado mal pesava (72%, correndo).
+        /// </summary>
+        public float WadeFactor(float submersion) => Mathf.Lerp(wadeShallow, wadeDeep, Mathf.InverseLerp(0.45f, 0.9f, submersion));
+
         void UpdateMovement(float dt)
         {
             // Caindo num buraco ou nas mãos da entidade não há o que comandar.
-            Vector2 input = IsReturning ? Vector2.zero : Vector2.ClampMagnitude(_move.ReadValue<Vector2>(), 1f);
+            Vector2 input = IsReturning || Paused ? Vector2.zero : Vector2.ClampMagnitude(_move.ReadValue<Vector2>(), 1f);
             bool grounded = _controller.isGrounded;
             bool movingForward = input.y > 0.1f;
 
@@ -473,12 +586,12 @@ namespace BackRooms.Player
                 return;
             }
 
-            IsSprinting = _sprint.IsPressed() && movingForward && !IsCrouching && !_exhausted && _stamina > 0f && Submersion < 0.8f;
+            IsSprinting = Held(_sprint) && movingForward && !IsCrouching && !_exhausted && _stamina > 0f && Submersion < WadeSprintLimit;
             UpdateStamina(dt);
 
             float speed = IsCrouching ? crouchSpeed : IsSprinting ? sprintSpeed : walkSpeed;
             if (IsSwimming) speed = walkSpeed * swimSpeed;
-            else if (Submersion > 0f) speed *= Mathf.Lerp(wadeShallow, wadeDeep, Mathf.InverseLerp(0.4f, 1.2f, Submersion));
+            else if (Submersion > 0f) speed *= WadeFactor(Submersion);
 
             Vector3 target = (transform.right * input.x + transform.forward * input.y) * speed;
             _horizontalVelocity = Vector3.MoveTowards(_horizontalVelocity, target, acceleration * dt);
@@ -492,13 +605,15 @@ namespace BackRooms.Player
                 // velocidade muda aos poucos (inércia); uma queda rápida a água freia mais forte.
                 float floatY = water.SurfaceY - floatDepth;
                 float vertical = -sinkSpeed;
-                if (!IsReturning && _crouch.IsPressed()) vertical = -swimVerticalSpeed;
-                else if (!IsReturning && _jump.IsPressed()) vertical = Mathf.Clamp((floatY - transform.position.y) * 3f, -swimVerticalSpeed, swimVerticalSpeed);
+                if (!IsReturning && Held(_crouch)) vertical = -swimVerticalSpeed;
+                else if (!IsReturning && Held(_jump)) vertical = Mathf.Clamp((floatY - transform.position.y) * 3f, -swimVerticalSpeed, swimVerticalSpeed);
                 // Quem chega andando (descendo a escada para a água funda) traz o empurrão de -2 m/s
                 // que o prende ao chão: não é queda, então não vira mergulho ao sair do degrau.
                 if (grounded && _verticalVelocity < -sinkSpeed) _verticalVelocity = -sinkSpeed;
                 float rate = Mathf.Abs(_verticalVelocity) > swimVerticalSpeed ? swimAcceleration * 3f : swimAcceleration;
                 _verticalVelocity = Mathf.MoveTowards(_verticalVelocity, vertical, rate * dt);
+                // Pego nadando (o Undertow das Piscinas): puxado para o fundo, de uma vez.
+                if (IsCaught) _verticalVelocity = -caughtSinkSpeed;
 
                 // À tona, empurrando contra uma borda baixa (ou de frente para ela, encostado, com
                 // Espaço): sobe nela. Andando, borda não se sobe; do fundo, primeiro sobe à tona.
@@ -512,7 +627,7 @@ namespace BackRooms.Player
             {
                 // Um empurrão constante para baixo mantém o controlador colado ao chão.
                 _verticalVelocity = -2f;
-                if (_jump.WasPressedThisFrame() && !IsCrouching && !IsReturning)
+                if (Tapped(_jump) && !IsCrouching && !IsReturning)
                     _verticalVelocity = Mathf.Sqrt(2f * gravity * jumpHeight);
             }
             else
@@ -534,7 +649,7 @@ namespace BackRooms.Player
         bool TryStartClimb(PoolWater water, Vector2 input, float floatY)
         {
             // Só à tona: a cabeça fora d'água e os pés perto de onde boia; não mergulhando nem voltando.
-            if (IsReturning || IsUnderwater || _crouch.IsPressed() || transform.position.y < floatY - 0.25f) return false;
+            if (IsReturning || IsUnderwater || Held(_crouch) || transform.position.y < floatY - 0.25f) return false;
             // Uma subida barrada no caminho só se tenta de novo depois de um instante.
             if (Time.time < _climbRetryAt) return false;
 
@@ -550,7 +665,7 @@ namespace BackRooms.Player
             CanClimb = true;
 
             // Empurrando contra a borda (o direcional) ou, só com Espaço, encostado nela e de frente.
-            bool start = pushing || _jump.IsPressed() && gap <= 0.1f && Vector3.Dot(look, inward) >= 0.7f;
+            bool start = pushing || Held(_jump) && gap <= 0.1f && Vector3.Dot(look, inward) >= 0.7f;
             if (!start) return false;
 
             IsClimbing = true;
@@ -663,6 +778,16 @@ namespace BackRooms.Player
         void UpdateFall(float dt)
         {
             if (!IsReturning) return;
+
+            // Levado para a cabine: espera a porta fechar e então cai o sinal.
+            if (IsTaken)
+            {
+                _takenTimer -= dt;
+                if (_takenTimer > 0f) return;
+                IsTaken = false;
+                GetCaught();
+                return;
+            }
 
             _fallTimer -= dt;
             if (_fallTimer > 0f) return;

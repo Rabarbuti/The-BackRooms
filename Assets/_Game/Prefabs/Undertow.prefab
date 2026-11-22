@@ -1,0 +1,203 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &1008334566425662274
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5622643924137864620}
+  - component: {fileID: 1956913043015519407}
+  - component: {fileID: 1303401902965702979}
+  - component: {fileID: 6374629150309852517}
+  - component: {fileID: 4127764812109436553}
+  - component: {fileID: 8029566869516479107}
+  m_Layer: 0
+  m_Name: Undertow
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5622643924137864620
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1008334566425662274}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1956913043015519407
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1008334566425662274}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6381a1f8df0213e41acb6a60cc1a147b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Entities.UndertowBody
+  paleMaterial: {fileID: 2100000, guid: 43f8e92c40e7ca942ae13c5c9492dad2, type: 2}
+  backMaterial: {fileID: 2100000, guid: 3bc4835232693f145a5dbb6c5ffe3c8a, type: 2}
+  bubbleMaterial: {fileID: 2100000, guid: c8c156a8edc319f4493f5173b711dcbe, type: 2}
+  model: {fileID: 4900000, guid: 1c0263c6f90eb3b48b6dfde596970fd3, type: 3}
+  modelMaterials:
+  - {fileID: 2100000, guid: 9cb31d18f99ab9e4493b5d5bc5e048ba, type: 2}
+  - {fileID: 2100000, guid: d81be82f58061d54a923f34493a7247c, type: 2}
+  - {fileID: 2100000, guid: 99db519125710b743853168cd461007d, type: 2}
+--- !u!114 &1303401902965702979
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1008334566425662274}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
+  GlobalObjectIdHash: 3876383121
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  m_InScenePlacedDisabledByDefault: 0
+  DeferredDespawnTick: 0
+  Ownership: 1
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  m_InScenePlaced: 0
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 1
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
+  SyncOwnerTransformWhenParented: 1
+  AllowOwnerToParent: 0
+--- !u!114 &6374629150309852517
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1008334566425662274}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e96cb6065543e43c4a752faaa1468eb1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.Components.NetworkTransform
+  ShowTopMostFoldoutHeaderGroup: 1
+  NetworkTransformExpanded: 0
+  AutoOwnerAuthorityTickOffset: 1
+  PositionInterpolationType: 0
+  RotationInterpolationType: 0
+  ScaleInterpolationType: 0
+  PositionLerpSmoothing: 1
+  PositionMaxInterpolationTime: 0.1
+  RotationLerpSmoothing: 1
+  RotationMaxInterpolationTime: 0.1
+  ScaleLerpSmoothing: 1
+  ScaleMaxInterpolationTime: 0.1
+  AuthorityMode: 0
+  TickSyncChildren: 0
+  UseUnreliableDeltas: 0
+  SyncPositionX: 1
+  SyncPositionY: 1
+  SyncPositionZ: 1
+  SyncRotAngleX: 0
+  SyncRotAngleY: 1
+  SyncRotAngleZ: 0
+  SyncScaleX: 0
+  SyncScaleY: 0
+  SyncScaleZ: 0
+  PositionThreshold: 0.001
+  RotAngleThreshold: 0.01
+  ScaleThreshold: 0.01
+  UseQuaternionSynchronization: 0
+  UseQuaternionCompression: 0
+  UseHalfFloatPrecision: 0
+  InLocalSpace: 0
+  SwitchTransformSpaceWhenParented: 0
+  Interpolate: 1
+  SlerpPosition: 0
+--- !u!114 &4127764812109436553
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1008334566425662274}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: afc1f5f43ee75544a9ec450780c039e4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Entities.UndertowBrain
+  ShowTopMostFoldoutHeaderGroup: 1
+  returnSpeed: 1.4
+  investigateSpeed: 2.3
+  huntSpeed: 3.3
+  crawlSpeed: 0.9
+  acceleration: 5
+  verticalSpeed: 2.2
+  turnSpeed: 150
+  floodInvestigateSpeed: 1.6
+  floodHuntSpeed: 2.2
+  lungeSpeed: 3
+  lungeRange: 2.5
+  prowlSpeed: 1.2
+  prowlNear: 8
+  prowlFar: 18
+  prowlKeepAway: 7
+  hearRange: 24
+  pipeLoudness: 0.6
+  huntRange: 9
+  huntMemory: 1.6
+  circleMemory: 8
+  investigateSeconds: 12
+  lingerSeconds: 4
+  contactSeconds: 2
+  stopShort: 1.6
+  bumpRadius: 0.6
+  roamMinSeconds: 16
+  roamMaxSeconds: 30
+  roamNearPlayer: 0.65
+  roamMinDistance: 10
+  roamPreferred: 14
+  wakeSeconds: 2.2
+  emergeSeconds: 1.6
+  circleSeconds: 8
+  pipeSeconds: 4
+  pipeSpeed: 8
+  diveSeconds: 1.4
+  feedSeconds: 3
+  mercySeconds: 10
+  roarCooldown: 5
+  catchRadius: 1.4
+  catchSubmersion: 0.9
+  headForward: 1.25
+  bodyRadius: 0.45
+--- !u!114 &8029566869516479107
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1008334566425662274}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4b2753d52669fcf41914bcc85f5ebc0d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Entities.UndertowAudio
+  volume: 0.95
+  growlRange: 36
+  roarRange: 110
+  underwaterCutoff: 650

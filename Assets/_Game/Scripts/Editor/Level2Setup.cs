@@ -67,6 +67,8 @@ namespace BackRooms.EditorTools
         {
             PoolMaterials materials = EnsureMaterials();
             VolumeProfile profile = EnsureVolumeProfile();
+            // O Undertow, o inimigo da água funda (UndertowPreview grava o prefab de rede).
+            GameObject undertow = UndertowPreview.CreatePrefab();
 
             Level0Setup.BuildScene(false, new Level0Setup.SceneOptions
             {
@@ -85,6 +87,7 @@ namespace BackRooms.EditorTools
                     Apply(level.GetComponent<LevelBuilder>(), materials);
                     UseOwnAtmosphere(profile);
                     UseDusk();
+                    AddUndertow(undertow);
                 },
             });
             Debug.Log($"[BackRooms] Level 2 de teste montado em {ScenePath}: abra a cena, aperte Play e hospede (H).");
@@ -101,6 +104,17 @@ namespace BackRooms.EditorTools
 
             foreach (FluorescentHum hum in Object.FindObjectsByType<FluorescentHum>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 Object.DestroyImmediate(hum);
+        }
+
+        // O diretor do Undertow fica no objeto da sessão (com o NetworkManager): é ele que o põe no
+        // covil, no host. Ela não usa o EntityDirector (que procura um EntityBrain).
+        static void AddUndertow(GameObject prefab)
+        {
+            var session = Object.FindFirstObjectByType<BackRooms.Net.GameSession>();
+            if (session == null) return;
+            var director = session.gameObject.AddComponent<BackRooms.Entities.UndertowDirector>();
+            director.session = session;
+            director.prefab = prefab;
         }
 
         /// <summary>Mais longo que o apagão do Level 0, para o dia caber entre as rampas.</summary>
@@ -140,6 +154,10 @@ namespace BackRooms.EditorTools
             builder.poolLampMaterial = m.Lamp;
             builder.poolCausticsMaterial = m.Caustics;
             builder.poolRailMaterial = m.Rail;
+            // A maré: marca molhada, linha da maré alta e as lâmpadas de alarme.
+            builder.poolWetMaterial = m.Wet;
+            builder.poolTideLineMaterial = m.TideLine;
+            builder.poolAlarmMaterial = m.Alarm;
             // Manchas (decalques), nesta ordem: limo, calcário, mofo, ferrugem. O construtor escolhe
             // onde: poucas e longe do início.
             builder.poolStainDecals = m.Stains;
@@ -233,6 +251,7 @@ namespace BackRooms.EditorTools
                     problems.Add("o Volume global da cena não usa " + ProfilePath);
                 if (Object.FindFirstObjectByType<FluorescentHum>() != null) problems.Add("a cena ainda tem o zumbido de lâmpada fluorescente");
                 if (builder.waterMaterial == null || builder.poolCausticsMaterial == null) problems.Add("falta o material da água ou da cáustica");
+                if (builder.poolWetMaterial == null || builder.poolTideLineMaterial == null || builder.poolAlarmMaterial == null) problems.Add("falta o material da marca da maré ou do alarme");
 
                 if (builder.poolStainDecals == null || builder.poolStainDecals.Length != 4 || builder.poolStainDecals.Any(m => m == null))
                     problems.Add("falta algum material de mancha (Decal_Stain_*)");
@@ -539,6 +558,7 @@ namespace BackRooms.EditorTools
         sealed class PoolMaterials
         {
             public Material Tile, Mosaic, Accent, Coping, Water, Caustics, Window, GlassBlock, Lamp, Rail, SkylightOn, SkylightOff;
+            public Material Wet, TideLine, Alarm;
             /// <summary>Manchas, na ordem do LevelBuilder.poolStainDecals: limo, calcário, mofo, ferrugem.</summary>
             public Material[] Stains;
             /// <summary>Marcações, na ordem do LevelBuilder.poolMarkDecals: 2.0 M, NO DIVING, DEEP END, T de raia.</summary>
@@ -623,6 +643,13 @@ namespace BackRooms.EditorTools
 
             m.Water = WaterMaterial(waterNormal, waterDetail);
             m.Caustics = CausticsMaterial(caustics, causticsDetail);
+            // Película molhada: escurece e dá brilho ao azulejo por onde a maré passou.
+            // (alfa 0,34 na primeira foto: o seco molhado ficava só 18% mais escuro, não se notava.)
+            m.Wet = Film("Pool_Wet", new Color(0.04f, 0.06f, 0.05f, 0.5f), 0.95f, -2);
+            // Linha de sujeira da maré alta (calcário e limo): cinza-esverdeado, quase opaca.
+            m.TideLine = Film("Pool_TideLine", new Color(0.24f, 0.21f, 0.12f, 0.9f), 0.25f, -1);
+            // Lente do alarme: vermelho; o brilho (emissivo) é o PoolAlarm que acende e apaga.
+            m.Alarm = Lit("Pool_Alarm", new Color(0.7f, 0.06f, 0.04f), null, null, 0.85f, new Color(1f, 0.08f, 0.04f) * 2f);
             m.Stains = stains;
             m.Marks = marks;
 
@@ -703,6 +730,27 @@ namespace BackRooms.EditorTools
 
             // Antes da refração: a água refrata a imagem já com a cáustica.
             material.renderQueue = 2750; // HDRenderQueue.Priority.PreRefraction (interno do HDRP)
+            HDMaterial.ValidateMaterial(material);
+            HDMaterial.SetRenderingPass(material, HDMaterial.RenderingPass.BeforeRefraction);
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        // Película transparente sobre o azulejo (marca da maré), desenhada antes da refração, para
+        // aparecer através da água; a prioridade a põe por baixo da cáustica.
+        static Material Film(string name, Color color, float smoothness, int priority)
+        {
+            Material material = Lit(name, color, null, null, smoothness);
+            if (material == null) return null;
+            material.SetFloat("_SurfaceType", 1f);
+            material.SetFloat("_BlendMode", 0f);
+            material.SetFloat("_ZWrite", 0f);
+            material.SetFloat("_TransparentZWrite", 0f);
+            material.SetFloat("_EnableFogOnTransparent", 1f);
+            material.SetFloat("_SupportDecals", 0f);
+            material.SetFloat("_ReceivesSSRTransparent", 0f);
+            material.SetFloat("_RefractionModel", 0f);
+            material.SetFloat("_TransparentSortPriority", priority);
             HDMaterial.ValidateMaterial(material);
             HDMaterial.SetRenderingPass(material, HDMaterial.RenderingPass.BeforeRefraction);
             EditorUtility.SetDirty(material);

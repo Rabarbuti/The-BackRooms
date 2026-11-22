@@ -59,9 +59,14 @@ namespace BackRooms.Net
         readonly NetworkVariable<byte> _penColor = new NetworkVariable<byte>(
             0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
+        // Cadeira em que está sentado (ClassroomSeats, Escritório), ou -1. Quem entra depois recebe o valor atual.
+        readonly NetworkVariable<short> _seat = new NetworkVariable<short>(
+            -1, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+
         float _nextSend;
         float _shownPitch;
         float _shownEye;
+        bool _shownSeated;
         bool _ready;
 
         /// <summary>O jogador desta máquina, quando já está no mapa. Nulo no menu.</summary>
@@ -93,6 +98,35 @@ namespace BackRooms.Net
 
         /// <summary>Cor da caneta publicada na rede (índice da tinta). Vale em qualquer máquina.</summary>
         public int PenColor => _penColor.Value;
+
+        /// <summary>
+        /// Em que cadeira está sentado (índice em <see cref="BackRooms.World.ClassroomSeats"/>), ou -1.
+        /// Vale em qualquer máquina, como <see cref="Crouching"/>.
+        /// </summary>
+        public int Seat => IsOwner ? controller.Seat : _seat.Value;
+
+        /// <summary>Sentado numa cadeira? Vale em qualquer máquina.</summary>
+        public bool Seated => Seat >= 0;
+
+        /// <summary>
+        /// Do dono para o host: quer sentar na cadeira <paramref name="seat"/>. O host decide (uma
+        /// pessoa por cadeira) e responde ao dono por <see cref="SeatAnswerRpc"/>.
+        /// </summary>
+        [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Owner)]
+        public void RequestSeatRpc(short seat)
+        {
+            BackRooms.World.ClassroomSeats seats = BackRooms.World.ClassroomSeats.Instance;
+            bool granted = seats != null && seats.ServerClaim(OwnerClientId, seat);
+            SeatAnswerRpc(seat, granted);
+        }
+
+        /// <summary>Do host para o dono: pode sentar (ou a cadeira já tem dono).</summary>
+        [Rpc(SendTo.Owner)]
+        void SeatAnswerRpc(short seat, bool granted)
+        {
+            BackRooms.World.ClassroomSeats seats = BackRooms.World.ClassroomSeats.Instance;
+            if (seats != null) seats.Answer(this, seat, granted);
+        }
 
         /// <summary>
         /// Quantos jogadores da sessão estão esperando na porta de saída e quantos estão no
@@ -173,7 +207,13 @@ namespace BackRooms.Net
 
         // Avisa a rede de que a mudança de lugar foi um salto. Sem isso os outros jogadores
         // veriam este deslizar do fundo do buraco até a sala inicial, atravessando paredes.
-        void OnRespawned()
+        void OnRespawned() => SnapNetwork();
+
+        /// <summary>
+        /// Dono: a mudança de lugar de agora foi um salto (sentar, levantar, voltar ao início); os
+        /// outros não o veem deslizar até lá.
+        /// </summary>
+        public void SnapNetwork()
         {
             if (IsSpawned && TryGetComponent(out NetworkTransform networkTransform))
                 networkTransform.Teleport(transform.position, transform.rotation, transform.localScale);
@@ -222,6 +262,9 @@ namespace BackRooms.Net
             bool working = BackRooms.World.SwitchObjective.LocalWorking;
             if (_working.Value != working) _working.Value = working;
 
+            short seat = (short)controller.Seat;
+            if (_seat.Value != seat) _seat.Value = seat;
+
             if (Time.unscaledTime < _nextSend) return;
             _nextSend = Time.unscaledTime + SendInterval;
 
@@ -236,8 +279,18 @@ namespace BackRooms.Net
             float dt = Time.deltaTime;
             bool crouching = _crouching.Value;
 
+            // Sentado numa cadeira (Escritório): olho na altura de quem senta, corpo virado para a
+            // frente da cadeira (a cabeça é que gira) e a figura na pose sentada.
+            BackRooms.World.ClassroomSeats seats = BackRooms.World.ClassroomSeats.Instance;
+            int seat = _seat.Value;
+            bool seated = seat >= 0 && seats != null && seat < seats.Count;
+
             _shownPitch = Mathf.Lerp(_shownPitch, _pitch.Value, 1f - Mathf.Exp(-12f * dt));
-            _shownEye = Mathf.MoveTowards(_shownEye, crouching ? controller.crouchingEyeHeight : controller.standingEyeHeight, 4f * dt);
+            float eye = seated ? BackRooms.World.ClassroomSeats.SeatEye : crouching ? controller.crouchingEyeHeight : controller.standingEyeHeight;
+            // Ao sentar e ao levantar a pessoa salta de lugar: o olho vai junto, sem deslizar.
+            if (seated != _shownSeated) _shownEye = eye;
+            _shownSeated = seated;
+            _shownEye = Mathf.MoveTowards(_shownEye, eye, 4f * dt);
 
             cameraPivot.localPosition = new Vector3(0f, _shownEye, 0f);
             cameraPivot.localRotation = Quaternion.Euler(_shownPitch, 0f, 0f);
@@ -257,8 +310,20 @@ namespace BackRooms.Net
             {
                 // A figura se agacha de verdade (dobra as pernas), olha para onde o jogador
                 // olha e mostra o que ele tem nas mãos.
-                float crouch = Mathf.InverseLerp(controller.standingEyeHeight, controller.crouchingEyeHeight, _shownEye);
+                float crouch = seated ? 0f : Mathf.InverseLerp(controller.standingEyeHeight, controller.crouchingEyeHeight, _shownEye);
                 figure.SetState(crouch, _shownPitch, _holding.Value, _flashlightOn.Value);
+
+                if (seated)
+                {
+                    float front = seats.YawWorld(seat);
+                    figure.transform.rotation = Quaternion.Euler(0f, front, 0f);
+                    figure.SetSeated(true, Mathf.DeltaAngle(front, transform.eulerAngles.y));
+                }
+                else
+                {
+                    if (figure.transform.localRotation != Quaternion.identity) figure.transform.localRotation = Quaternion.identity;
+                    figure.SetSeated(false, 0f);
+                }
 
                 // A caneta na mão do traje leva a tinta escolhida.
                 BackRooms.Items.DrawingBoard board = BackRooms.Items.DrawingBoard.Instance;

@@ -29,6 +29,9 @@ namespace BackRooms.Player
         [Tooltip("Metros andados por ciclo completo de passada (dois passos).")]
         public float strideLength = 1.45f;
 
+        /// <summary>Altura da bacia sentado: o assento das cadeiras do Escritório fica a 0,5 m do chão.</summary>
+        const float SeatedHip = 0.58f;
+
         [Header("Modelo (vazio = as peças feitas em código)")]
         public TextAsset model;
         [Tooltip("Materiais do modelo, um por parte (o nome termina com o nome da parte).")]
@@ -92,6 +95,9 @@ namespace BackRooms.Player
         bool _holding;
         bool _lightOn;
         bool _built;
+        bool _seated;
+        float _sit;
+        float _headYaw;
 
         void Awake()
         {
@@ -107,6 +113,22 @@ namespace BackRooms.Player
             _holding = holding;
             _lightOn = lightOn;
         }
+
+        /// <summary>
+        /// Sentado numa cadeira (<c>ClassroomSeats</c>): a figura senta, virada para a frente da cadeira
+        /// (quem vira o corpo é o PlayerNetwork), e a cabeça gira <paramref name="headYaw"/> graus para
+        /// onde o jogador olha. Chamado a cada quadro pelo PlayerNetwork.
+        /// </summary>
+        public void SetSeated(bool seated, float headYaw)
+        {
+            // Ao sentar e ao levantar a pessoa salta de lugar: a pose vai junto, sem transição.
+            if (seated != _seated) _sit = seated ? 1f : 0f;
+            _seated = seated;
+            _headYaw = headYaw;
+        }
+
+        /// <summary>Verdadeiro se, pelo que chegou, este jogador está sentado.</summary>
+        public bool Seated => _seated;
 
         /// <summary>
         /// Procura a superfície na frente do corpo, na altura dos ombros e do peito: o braço com
@@ -186,15 +208,17 @@ namespace BackRooms.Player
             ProbeWall();
             for (int i = 0; i < 2; i++) _tuck[i] = Mathf.MoveTowards(_tuck[i], 0f, dt * 2.5f);
 
-            Pose(_phase, _speed, _crouch, _pitch, _hold, _aim, Time.time);
+            if (_seated) _speed = 0f;
+            Pose(_phase, _speed, _crouch, _pitch, _hold, _aim, Time.time, _sit, _headYaw);
         }
 
         /// <summary>
         /// Coloca o corpo numa pose. <paramref name="hold"/> e <paramref name="aim"/> vão de 0 a 1:
         /// braço direito erguido com o item e braço esquerdo apontando a lanterna.
-        /// Público para a ferramenta de prévia, que fotografa fora do Play.
+        /// Público para a ferramenta de prévia, que fotografa fora do Play. <paramref name="sit"/> (0 a 1)
+        /// senta a figura numa cadeira e <paramref name="headYaw"/> gira a cabeça para o lado (graus).
         /// </summary>
-        public void Pose(float phase, float speed, float crouch, float pitch, float hold, float aim, float time)
+        public void Pose(float phase, float speed, float crouch, float pitch, float hold, float aim, float time, float sit = 0f, float headYaw = 0f)
         {
             if (!_built) Build();
 
@@ -205,14 +229,17 @@ namespace BackRooms.Player
             float breathe = Mathf.Sin(time * 1.6f);
 
             // Pernas: em pé quase retas; agachado, coxa para a frente e canela dobrada para trás.
-            float thighBase = Mathf.Lerp(4f, 62f, crouch);
-            float kneeBase = Mathf.Lerp(8f, 118f, crouch);
-            float legSwing = Mathf.Lerp(0f, 34f, run) * (1f - 0.5f * crouch) + Mathf.Clamp01(speed / 1.4f) * 10f * (1f - run);
+            // Sentado: coxa na horizontal e canela de pé, os pés no chão diante da cadeira.
+            sit = Mathf.Clamp01(sit);
+            float thighBase = Mathf.Lerp(Mathf.Lerp(4f, 62f, crouch), 86f, sit);
+            float kneeBase = Mathf.Lerp(Mathf.Lerp(8f, 118f, crouch), 84f, sit);
+            float legSwing = (Mathf.Lerp(0f, 34f, run) * (1f - 0.5f * crouch) + Mathf.Clamp01(speed / 1.4f) * 10f * (1f - run)) * (1f - sit);
 
             // A bacia fica na altura que deixa os pés no chão.
             float hip = thighLength * Mathf.Cos(thighBase * Mathf.Deg2Rad) + shinLength * Mathf.Cos((kneeBase - thighBase) * Mathf.Deg2Rad) + footHeight;
             float bob = -Mathf.Abs(swing) * 0.035f * Mathf.Clamp01(speed / 2f);
-            _pelvis.localPosition = new Vector3(0f, hip + bob, 0f);
+            // Sentado, a bacia fica no assento, um pouco para trás (o encosto da cadeira).
+            _pelvis.localPosition = new Vector3(0f, Mathf.Lerp(hip + bob, SeatedHip, sit), -0.08f * sit);
             _rig.localRotation = Quaternion.Euler(0f, 0f, swing * 2f * run);
 
             for (int i = 0; i < 2; i++)
@@ -227,11 +254,12 @@ namespace BackRooms.Player
             }
 
             // Tronco: um pouco curvado; mais agachado ou correndo.
-            float lean = 5f + 26f * crouch + 8f * run + breathe * 0.8f;
+            float lean = Mathf.Lerp(5f + 26f * crouch + 8f * run, 2f, sit) + breathe * 0.8f;
             _spine.localRotation = Quaternion.Euler(lean, -swing * 6f * run, 0f);
 
             // Cabeça: acompanha para onde o jogador olha (positivo = para baixo), descontando a curvatura do tronco.
-            _head.localRotation = Quaternion.Euler(Mathf.Clamp(pitch, -60f, 60f) * 0.75f - lean * 0.8f, 0f, 0f);
+            _head.localRotation = Quaternion.Euler(0f, Mathf.Clamp(headYaw, -75f, 75f) * sit, 0f)
+                                * Quaternion.Euler(Mathf.Clamp(pitch, -60f, 60f) * 0.75f - lean * 0.8f, 0f, 0f);
 
             // Braços: balançam ao contrário das pernas. O direito sobe com o item; o esquerdo, com a lanterna.
             float armSwing = Mathf.Lerp(4f, 30f, run) + Mathf.Clamp01(speed / 1.4f) * 8f;
@@ -241,8 +269,9 @@ namespace BackRooms.Player
                 float busy = i == 0 ? hold : aim;
                 float forward = -swing * side * (1f - busy);
 
-                float shoulder = lean + forward * armSwing + busy * (i == 0 ? 52f : 60f) + crouch * 18f * (1f - busy);
-                float elbow = 12f + Mathf.Max(0f, forward) * 12f + busy * (i == 0 ? 58f : 28f) + crouch * 40f * (1f - busy);
+                // Sentado, o braço livre descansa na carteira: ombro para a frente, cotovelo dobrado.
+                float shoulder = lean + forward * armSwing + busy * (i == 0 ? 52f : 60f) + crouch * 18f * (1f - busy) + sit * 28f * (1f - busy);
+                float elbow = 12f + Mathf.Max(0f, forward) * 12f + busy * (i == 0 ? 58f : 28f) + crouch * 40f * (1f - busy) + sit * 55f * (1f - busy);
 
                 _itemShown[i] = busy > 0.2f;
 
