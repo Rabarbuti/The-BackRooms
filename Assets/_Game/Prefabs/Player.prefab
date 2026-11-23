@@ -46,6 +46,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Player.ItemHand
   suitMaterial: {fileID: 2100000, guid: 25489b34354fc204d9042652071ff430, type: 2}
   gloveMaterial: {fileID: 2100000, guid: a71a3b2c8449e0e4c873f9c5a69a27dd, type: 2}
+  suitModel: {fileID: 4900000, guid: 72161bcfe8d9b50408dcac6da2cc682a, type: 3}
+  suitModelMaterials:
+  - {fileID: 2100000, guid: b4e4e57888dbc8a4b8ebfd80c8d72823, type: 2}
+  sleeveRoll: 0
+  sleeveScale: 0.95
+  modelGrip: {x: 0.075, y: 0.03, z: 0.012}
+  modelPenRadius: 0.0095
   penMaterial: {fileID: 2100000, guid: a46ffc5abc2290f4fbb4b14735b0ba20, type: 2}
   pen: {fileID: 6917831182773658386}
 --- !u!1 &3660427704850313308

@@ -606,6 +606,9 @@ namespace BackRooms.EditorTools
             itemHand.suitMaterial = hazmat;
             itemHand.gloveMaterial = rubber;
             itemHand.penMaterial = ink;
+            // A manga é o braço do modelo do traje, o mesmo do corpo.
+            itemHand.suitModel = figure.model;
+            itemHand.suitModelMaterials = figure.modelMaterials;
             handObject.SetActive(false);
 
             var pen = player.AddComponent<PenTool>();
