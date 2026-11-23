@@ -726,6 +726,11 @@ namespace BackRooms.Entities
                 _repathAt = 0f;
             }
 
+            // Trava de colisão: o passo de verdade não entra em parede nem em móvel. O caminho é
+            // conferido ao planejar, mas ela anda com inércia e a curva sai diferente da linha
+            // conferida; e os móveis das salas não existem para a grade.
+            if (_velocity.sqrMagnitude > 0f) moved = Unblock(position, moved, dt);
+
             transform.position = moved;
 
             Vector3 facing = _velocity.sqrMagnitude > 0.05f ? _velocity
@@ -734,6 +739,65 @@ namespace BackRooms.Entities
 
             if (facing.sqrMagnitude > 0.001f)
                 transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(facing, Vector3.up), turnSpeed * dt);
+        }
+
+        // Batendo em algo da fase, desliza ao longo do obstáculo (de frente, para a direita de quem
+        // anda, para contornar o que está no meio do caminho); sem saída, para e recalcula.
+        Vector3 Unblock(Vector3 position, Vector3 moved, float dt)
+        {
+            Vector3 step = Flat(moved - position);
+            float length = step.magnitude;
+            if (length < 0.0001f || !StepHits(position, step, out Vector3 normal)) return moved;
+
+            Vector3 along = step - normal * Vector3.Dot(step, normal);
+            if (along.magnitude < length * 0.25f)
+            {
+                Vector3 right = new Vector3(step.z, 0f, -step.x);
+                along = right - normal * Vector3.Dot(right, normal);
+            }
+
+            if (along.sqrMagnitude > 0.000001f)
+            {
+                along = along.normalized * length;
+                Vector3 slid = new Vector3(position.x + along.x, moved.y, position.z + along.z);
+                if (!StepHits(position, along, out _) && _nav.FloorClear(position, slid, bodyRadius * 0.5f))
+                {
+                    _velocity = along / Mathf.Max(dt, 0.0001f);
+                    return slid;
+                }
+            }
+
+            _velocity = Vector3.zero;
+            _repathAt = 0f;
+            return position;
+        }
+
+        // Uma cápsula do corpo, do tornozelo ao peito, bate em algum colisor da fase nesse passo?
+        // O que já está encostado ou por dentro (distância zero) não conta: assim ela consegue sair
+        // de onde não devia estar.
+        bool StepHits(Vector3 from, Vector3 step, out Vector3 normal)
+        {
+            normal = Vector3.zero;
+            float distance = step.magnitude;
+            if (distance < 0.0001f) return false;
+
+            float radius = bodyRadius * 0.85f;
+            Vector3 low = from + Vector3.up * (radius + 0.1f), high = from + Vector3.up * 1.5f;
+            int count = Physics.CapsuleCastNonAlloc(low, high, radius, step / distance, Hits, distance + 0.03f, ~0, QueryTriggerInteraction.Ignore);
+
+            float best = float.MaxValue;
+            for (int i = 0; i < count; i++)
+            {
+                RaycastHit hit = Hits[i];
+                if (hit.distance <= 0f || hit.distance >= best || !hit.collider.transform.IsChildOf(_levelRoot)) continue;
+
+                Vector3 flat = Flat(hit.normal);
+                if (flat.sqrMagnitude < 0.04f) continue;
+                best = hit.distance;
+                normal = flat.normalized;
+            }
+
+            return best < float.MaxValue;
         }
 
         void Repath(Vector3 position, float now)

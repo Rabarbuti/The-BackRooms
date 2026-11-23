@@ -21,6 +21,13 @@ namespace BackRooms.Entities
         readonly LevelBuilder _builder;
         readonly Queue<int> _queue = new Queue<int>();
         readonly int[,] _scratch;
+        // Escritório: passagens entre células vizinhas (a leste e ao norte de cada uma) em que um
+        // móvel não deixa o corpo passar. Nulo nas outras fases.
+        readonly bool[,] _blockedEast;
+        readonly bool[,] _blockedNorth;
+
+        /// <summary>Raio do corpo que tem de caber entre os centros de duas células vizinhas.</summary>
+        public const float PassageRadius = 0.45f;
 
         public LevelData Data { get; }
 
@@ -44,6 +51,52 @@ namespace BackRooms.Entities
             _builder = builder;
             Data = builder.Data;
             _scratch = new int[Data.Width, Data.Height];
+
+            // A grade só sabe de paredes. No Escritório há balcão, mesas e sofás no meio das
+            // células: a passagem que um móvel fecha deixa de valer, e o caminho dá a volta.
+            if (!Data.HasOffice) return;
+            _blockedEast = new bool[Data.Width, Data.Height];
+            _blockedNorth = new bool[Data.Width, Data.Height];
+            Physics.SyncTransforms();
+            for (int z = 0; z < Data.Height; z++)
+                for (int x = 0; x < Data.Width; x++)
+                {
+                    if (Data.CanWalk(x, z, WallSide.East, false)) _blockedEast[x, z] = PassageBlocked(builder, x, z, x + 1, z, out _);
+                    if (Data.CanWalk(x, z, WallSide.North, false)) _blockedNorth[x, z] = PassageBlocked(builder, x, z, x, z + 1, out _);
+                }
+        }
+
+        /// <summary>
+        /// Uma cápsula do tamanho do corpo dos inimigos, indo do centro de uma célula ao da vizinha,
+        /// bate em algum colisor da fase? Vale também o que já está em cima do centro de partida.
+        /// </summary>
+        public static bool PassageBlocked(LevelBuilder builder, int x, int z, int nx, int nz, out Collider by)
+        {
+            Vector3 a = builder.CellCenter(x, z), b = builder.CellCenter(nx, nz);
+            Vector3 low = Vector3.up * (PassageRadius + 0.08f), high = Vector3.up * 1.6f;
+            Vector3 delta = b - a;
+
+            foreach (Collider c in Physics.OverlapCapsule(a + low, a + high, PassageRadius, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+                if (c.transform.IsChildOf(builder.transform)) { by = c; return true; }
+
+            foreach (RaycastHit hit in Physics.CapsuleCastAll(a + low, a + high, PassageRadius, delta.normalized, delta.magnitude, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+                if (hit.collider.transform.IsChildOf(builder.transform)) { by = hit.collider; return true; }
+
+            by = null;
+            return false;
+        }
+
+        bool FurnitureBlocks(int x, int z, WallSide side)
+        {
+            if (_blockedEast == null) return false;
+            switch (side)
+            {
+                case WallSide.East: return _blockedEast[x, z];
+                case WallSide.West: return x > 0 && _blockedEast[x - 1, z];
+                case WallSide.North: return _blockedNorth[x, z];
+                case WallSide.South: return z > 0 && _blockedNorth[x, z - 1];
+                default: return false;
+            }
         }
 
         public int[,] NewMap()
@@ -74,7 +127,7 @@ namespace BackRooms.Entities
         /// <summary>A entidade pode passar da célula (x, z) para a vizinha daquele lado?</summary>
         public bool CanStep(int x, int z, WallSide side)
         {
-            if (!Standable(x, z) || !Data.CanWalk(x, z, side, false)) return false;
+            if (!Standable(x, z) || !Data.CanWalk(x, z, side, false) || FurnitureBlocks(x, z, side)) return false;
 
             Data.Neighbor(x, z, side, out int nx, out int nz);
             return Standable(nx, nz);

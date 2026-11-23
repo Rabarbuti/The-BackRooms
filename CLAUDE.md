@@ -605,7 +605,8 @@ Sozinho na máquina, direto:
 - `Level3Setup.BatchCheck` — recria a cena e os materiais do Escritório e confere 8 seeds
   (`OfficeGenerator.Validate` sem problemas, mesma seed = mesmo `Hash`, uma porta de saída, três
   elevadores, início na cabine, caminho até a escada e escada até a porta livres para uma cápsula do
-  tamanho do jogador, chão sob cada ponto da escada); fotos em `Logs/Previews/level3_*.png` (cabine,
+  tamanho do jogador, chão sob cada ponto da escada, nenhuma passagem entre células de sala de aula
+  barrada por móvel para o corpo dos inimigos); fotos em `Logs/Previews/level3_*.png` (cabine,
   saguão, corredor nos dois sentidos, salas, cafeteria, área de estar, porta da escada de perto e de
   longe, vão da escada, saída, placa). Sai com 0 se passou, 3 se falhou.
 - `Level3MenuPhoto.BatchRun` — não é teste: o menu inicial com o Level 3 escolhido e a vista do

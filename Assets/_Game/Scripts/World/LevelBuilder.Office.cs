@@ -119,6 +119,10 @@ namespace BackRooms.World
             public readonly List<LockerDoor> LockerDoors = new List<LockerDoor>();
             public Transform Lockers;
             public Mesh TubeMesh, PanelMesh, DomeMesh, SpotsMesh, LeafMesh, LockerLeafMesh, LockerHandleMesh, ButtonMesh;
+            /// <summary>Difusores das luminárias: uma malha das acesas e uma das apagadas por tipo.</summary>
+            public FusedMesh TubeOn, TubeOff, PanelOn, PanelOff, DomeOn, DomeOff;
+            /// <summary>As portas de armário soltas enquanto fechadas (folhas e puxadores).</summary>
+            public FusedMesh LockerLeaves, LockerHandles;
         }
 
         OfficeKit _ok;
@@ -150,6 +154,15 @@ namespace BackRooms.World
             _ok.LockerHandleMesh = BoxMesh("Puxador", new Vector3(0.03f, 0.05f, 0.006f));
             _ok.ButtonMesh = BoxMesh("BotaoDoElevador", new Vector3(0.04f, 0.04f, 0.012f));
 
+            // Os difusores não são um objeto por luminária: cada tipo tem uma malha das acesas e
+            // uma das apagadas, e a luminária aparece numa ou na outra (FusedMesh).
+            _ok.TubeOn = OfficeFused("TubosAcesos", office.tubeOn, ShadowCastingMode.Off, _ok.Fixtures);
+            _ok.TubeOff = OfficeFused("TubosApagados", office.tubeOff, ShadowCastingMode.Off, _ok.Fixtures);
+            _ok.PanelOn = OfficeFused("EmbutidasAcesas", office.panelOn, ShadowCastingMode.Off, _ok.Fixtures);
+            _ok.PanelOff = OfficeFused("EmbutidasApagadas", office.panelOff, ShadowCastingMode.Off, _ok.Fixtures);
+            _ok.DomeOn = OfficeFused("PendentesAcesos", office.domeOn, ShadowCastingMode.Off, _ok.Fixtures);
+            _ok.DomeOff = OfficeFused("PendentesApagados", office.domeOff, ShadowCastingMode.Off, _ok.Fixtures);
+
             BuildOfficeFloors();
             BuildOfficeCeilings();
             BuildOfficeEdges();
@@ -161,6 +174,9 @@ namespace BackRooms.World
             BuildOfficeAtrium();
             BuildOfficeSigns();
             FlushOffice();
+            foreach (FusedMesh fused in new[] { _ok.TubeOn, _ok.TubeOff, _ok.PanelOn, _ok.PanelOff, _ok.DomeOn, _ok.DomeOff,
+                                                _ok.LockerLeaves, _ok.LockerHandles })
+                if (fused != null) fused.Finish();
             BuildOfficeEvents();
             _ok = null;
         }
@@ -290,6 +306,30 @@ namespace BackRooms.World
                 foreach (float z in new[] { -0.6f, 0.6f })
                     mb.AddDisc(new Vector3(x, 0f, z), Vector3.down, Vector3.right, 0.07f, 16);
             return mb.ToMesh("SpotsDaCabine");
+        }
+
+        FusedMesh OfficeFused(string objectName, Material material, ShadowCastingMode shadows, Transform parent)
+        {
+            return CreateRenderer(objectName, null, material, shadows, parent).gameObject.AddComponent<FusedMesh>();
+        }
+
+        // O objeto de uma luminária: sem desenho próprio (o difusor está nas malhas juntadas), só
+        // o lugar, as luzes e o componente CeilingLight.
+        Transform FixtureHolder(string objectName, Vector3 localPosition, Quaternion localRotation)
+        {
+            var go = new GameObject(objectName);
+            go.transform.SetParent(_ok.Fixtures, false);
+            go.transform.localPosition = localPosition;
+            go.transform.localRotation = localRotation;
+            return go.transform;
+        }
+
+        // Põe o difusor nas duas malhas do tipo e devolve o número da peça.
+        static int AddFixture(FusedMesh on, FusedMesh off, Mesh mesh, Transform holder)
+        {
+            Matrix4x4 place = Matrix4x4.TRS(holder.localPosition, holder.localRotation, Vector3.one);
+            off.Add(mesh, place);
+            return on.Add(mesh, place);
         }
 
         void FlushOffice()
@@ -798,9 +838,8 @@ namespace BackRooms.World
             Quaternion turn = runsAlongX ? Quaternion.Euler(0f, 90f, 0f) : Quaternion.identity;
             Vector3 tubeAxis = turn * Vector3.right;
 
-            MeshRenderer tube = CreateRenderer($"Tubo_{x}_{z}", _ok.TubeMesh, office.tubeOff, ShadowCastingMode.Off, _ok.Fixtures);
-            tube.transform.localPosition = c + Vector3.up * OfficeTubeHeight;
-            tube.transform.localRotation = turn;
+            Transform tube = FixtureHolder($"Tubo_{x}_{z}", c + Vector3.up * OfficeTubeHeight, turn);
+            int item = AddFixture(_ok.TubeOn, _ok.TubeOff, _ok.TubeMesh, tube);
             AddCollider(tube.gameObject, Vector3.zero, new Vector3(2.4f, 0.075f, 0.075f));
 
             foreach (float s in new[] { -0.95f, 0.95f })
@@ -809,24 +848,24 @@ namespace BackRooms.World
             HDAdditionalLightData[] lights = null;
             if (state != LightState.Dead)
                 // Girar o tubo em Y não muda o "para baixo" do spot.
-                lights = new[] { OfficeSpot(tube.transform, new Vector3(0f, -0.06f, 0f), Quaternion.Euler(90f, 0f, 0f), officeTubeCandela, 7.5f, 150f, 5200f, true) };
+                lights = new[] { OfficeSpot(tube, new Vector3(0f, -0.06f, 0f), Quaternion.Euler(90f, 0f, 0f), officeTubeCandela, 7.5f, 150f, 5200f, true) };
 
             CeilingLight light = tube.gameObject.AddComponent<CeilingLight>();
-            light.Init(state, lights, tube, office.tubeOn, office.tubeOff);
+            light.InitFused(state, lights, _ok.TubeOn, _ok.TubeOff, item);
             _ok.CorridorLights[x + z * Data.Width] = light;
         }
 
         void RecessedLight(int x, int z, LightState state)
         {
             Vector3 c = OCellCenter(x, z);
-            MeshRenderer panel = CreateRenderer($"Embutida_{x}_{z}", _ok.PanelMesh, office.panelOff, ShadowCastingMode.Off, _ok.Fixtures);
-            panel.transform.localPosition = c + Vector3.up * (OfficeRoomCeiling - 0.004f);
+            Transform panel = FixtureHolder($"Embutida_{x}_{z}", c + Vector3.up * (OfficeRoomCeiling - 0.004f), Quaternion.identity);
+            int item = AddFixture(_ok.PanelOn, _ok.PanelOff, _ok.PanelMesh, panel);
 
             HDAdditionalLightData[] lights = null;
             if (state != LightState.Dead)
-                lights = new[] { OfficeSpot(panel.transform, new Vector3(0f, -0.04f, 0f), Quaternion.Euler(90f, 0f, 0f), officeRoomCandela, 7.5f, 150f, 4300f, true) };
+                lights = new[] { OfficeSpot(panel, new Vector3(0f, -0.04f, 0f), Quaternion.Euler(90f, 0f, 0f), officeRoomCandela, 7.5f, 150f, 4300f, true) };
 
-            panel.gameObject.AddComponent<CeilingLight>().Init(state, lights, panel, office.panelOn, office.panelOff);
+            panel.gameObject.AddComponent<CeilingLight>().InitFused(state, lights, _ok.PanelOn, _ok.PanelOff, item);
         }
 
         // Pendente em meia-esfera preta, pendurado das ripas.
@@ -838,15 +877,15 @@ namespace BackRooms.World
             OM(office.blackPlastic).AddDisc(c + Vector3.up * (bottom + 0.22f), Vector3.up, Vector3.right, 0.3f, 20);
             OBox(office.blackPlastic, c + Vector3.up * ((bottom + 0.22f + OfficeSlatsBottom) * 0.5f), new Vector3(0.008f, OfficeSlatsBottom - bottom - 0.22f, 0.008f), caps: false);
 
-            MeshRenderer dome = CreateRenderer($"Pendente_{x}_{z}", _ok.DomeMesh, office.domeOff, ShadowCastingMode.Off, _ok.Fixtures);
-            dome.transform.localPosition = c + Vector3.up * (bottom + 0.03f);
+            Transform dome = FixtureHolder($"Pendente_{x}_{z}", c + Vector3.up * (bottom + 0.03f), Quaternion.identity);
+            int item = AddFixture(_ok.DomeOn, _ok.DomeOff, _ok.DomeMesh, dome);
 
             float candela = Data.Office[x, z] == OfficeCell.Lounge ? officePendantCandela * 0.55f : officePendantCandela;
             HDAdditionalLightData[] lights = null;
             if (state != LightState.Dead)
-                lights = new[] { OfficeSpot(dome.transform, new Vector3(0f, -0.02f, 0f), Quaternion.Euler(90f, 0f, 0f), candela, 7f, 115f, 3600f, true) };
+                lights = new[] { OfficeSpot(dome, new Vector3(0f, -0.02f, 0f), Quaternion.Euler(90f, 0f, 0f), candela, 7f, 115f, 3600f, true) };
 
-            dome.gameObject.AddComponent<CeilingLight>().Init(state, lights, dome, office.domeOn, office.domeOff);
+            dome.gameObject.AddComponent<CeilingLight>().InitFused(state, lights, _ok.DomeOn, _ok.DomeOff, item);
         }
 
         // ---------------------------------------------------------------- Eventos

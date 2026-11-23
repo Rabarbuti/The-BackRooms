@@ -13,6 +13,10 @@ namespace BackRooms.World
         Quaternion _closed;
         float _sign = 1f;
         float _angle;
+        Renderer[] _own;
+        FusedMesh _leaves;
+        FusedMesh _handles;
+        int _item = -1;
 
         /// <summary>Célula do corredor onde o armário está.</summary>
         public int X { get; private set; }
@@ -40,11 +44,38 @@ namespace BackRooms.World
             _sign = Vector3.Dot(Quaternion.AngleAxis(30f, Vector3.up) * free, Facing) > 0f ? 1f : -1f;
         }
 
+        /// <summary>
+        /// Fechada, a porta é desenhada pelas malhas juntadas de todas as portas soltas (peça
+        /// <paramref name="item"/> de cada uma) e os objetos dela ficam desligados; só enquanto
+        /// gira ela sai das malhas e desenha a própria folha e o próprio puxador.
+        /// </summary>
+        public void UseFused(FusedMesh leaves, FusedMesh handles, int item, Renderer[] own)
+        {
+            _leaves = leaves;
+            _handles = handles;
+            _item = item;
+            _own = own;
+            ShowOwn(false);
+        }
+
         public void SetAngle(float degrees)
         {
             if (Mathf.Abs(degrees - _angle) < 0.01f) return;
+            bool wasOpen = _angle > 0.01f;
             _angle = degrees;
             transform.localRotation = _closed * Quaternion.AngleAxis(_sign * degrees, Vector3.up);
+
+            bool open = _angle > 0.01f;
+            if (open != wasOpen && _item >= 0) ShowOwn(open);
+        }
+
+        void ShowOwn(bool own)
+        {
+            if (_own != null)
+                foreach (Renderer part in _own)
+                    if (part != null) part.enabled = own;
+            if (_leaves != null) _leaves.SetShown(_item, !own);
+            if (_handles != null) _handles.SetShown(_item, !own);
         }
     }
 

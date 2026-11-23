@@ -134,8 +134,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Entities.JanitorAudio
   volume: 0.9
-  keysRange: 22
-  dragRange: 16
+  stepRange: 20
+  cartRange: 26
+  mopRange: 16
+  voiceRange: 14
+  squeakEvery: 0.9
+  huntSpeed: 3
 --- !u!114 &8308390818198281214
 MonoBehaviour:
   m_ObjectHideFlags: 0

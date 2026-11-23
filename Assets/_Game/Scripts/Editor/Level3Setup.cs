@@ -649,6 +649,9 @@ namespace BackRooms.EditorTools
 
                     List<string> blocked = BlockedPath(builder);
                     if (blocked.Count > 0) problems.Add($"seed {seed}: caminho até a escada bloqueado ({string.Join(", ", blocked.Take(4))})");
+                    // Salas de aula: os inimigos têm de caber entre as mesas, de célula em célula.
+                    List<string> desks = BlockedPassages(builder).Where(s => s.StartsWith("Classroom") && s.Contains("->Classroom")).ToList();
+                    if (desks.Count > 0) problems.Add($"seed {seed}: {desks.Count} passagens de sala de aula barradas por móveis ({string.Join(", ", desks.Take(3))})");
                     List<string> floating = RouteOffGround(builder);
                     if (floating.Count > 0) problems.Add($"seed {seed}: pontos da escada sem chão ({string.Join(", ", floating)})");
 
@@ -713,6 +716,46 @@ namespace BackRooms.EditorTools
 
             foreach (ElevatorDoors doors in Object.FindObjectsByType<ElevatorDoors>()) doors.Snap(0f);
             return blocked;
+        }
+
+        // Os inimigos andam de centro de célula em centro de célula (LevelNav): entre duas células
+        // vizinhas sem parede, uma cápsula do tamanho do corpo deles não pode bater em móvel nenhum.
+        // Fica de fora o que eles não pisam: a cabine inicial, buracos e barricadas.
+        public static List<string> BlockedPassages(LevelBuilder builder)
+        {
+            Physics.SyncTransforms();
+            LevelData d = builder.Data;
+            var blocked = new List<string>();
+
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                    foreach (WallSide side in new[] { WallSide.East, WallSide.North })
+                    {
+                        if (!d.CanWalk(x, z, side, false) || !d.Neighbor(x, z, side, out int nx, out int nz)) continue;
+                        if (d.InRoom(x, z) || d.InRoom(nx, nz) || d.Pit[x, z] || d.Pit[nx, nz] || d.IsBarricade(x, z) || d.IsBarricade(nx, nz)) continue;
+
+                        if (!BackRooms.Entities.LevelNav.PassageBlocked(builder, x, z, nx, nz, out Collider hitBy)) continue;
+
+                        blocked.Add($"{d.Office[x, z]}({x},{z})->{d.Office[nx, nz]}({nx},{nz}) por {hitBy.name} (caixa {hitBy.bounds.center:F1} x {hitBy.bounds.size:F1})");
+                    }
+
+            return blocked;
+        }
+
+        /// <summary>Não é teste: lista as passagens entre células barradas por móveis, em algumas seeds.</summary>
+        public static void BatchPassages()
+        {
+            EditorSceneManager.OpenScene(ScenePath);
+            LevelBuilder builder = Object.FindFirstObjectByType<LevelBuilder>();
+            foreach (int seed in CheckSeeds)
+            {
+                builder.seed = seed;
+                builder.Rebuild();
+                List<string> blocked = BlockedPassages(builder);
+                var byKind = blocked.GroupBy(s => s.Substring(0, s.IndexOf('('))).Select(g => $"{g.Key}={g.Count()}");
+                Debug.Log($"[BackRooms] PASSAGENS seed {seed}: {blocked.Count} barradas [{string.Join(", ", byKind)}] " + string.Join(" | ", blocked.Take(40)));
+            }
+            EditorApplication.Exit(0);
         }
 
         static List<string> RouteOffGround(LevelBuilder builder)
