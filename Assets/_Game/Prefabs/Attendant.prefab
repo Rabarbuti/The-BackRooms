@@ -130,6 +130,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Entities.AttendantAudio
   volume: 0.9
   range: 34
+  breathRange: 7
 --- !u!114 &7416699585625022542
 MonoBehaviour:
   m_ObjectHideFlags: 0

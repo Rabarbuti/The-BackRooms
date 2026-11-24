@@ -136,6 +136,8 @@ MonoBehaviour:
   volume: 0.9
   range: 24
   fullSpeed: 4.2
+  voiceRange: 30
+  growlEvery: {x: 3, y: 5}
 --- !u!114 &8308390818198281214
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -246,9 +248,10 @@ MonoBehaviour:
   switchRechargeSeconds: 25
   switchNoiseRadius: 45
   waveJitter: 6
-  emergeMinCells: 4
+  emergeMinCells: 3
+  lurkMinCells: 2
   emergeCooldown: 5
-  lingerCells: 7
-  lingerSeconds: 25
+  regionSwitchSeconds: 1.5
+  huntSwitchSeconds: 0.4
   hesitateSeconds: 0.6
   hesitateCooldown: 4
