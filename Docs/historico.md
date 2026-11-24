@@ -377,3 +377,183 @@ Pedidos do usuário jogando a branch `rodada-jogando`. Quatro agentes (`filmador
 **Junção da `main` (PR 22) na `modelos-tripo` (21/11/2026):** conflitos resolvidos: `PlayerBody` (a pose sentada da `main` com as medidas ajustáveis, o modelo e a `BindPose` daqui; a bacia, também sentada, usa as medidas do traje), `CharacterModels` (os três inimigos novos e o traje), `CLAUDE.md` (os dois textos) e `ContentVersion` (25, acima do 24 da `main`); as cenas do Level 0 e do Level 1 ficaram as da `main` e foram recriadas pelos geradores. Achado: o `ObjectiveTest.BatchRunLevel3` já falhava na `main` desde `b88eaa6`, que passou a exigir todos os alarmes do Escritório (`SwitchObjective.RequiredFor`) sem mudar o teste; ele agora arma, dentro da janela, quantos pontos a fase exige. Testes depois da junção (todos passaram): `Level1Setup.BatchCheck`, fumaça (seed 1998 `9595CEDE`), `ObjectiveTest` nas três fases, `LevelSelectTest`, `Level1PlayTest`, `Level0ColliderCheck`; dois editores: `ObjectiveTest.BatchHost` + `BatchJoin` e `Level0SmokeTest.BatchHost` + `BatchJoin`.
 
 **Level 3: menos objetos desenhados e inimigos que não atravessam móveis (23/11/2026, branch `level3-menos-draw-calls`):** (1) Difusores das luminárias e portas de armário soltas viraram malhas juntas (`FusedMesh`: cada peça some e volta recolhendo os vértices num ponto). Cada tipo de luminária tem uma malha das acesas e uma das apagadas; a porta de armário só é objeto próprio enquanto gira. Na seed 1998 o Escritório caiu de 262 para 78 objetos desenhados (156 luminárias e 18 portas em 8 malhas). (2) Os inimigos da rotina comum (`EntityBrain.Move`) conferem o passo com uma cápsula contra os colisores da fase: batendo, deslizam ao longo do obstáculo; sem saída, param e recalculam. Antes a física só era consultada ao planejar o atalho, e a inércia cortava quinas. (3) Salas de aula: mesas em blocos entre as faixas que ligam os centros das células (`FreeBands`, `LaneGap` 0,6 m), mesa do professor antes da primeira faixa; em 8 seeds as passagens barradas por móveis caíram de 67 a 116 por mapa para 0. (4) No Escritório o `LevelNav` testa cada passagem entre células (`PassageBlocked`, cápsula de 0,45 m) e não usa a que um móvel fecha (cafeteria, saguão, estar: 22 a 31 por mapa); célula com móvel no centro vira lugar onde o inimigo não entra. `Level3Setup.BatchCheck` reprova sala de aula com passagem barrada; `Level3Setup.BatchPassages` lista todas. Testado: `Level3Setup.BatchCheck` passou e os scripts compilam. **Não rodaram** (a rodada foi interrompida duas vezes): `Level3EnemiesTest`, `AttendantTest`, `JanitorTest`, `Level3PlayTest`, `Level3ElevatorTest`, `Level3SoundTest`, fumaça do Level 0, `Level1CaptainTest`, `LevelSelectTest`. O jogo foi aberto à mão depois da parte (1); as partes (2) a (4) não foram jogadas.
+
+## 23/11/2026 — terceira rodada: pato de borracha, passos novos, Level 3 maior
+
+Pedidos do usuário. Três agentes trabalharam ao mesmo tempo na mesma pasta, na branch `sons-e-level3-maior`:
+`pato`, `passos` e `level3`. Unity e Blender só pela fila.
+
+- **Pato de borracha** (`pato`). Em algumas fases havia um som de "pato". Não era um culpado só: eram
+  quatro sons afinados que escorregavam de altura, cada um numa fase:
+  - a roda da válvula, no Level 2: varria 60 Hz a 1,7 kHz a cada meia volta e se repetia enquanto se
+    segurava E;
+  - o rangido da porta de saída, em todas as fases;
+  - o guincho afinado do rodízio do Zelador, no Level 3;
+  - o rangido do passo vinílico, no Level 1, refeito pelo `passos`.
+
+  A causa comum na válvula e na porta era um seno com a frequência variando **dentro** da fase,
+  `sin(2π·f(t)·t)`. A frequência que sai é `f + t·f'`, e um vibrato de poucos Hz vira um vaivém de centenas
+  de Hz. O rodízio do Zelador já acumulava a fase: soava como pato pelo desenho, um pulso afinado com curva
+  de tom.
+
+  A válvula (`SwitchObjective`), a porta (`LevelExit`) e o rodízio (`JanitorAudio`) viraram atrito de ruído
+  filtrado, sem nota. O instante, a duração e o volume ficaram iguais, e o barulho para os inimigos não
+  mudou. Os candidatos fracos ficaram listados no relato do agente, entre eles o guincho da entidade do
+  Level 0, que não foi mexido.
+- **Passos novos** (`passos`). O usuário achou os passos esquisitos, longe de um pé batendo no chão. A
+  síntese dos pisos secos (`Footsteps.CreateGroundStep`) foi refeita só com ruído filtrado:
+  - o calcanhar: um baque sem altura (pulso e ruído por um passa-baixas de 140 a 170 Hz);
+  - 12 a 115 ms depois, a planta do pé, mais aguda e mais fraca, com o corpo em 360 a 900 Hz e o estalo na
+    cor de cada piso.
+
+  A cor de cada piso:
+  - carpete abafado, com roçar;
+  - laminado com modos de tábua curtos;
+  - vinílico seco;
+  - azulejo duro, com rabicho de sala de ruído;
+  - piso duro do Escritório, que ganhou som próprio, mais seco que o azulejo.
+
+  Há três conjuntos por piso (agachado, arrastado e mais fraco; andando; correndo, com as batidas juntas),
+  com seis variações cada, e os pés alternam. Saíram:
+  - os senos afinados do laminado e do azulejo;
+  - o seno que descia de tom no carpete;
+  - o guincho de 1,4 a 1,9 kHz do vinílico.
+
+  Na água rasa, as gotas de seno que chilreavam viraram estalinhos de ruído. Nado, debaixo d'água e espirro
+  ficaram iguais. Medido nos WAV exportados: nenhum tom nem glissando, e o volume (RMS em 50 ms) a ±2 dB dos
+  antigos. A cadência, as superfícies e o barulho para os inimigos não mudaram.
+- **Level 3 maior** (`level3`). O andar do Escritório passou de 14 x 12 para **16 x 14 células**, com o mesmo
+  gerador e a mesma parte de corredor, salas e luminárias por célula. Em 508 seeds:
+  - células andáveis: 158 → 214 (+35%);
+  - salas: 17,7 → 24,1;
+  - caminho da cabine à escada: 13,4 → 17,0 células.
+
+  A altura 14 deixa o miolo sempre fundo o bastante para o transversal leste-oeste: o andar ganha voltas,
+  não corredores mais longos. Acertado o que dependia do tamanho:
+  - trechos de luminárias queimadas proporcionais ao corredor, a 9 células da cabine (eram 8);
+  - trecho da onda de luzes de no máximo 10 luminárias (`LevelBuilder.MaxWaveRun`): o lado de 12 do anel
+    vira dois, com dois interruptores; nas seeds de conferência, 5,25 → 7,0 trechos por planta;
+  - 6 pilhas no Escritório (eram 4);
+  - alarmes a 7 passos uns dos outros, 6 da cabine e 5 da escada (eram 6, 5 e 4);
+  - o Ascensorista fica 85 s no andar (75);
+  - a sombra das luminárias pode usar 80% do atlas em cache (era 60%), para seguir a 128 px com até ~200
+    acesas.
+
+  As luzes com sombra subiram no total (seed 1998: 84 → 120), mas o HDRP só põe no laço de cada quadro as
+  luzes a menos de `fadeDistance` da câmera e com dimmer acima de 0. Com os 30 m de antes, o andar maior
+  pegava 6% mais luzes nesse raio em média e 13% no pior lugar. O `Level3Setup` passou o fade para 28 m e o
+  número ficou abaixo do antigo (média 59 contra 65). Objetos desenhados: 78 → 82.
+
+  Conferidor fora do Unity (o gerador compilado sozinho), com `Validate` em 508 seeds: 0 falhas.
+  `Level3Setup.BatchCheck` passou duas vezes e regravou a cena e os prefabs; a foto do menu
+  (`Level3MenuPhoto`) foi olhada.
+- **Atalho que libera todas as fases** (`cheat`), para a build do itch.io: no menu inicial, **Ctrl + Shift + L**
+  libera todas; de novo, volta a trancar (fica o progresso de verdade). Aviso curto no alto da tela
+  (`ALL LEVELS UNLOCKED` / `LEVELS LOCKED AGAIN`) e a lista "Level" atualiza na hora. Guardado numa preferência
+  própria (`BackRooms.UnlockAll`, `LevelProgress.CheatUnlocked`), sem tocar nas fases zeradas nem nos tempos;
+  não é o modo desenvolvedor (sem a nota). Trancando com uma fase que só o atalho liberava escolhida, o menu
+  volta para a última liberada de verdade. No editor e em Development Build tudo já está liberado (só o aviso
+  muda): confere-se numa build de release. Com `DevModeOverride` forçado (testes) a marca é ignorada, então o
+  `LevelSelectTest` continua achando a fase bloqueada. Só compilado; **não testado** em Play nem jogando.
+- **GDD, README e documentação em dia** (`gdd`), porque a rubrica da entrega pede um GDD vivo, com as
+  mudanças de trajetória, e um README com os créditos dos assets:
+  - `GDD.md` na raiz: ficha, conceito, como se joga, controles (teclado e controle), as quatro fases,
+    sistemas, estados do jogo (com diagrama) e o que impede ficar preso, arte, áudio, tecnologia,
+    mudanças de trajetória, fora do escopo, problemas conhecidos;
+  - `README.md` na raiz: como jogar (com o atalho Ctrl + Shift + L em destaque), build, pastas, créditos e
+    equipe; o que não se confirmou no repositório (licenças das saídas de IA, autor da música do menu, um
+    nome da equipe) ficou `A CONFIRMAR`;
+  - `Docs/imagens`: dez fotos de `Logs/Previews`, em PNG (JPG iria para o LFS, sem orçamento); as tiradas
+    antes de 21/11 foram recortadas no alto para tirar a dica "F9 - REC" do painel, que não vale mais;
+  - acertado o que estava vencido: single player e gravação no R em `mecanicas.md`, `plano-coop.md` e na
+    abertura do `CLAUDE.md`; o retrato de 11/11 do `plano-coop.md` marcado como tal; a regra do alarme do
+    Escritório em `level3-escritorio.md`; nota de 21–23/11 no `plano-de-acao.md`. O `CLAUDE.md` ganhou a
+    regra de atualizar o GDD junto com mudança de jogo.
+- **Um som só por monstro no Level 3** (`som3`). O usuário, jogando: "muito som nada a ver", sobretudo a água
+  e as borbulhas. O **Zelador** (`JanitorAudio`) ficou só com a **vassoura seca**: uma passada a cada dois passos
+  (ruído em faixa, "xxxsh", 4 variações, até 24 m), mais curta e forte caçando, calada parado ou sumindo.
+  Saíram botas, chaves, rodízio, rodas, esfregão molhado, balde (água, borbulhas, pancada), espremedeira,
+  voz e o gorgolejo de aparecer e sumir. O **Ascensorista** (`AttendantAudio`) ficou só com a **bengala**,
+  refeita de senos afinados (soava como bip) para um "toc" de madeira em ruído de faixa, no mesmo ritmo;
+  saíram o arrasto, os estalos da boca e a respiração. Quem ouve quem, velocidades e regras não mudaram.
+  `JanitorTest` e `AttendantTest` passaram a cobrar a vassoura e a bengala tocando ao andar; a exportação
+  dá `zelador_vassoura_0..3` e `ascensorista_bengala`. Só compilado: **não testado nem ouvido**.
+- **Ascensorista de volta, voz de caça no Zelador** (`sons3b`). O usuário, jogando: "O som antigo do
+  Ascensorista tava muito melhor. Deixa como tava. E no Zelador põe alguma voz pra saber quando ele tá
+  correndo atrás de você." `AttendantAudio`, `AttendantTest` e o trecho do Ascensorista no `EntitySounds`
+  voltaram exatamente aos da HEAD (bengala de antes, arrasto correndo, estalos ao escutar, respiração;
+  diff vazio). O Zelador continua com a vassoura e ganhou um **rosnado de caça** (`JanitorAudio.CreateGrowl`,
+  4 variações de 0,7 a 1,3 s): sopro cortado em pulsos irregulares de garganta (33 a 50 por segundo, sem
+  nota), formantes largos de vogal escura e ronco de peito, sem seno nem água. Toca quando o estado vira
+  `Chase` (o de ataque, com dois golpes, primeiro), repete a cada 3 a 5 s enquanto dura, cala ao perder de
+  vista (~0,4 s), pegar ou sumir (na hora); 3D até 30 m. Usa o `State` e o `Present` que já vão pela rede:
+  o `JanitorBrain` não mudou. Exportação: `zelador_voz_0..3` e de novo `ascensorista_*`. Jogabilidade igual.
+  Só compilado: **não testado nem ouvido**.
+- **Estados e erros** (`estados`), da auditoria contra a rubrica: (1) botão **Quit** no menu inicial, depois de
+  Options (`ConnectionMenu`; `Application.Quit`, no editor sai do Play), sem atalho de teclado; (2) o jogo
+  sozinho hospeda só em `127.0.0.1` (`session.Host(!MultiplayerMenu)`), para o Firewall do Windows não
+  perguntar; a troca de fase segue pelo `_pendingHostLocalOnly`, e com o multiplayer ligado nada muda;
+  (3) erro ao montar a fase (`GameSession.BuildRoutine`) volta ao menu com "Could not build the level. Press
+  Play to try again." em vez de prender em "Opening the session...", e a fase montada sem o jogador ficar
+  pronto em 30 s sai do mesmo jeito. Só compilado: **não testado**.
+- **Sombras quebradas nos vãos de porta do Level 3** (`sombras`). O usuário, jogando: "algumas sombras dentro
+  dos buracos das portas tão bugadas". Não era sombra: era **z-fighting**. A face de dentro do batente branco
+  ficava no mesmo plano da ponta da parede cinza, e a face de baixo do batente no da verga, desde que o
+  Escritório existe. Como são materiais diferentes (duas malhas), a placa de vídeo escolhia ora uma, ora a
+  outra, em triângulos: uma cunha escura em diagonal, serrilhada, que treme com o antisserrilhamento. Valia
+  para todas as portas de sala e para a da escada, em qualquer qualidade. Conserto: o batente avança 4 mm para
+  dentro do vão (`LevelBuilder.DoorFrameInset`, em `DoorFrame` e `BuildStairDoor`). Colisor, passagem, planta e
+  hash não mudam, e não custa nada no desenho. Fotos de antes e depois do mesmo vão, 3 seeds, High Fidelity
+  (sombra a 256 px) e Performant (128 px), sem filmadora e sem AA: `Level3Setup.BatchDoorPhotos`, em
+  `Logs/Previews/portas`. Antes, a cunha aparece nas seis montagens; depois, some. A resolução da sombra não
+  era a causa: o usuário joga em High Fidelity (256 px), e o log dele não tinha aviso de atlas cheio. Mas as
+  fotos desenham a sombra a cada quadro: defeito só da sombra em cache não sairia nelas.
+- **Qualidade inicial em placa integrada** (`qualidade`). A build abria sempre em High Fidelity. Agora, sem
+  qualidade salva e com placa de vídeo integrada (Intel UHD/HD/Iris, AMD "Radeon Graphics" sem modelo, Vega
+  ou 680M/780M de APU; na dúvida, não), `GameOptions.Load` aplica o Performant sem gravar: a conta se refaz a
+  cada abertura até o jogador escolher em Options, e a escolha dele vale dali em diante. Placa dedicada,
+  editor e `-nographics` ficam como antes. O `Player.log` diz a placa e o perfil (`[BackRooms] Placa de
+  vídeo: ...`). O `GameOptionsCheck` confere a função com seis nomes de placa. Só compilado: **não testado
+  na build** nem num computador com vídeo integrado.
+- **Esfregão na parede e o Zelador sempre no escuro mais perto** (`zelador`). O usuário, jogando: "vi o
+  esfregão dele atravessando uma parede... faz ele ficar no canto escuro que tá mais próximo do jogador
+  sempre, e assim que ele entrar na escuridão perseguir ele". (1) **Esfregão:** o cabo de 1,3 m sai da mão
+  direita para trás e para o lado, bem além do raio de 0,38 m que o cérebro confere, e nada o conferia
+  contra a fase: rente à parede pela direita, virando, de costas para ela na beira da luz e no vão de porta
+  ele entrava na parede. `JanitorBody.Fit` (molde do `UndertowBody.Fit`), em cada máquina a cada quadro:
+  raios do cabo e da cabeça de tiras (ponta e dois lados) contra os colisores fixos da fase; onde bateria,
+  arrasta o esfregão reto atrás (no rastro por onde veio) e, se nem assim cabe, levanta-o em pé ao lado do
+  ombro. Começa com 18 cm de folga, recolhe em ~0,6 s e solta em ~3 s; o que ainda entraria sobe na hora.
+  O braço esquerdo esticado na caça e a cabeça pendurada se recolhem do mesmo jeito. Por onde ele anda não
+  mudou. Fotos de antes e depois rente à parede: `JanitorPreview.BatchCapture` (`zelador_parede_*`).
+  (2) **Comportamento:** antes, ele subia num escuro perto de alguém a 4 células ou mais, fora da vista, e ia
+  investigar onde o jogador estava; só caçava quem **via** (cone de 60°, 20 m) ou ouvia correr (4 células);
+  perdendo-o, vasculhava 8 s e voltava a rondar ao acaso; rondando longe de todos 25 s, sumia e voltava mais
+  perto. Agora (`JanitorBrain.Lurk.cs`, quatro vezes por segundo, sobre o mapa do `JanitorDark`): com todos na
+  luz, fica na célula escura mais perto a pé de algum jogador, na beira, virado para ele; dentro da mesma
+  região escura vai andando, para outra afunda e sobe (só se ela ficar uma célula ou mais mais perto por
+  1,5 s), a 2 células ou mais de todos; quem pisa numa célula escura da região dele é caçado na hora
+  (gancho novo `EntityBrain.Senses`) e não é largado enquanto ficar no escuro; noutra região, ele afunda e
+  sobe nela em 0,4 s, a 3 células ou mais e fora da vista. Voltando à luz, o jogador deixa de ser sentido e
+  ele volta à beira (gancho `EntityBrain.DrivesGoal`: sem vagar, vasculhar nem ir atrás de barulho). A
+  ponta do trecho da onda, a hesitação com a lanterna, os abrigos, sumir com a luz e os interruptores ficam
+  como eram. O `JanitorTest` passou a aceitar a aparição sozinha a 6 m (era 12). Só compilado: **não
+  testado em Play**.
+- **Cartazes das salas iniciais falam do monstro** (`cartazes`). O usuário: "ajeita os cartazes nas salinhas
+  iniciais pra meio que dar umas dicas sobre os monstros". O cartaz (`StartNote`, extraído do
+  `SwitchObjective.PinNote`) passou de TIPS + 4 dicas gerais a **7 avisos curtos sobre o monstro da fase** +
+  "ESC: TASKS", em 8 linhas (a textura cresce de 128 x 64 para 128 x 96 e o papel de 0,24 para 0,36 m de
+  altura, o mesmo ponto de 3,75 mm). O **Level 1 ganhou o dele** (dicas do Capitão, sem dígito nem
+  CLEARANCE), pregado pelo `LevelBuilder.BuildObjective` em `Cartaz/CartazDeDicas`, fora de `Moveis`: sem
+  sorteio, não muda a mobília nem o `PropLayer.Hash`. Os raios do cartaz passaram a ignorar jogadores
+  (`SwitchObjective.WallRay`). Saíram: "MARK THE SHALLOWS" e "STAY OFF THE DRAINS" (Level 2) e "3 ALARMS, IN
+  ROOMS" e "HIDE IN A SMALL ROOM WITH THE LIGHT ON" (Level 3; o lugar dos alarmes está no menu de pausa, e a
+  salinha acesa só abriga do Zelador, não do Ascensorista). O `PauseMenuTest` confere o cartaz nas quatro fases
+  (também letra que a `PixelFont` não desenha); o `Level1ObjectiveTest` cobra o cartaz sem dígito nem
+  CLEARANCE; o `EnglishTextPreview` fotografa os quatro. Só compilado e as texturas fotografadas: **não visto
+  em Play**.
+- **Testes por máquina:** só compilação (`Tools/compila.ps1`), o conferidor do gerador, o
+  `Level3Setup.BatchCheck`, a foto do menu e a medida dos WAV exportados (`EntitySounds.BatchExport`).
+  **Nada foi testado em Play nem ouvido**, a pedido: o usuário testa jogando. Falta ouvir a válvula, a porta,
+  o Zelador e os passos de cada piso. No Level 3, olhar se atravessar o andar ficou longo, se a onda e o
+  Zelador pegam no mesmo ritmo, se as pilhas sobram e se o fade de 28 m escureceu a ponta dos corredores.

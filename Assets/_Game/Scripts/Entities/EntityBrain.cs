@@ -163,6 +163,18 @@ namespace BackRooms.Entities
         /// </summary>
         protected virtual bool CellOpen(int x, int z) => true;
 
+        /// <summary>
+        /// Host: sabe onde este jogador está sem precisar vê-lo (caça na hora, como se o visse)? O
+        /// Zelador sente quem pisa no escuro dele. A entidade, o Capitão e o Ascensorista não.
+        /// </summary>
+        protected virtual bool Senses(PlayerNetwork player) => false;
+
+        /// <summary>
+        /// Host: quem herda escolhe o destino agora (o Zelador à espreita na beira do escuro): a
+        /// decisão daqui não vaga, não vasculha nem vai atrás de barulho; caçar e comer continuam.
+        /// </summary>
+        protected virtual bool DrivesGoal => false;
+
         /// <summary>A navegação da fase atual (só no host; nula antes da fase existir).</summary>
         protected LevelNav Nav => _nav;
 
@@ -358,7 +370,16 @@ namespace BackRooms.Entities
 
                 // Debaixo da mesa e no cone dele: viu o jogador se enfiar ali (a mesa tapa a
                 // visada, então não se confere a linha de visão).
-                if (!HasSight) { }
+                if (!hidden && Senses(player))
+                {
+                    float distance = Flat(at - position).magnitude;
+                    if (distance < seenDistance)
+                    {
+                        seenDistance = distance;
+                        seen = player;
+                    }
+                }
+                else if (!HasSight) { }
                 else if (hiding == HideKind.Table && !hidden)
                 {
                     float distance = Flat(at - position).magnitude;
@@ -409,8 +430,10 @@ namespace BackRooms.Entities
                     return;
                 }
 
-                BeginSearch(_goal, searchSeconds, now);
+                if (!DrivesGoal) BeginSearch(_goal, searchSeconds, now);
             }
+
+            if (DrivesGoal) return;
 
             if (heard)
             {
@@ -526,6 +549,8 @@ namespace BackRooms.Entities
 
         void Think(float now)
         {
+            if (DrivesGoal && State != EntityState.Feed) return;
+
             switch (State)
             {
                 case EntityState.Feed:

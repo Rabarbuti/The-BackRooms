@@ -939,11 +939,12 @@ namespace BackRooms.World
             AtBox(office.baseboard, u0, c - h - 0.06f, face - 0.012f, face, 0f, 0.09f, false);
             AtBox(office.baseboard, c + h + 0.06f, u1, face - 0.012f, face, 0f, 0.09f, false);
 
-            // Batente branco dos dois lados, como em DoorFrame.
-            float d = T * 0.5f + 0.02f;
-            AtBox(office.frameWhite, c - h - 0.06f, c - h, -d, d, 0f, OfficeDoorTop + 0.06f, false);
-            AtBox(office.frameWhite, c + h, c + h + 0.06f, -d, d, 0f, OfficeDoorTop + 0.06f, false);
-            AtBox(office.frameWhite, c - h - 0.06f, c + h + 0.06f, -d, d, OfficeDoorTop, OfficeDoorTop + 0.06f, false);
+            // Batente branco dos dois lados, como em DoorFrame (um pouco para dentro do vão: no mesmo
+            // plano da parede, os dois brigavam).
+            float d = T * 0.5f + 0.02f, inset = DoorFrameInset;
+            AtBox(office.frameWhite, c - h - 0.06f, c - h + inset, -d, d, 0f, OfficeDoorTop + 0.06f, false);
+            AtBox(office.frameWhite, c + h - inset, c + h + 0.06f, -d, d, 0f, OfficeDoorTop + 0.06f, false);
+            AtBox(office.frameWhite, c - h - 0.06f, c + h + 0.06f, -d, d, OfficeDoorTop - inset, OfficeDoorTop + 0.06f, false);
 
             // Folha aberta a 90°, para dentro, presa no batente do lado do vão: fica entre o caminho
             // da escada e o guarda-corpo do patamar.

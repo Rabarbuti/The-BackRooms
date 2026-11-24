@@ -15,10 +15,14 @@ namespace BackRooms.Entities
     /// • Só pisa em célula escura (<see cref="JanitorDark"/>: luminária queimada, apagada pela onda
     ///   de luzes ou sem energia depois do alarme). Não percebe nem pega quem está numa célula acesa,
     ///   por mais perto que esteja: a luz salva dele (o silêncio salva do outro, o do elevador).
-    /// • Aparece (<see cref="Present"/>) dentro de um trecho escuro, longe de todos e fora da vista,
-    ///   e vai na direção do jogador mais perto, pelo escuro. Quando a luz volta sobre ele, some no
-    ///   chão; volta noutro escuro depois de um tempo. Rondando longe de todos por muito tempo, também
-    ///   some e reaparece mais perto.
+    /// • À espreita (decisão de 23/11/2026): com todos na luz, fica na célula escura mais perto (a pé)
+    ///   de algum jogador, na beira, virado para ele, entre todos os escuros do andar (queimados, da
+    ///   onda, do alarme). Na mesma região escura vai andando; quando outra região passa a ser a mais
+    ///   perto (por <see cref="regionSwitchSeconds"/> e por uma célula ou mais), afunda e sobe lá.
+    /// • Quem pisa no escuro dele é caçado na hora, sem precisar ser visto (<see cref="Senses"/>), e
+    ///   não é largado enquanto ficar no escuro; se pisa noutra região escura, ele afunda e sobe nela
+    ///   (depois de <see cref="huntSwitchSeconds"/>), a <see cref="emergeMinCells"/> ou mais e fora da
+    ///   vista. Quando a luz volta sobre ele, some no chão; volta noutro escuro depois de um tempo.
     /// • A lanterna não o detém: o facho nele o faz hesitar um instante (<see cref="hesitateSeconds"/>),
     ///   no máximo uma vez a cada <see cref="hesitateCooldown"/>.
     /// • Enxerga bem no escuro e ouve mal (<see cref="EntityBrain.hearCells"/> curto): o barulho é a
@@ -33,14 +37,16 @@ namespace BackRooms.Entities
         public static JanitorBrain Janitor { get; private set; }
 
         [Header("Zelador: aparecer e sumir")]
-        [Tooltip("Aparece a pelo menos esta distância de caminhada de todo jogador, em células de 4 m.")]
-        public int emergeMinCells = 4;
-        [Tooltip("Segundos escondido, depois de sumir, antes de poder aparecer de novo.")]
+        [Tooltip("Com alguém no escuro (caça na hora): aparece a pelo menos isto de caminhada de todo jogador, em células de 4 m, e fora da vista.")]
+        public int emergeMinCells = 3;
+        [Tooltip("Com todos na luz (à espreita): aparece a pelo menos isto de caminhada de todo jogador, em células de 4 m.")]
+        public int lurkMinCells = 2;
+        [Tooltip("Segundos escondido, depois de a luz voltar sobre ele, antes de poder aparecer de novo.")]
         public float emergeCooldown = 5f;
-        [Tooltip("Rondando sem ninguém a menos disto (células em linha reta)...")]
-        public float lingerCells = 7f;
-        [Tooltip("...por mais que isto (s), some e reaparece mais perto.")]
-        public float lingerSeconds = 25f;
+        [Tooltip("À espreita: outra região escura tem de ser a mais perto do jogador por este tempo (s) antes de ele mudar para lá.")]
+        public float regionSwitchSeconds = 1.5f;
+        [Tooltip("Jogador no escuro de outra região: muda para lá depois deste tempo (s).")]
+        public float huntSwitchSeconds = 0.4f;
 
         [Header("Zelador: lanterna")]
         [Tooltip("Segundos parado quando o facho de uma lanterna o pega.")]
@@ -80,7 +86,6 @@ namespace BackRooms.Entities
 
         LevelNav _free;
         float _nextEmerge;
-        float _lonelySince = -1f;
         float _hesitateUntil;
         float _hesitateReady;
         float _parkAt = -1f;
@@ -157,18 +162,12 @@ namespace BackRooms.Entities
                 return true;
             }
 
-            // Rondando longe de todos por muito tempo: some e volta mais perto.
-            if (State == EntityState.Roam && NearestPlayer(out _) > lingerCells * LevelBuilder.Cell)
+            // À espreita no escuro mais perto ou caçando quem pisou no escuro (pode afundar aqui e subir noutro escuro).
+            if (now >= _huntAt)
             {
-                if (_lonelySince < 0f) _lonelySince = now;
-                else if (now - _lonelySince > lingerSeconds)
-                {
-                    Vanish(level, now, "longe de todos");
-                    _nextEmerge = now + 1f;
-                    return true;
-                }
+                _huntAt = now + HuntInterval;
+                if (Hunt(level, now)) return true;
             }
-            else _lonelySince = -1f;
 
             // O facho de uma lanterna: hesita um instante.
             if (now >= _hesitateReady && InTorchBeam(level.transform))
@@ -181,23 +180,8 @@ namespace BackRooms.Entities
             bool flinching = now < _hesitateUntil;
             if (now < _risenAt) return true;
             if (_flinch.Value != flinching) _flinch.Value = flinching;
+            if (!flinching) FaceLure(now);
             return flinching;
-        }
-
-        float NearestPlayer(out PlayerNetwork nearest)
-        {
-            nearest = null;
-            float best = float.MaxValue;
-            foreach (PlayerNetwork player in PlayerNetwork.All)
-            {
-                if (player == null || !player.IsSpawned || !player.InGame) continue;
-                Vector3 to = player.transform.position - transform.position;
-                to.y = 0f;
-                if (to.magnitude >= best) continue;
-                best = to.magnitude;
-                nearest = player;
-            }
-            return best;
         }
 
         // ---------------------------------------------------------------- Aparecer e sumir
@@ -208,7 +192,8 @@ namespace BackRooms.Entities
             _flinch.Value = false;
             Vanishes++;
             LastVanish = why;
-            _lonelySince = -1f;
+            _switchSince = -1f;
+            _mineFresh = false;
             _nextEmerge = Mathf.Max(_nextEmerge, now + emergeCooldown);
             // Sai do mapa depois de afundar (o corpo leva sinkSeconds descendo no lugar).
             _parkAt = now + SinkSeconds;
@@ -228,71 +213,25 @@ namespace BackRooms.Entities
             Teleport(position, rotation);
             ForgetPath();
             _present.Value = true;
-            _lonelySince = -1f;
+            _switchSince = -1f;
+            _lurking = true;
+            _mineFresh = false;
+            _lure = null;
+            _huntAt = 0f;
             Emerges++;
         }
 
-        // Escolhe a célula escura mais perto de algum jogador entre as que ficam longe (andando) de
-        // todos e fora da vista de todos. Aparece lá e vai para onde estava o mais perto.
+        // Aparece no escuro (JanitorBrain.Lurk.cs): com alguém no escuro, na região escura dele, a
+        // emergeMinCells ou mais de todos e fora da vista; com todos na luz, no escuro mais perto de
+        // alguém, a lurkMinCells ou mais. Depois o Hunt leva-o à beira do escuro ou atrás de quem caça.
         void TryEmerge(LevelBuilder level, float now)
         {
-            LevelData data = level.Data;
-            if (_free == null || _free.Data != data) _free = new LevelNav(level);
-
-            _players.Clear();
-            foreach (PlayerNetwork player in PlayerNetwork.All)
-                if (player != null && player.IsSpawned && player.InGame) _players.Add(player);
-            if (_players.Count == 0) return;
-
-            while (_playerMaps.Count < _players.Count) _playerMaps.Add(_free.NewMap());
-            for (int p = 0; p < _players.Count; p++)
-            {
-                int[,] map = _playerMaps[p];
-                if (_free.WorldToCell(_players[p].transform.position, out int px, out int pz) && WalkFrom(px, pz, map)) continue;
-                for (int z = 0; z < data.Height; z++)
-                    for (int x = 0; x < data.Width; x++) map[x, z] = -1;
-            }
-
-            int bestCell = -1;
-            float bestScore = float.MaxValue;
-            for (int z = 0; z < data.Height; z++)
-            {
-                for (int x = 0; x < data.Width; x++)
-                {
-                    if (!JanitorDark.IsDark(x, z) || data.IsShelter(x, z) || data.Pit[x, z] || data.IsBarricade(x, z)) continue;
-
-                    Vector3 center = _free.CellCenter(x, z);
-                    float nearest = float.MaxValue;
-                    bool ok = true;
-                    for (int p = 0; p < _players.Count && ok; p++)
-                    {
-                        Vector3 at = _players[p].transform.position;
-                        int steps = _playerMaps[p][x, z];
-                        float straight = Vector3.Distance(Flat(center), Flat(at)) / LevelBuilder.Cell;
-                        float cells = steps >= 0 ? steps : straight;
-                        if (cells < emergeMinCells || straight < emergeMinCells * 0.75f) ok = false;
-                        else if (Seen(_players[p], center, level.transform)) ok = false;
-                        nearest = Mathf.Min(nearest, cells);
-                    }
-                    if (!ok) continue;
-
-                    // O mais perto de alguém (sem passar do mínimo); empate, ao acaso.
-                    float score = nearest + Random.value * 0.5f;
-                    if (score >= bestScore) continue;
-                    bestScore = score;
-                    bestCell = x + z * data.Width;
-                }
-            }
-            if (bestCell < 0) return;
-
-            Vector3 spot = _free.CellCenter(bestCell % data.Width, bestCell / data.Width);
-            spot.y = level.transform.position.y;
-            NearestFrom(spot, out PlayerNetwork lure);
+            if (!Survey(level)) return;
+            if (!PickEmergeSpot(level, out Vector3 spot, out PlayerNetwork lure, out int cells, out string kind)) return;
             Vector3 look = lure != null ? lure.transform.position - spot : Vector3.forward;
             ManifestAt(spot, look);
-            LastEmergeKind = "no escuro";
-            LastEmergeCells = Mathf.RoundToInt(bestScore);
-            if (lure != null) Alert(lure.transform.position);
+            LastEmergeKind = kind;
+            LastEmergeCells = cells;
         }
 
         void NearestFrom(Vector3 spot, out PlayerNetwork nearest)
@@ -391,6 +330,8 @@ namespace BackRooms.Entities
         public void HearWorldNoise(Vector3 at, float radius)
         {
             if (!IsServer || !IsSpawned || !Present) return;
+            // À espreita, não sai da beira do escuro mais perto do jogador por barulho nenhum.
+            if (_lurking) return;
             if (Vector3.Distance(at, transform.position) > radius) return;
             // Só vai se o barulho caiu num escuro (ele não sai da luz para ver).
             if (!JanitorDark.IsDarkAt(at)) return;

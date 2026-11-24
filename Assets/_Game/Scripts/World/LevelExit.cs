@@ -168,13 +168,21 @@ namespace BackRooms.World
             _rattle = AudioClip.Create("Porta_Trancada", n, 1, rate, false);
             _rattle.SetData(rattle, 0);
 
+            // O rangido da dobradiça era um seno com a frequência dentro da fase, sin(2π·(210 + 120t +
+            // 25·sen 60t)·t), que oscilava de 40 Hz a 1,7 kHz quase dez vezes por segundo e soava como
+            // um pato de borracha (23/11/2026). Agora é atrito: ruído na faixa média, tremido, sem nota.
             int m = (int)(rate * 1.5f);
             var open = new float[m];
+            float creakLow = 0f, creakBase = 0f;
             for (int i = 0; i < m; i++)
             {
                 float t = i / (float)rate;
                 float bar = ((float)(rng.NextDouble() * 2.0 - 1.0) * 0.7f + Mathf.Sin(2f * Mathf.PI * 900f * t) * 0.3f) * Mathf.Exp(-t * 40f);
-                float creak = t > 0.1f && t < 1.0f ? Mathf.Sin(2f * Mathf.PI * (210f + 120f * t + 25f * Mathf.Sin(t * 60f)) * t) * 0.25f * Mathf.Sin(Mathf.PI * (t - 0.1f) / 0.9f) : 0f;
+                creakLow += ((float)(rng.NextDouble() * 2.0 - 1.0) - creakLow) * 0.12f; // ~900 Hz para baixo
+                creakBase += (creakLow - creakBase) * 0.025f;                            // tira o grave (~180 Hz)
+                float creak = t > 0.1f && t < 1.0f
+                    ? (creakLow - creakBase) * 1.5f * (0.55f + 0.45f * Mathf.Abs(Mathf.Sin(2f * Mathf.PI * 7f * t))) * Mathf.Sin(Mathf.PI * (t - 0.1f) / 0.9f)
+                    : 0f;
                 float slam = t > 1.15f ? (Mathf.Sin(2f * Mathf.PI * 70f * (t - 1.15f)) + (float)(rng.NextDouble() * 2.0 - 1.0) * 0.5f) * Mathf.Exp(-(t - 1.15f) * 14f) : 0f;
                 open[i] = (bar + creak + slam * 0.8f) * 0.7f;
             }

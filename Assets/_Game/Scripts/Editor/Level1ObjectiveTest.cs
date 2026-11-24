@@ -17,8 +17,8 @@ namespace BackRooms.EditorTools
     /// <summary>
     /// Teste em Play do objetivo do Level 1, "fechar o caixa" (level1-mostruario.md, seção 6):
     /// três etiquetas vermelhas em blocos diferentes e longe umas das outras, com os dígitos do
-    /// código na ordem; nenhum bilhete na sala inicial (saiu em 21/11/2026) e a placa amarela nos
-    /// totens; a porta trancada não abre. Depois, o painel do código (<see cref="CodePanel"/>), com
+    /// código na ordem; nenhum bilhete do código na sala inicial (saiu em 21/11/2026), o cartaz de
+    /// dicas do Capitão lá, sem dígito nem CLEARANCE, e a placa amarela nos totens; a porta trancada não abre. Depois, o painel do código (<see cref="CodePanel"/>), com
     /// teclado e mouse virtuais: mirando o teclado o aviso é E - KEYPAD e o E abre o painel; aberto,
     /// o jogador não anda nem gira e a tecla 1 digita em vez de puxar a caneta; Backspace apaga; um
     /// código errado pisca o visor, não destranca e limpa; Esc fecha (sem abrir o menu de pausa) e o
@@ -189,10 +189,18 @@ namespace BackRooms.EditorTools
                     }
                     // O bilhete com os dígitos fora de ordem saiu em 21/11/2026: não pode voltar.
                     if (_level.transform.Find("Moveis/Bilhete") != null) { Finish(false, "o bilhete do código voltou à sala inicial"); return; }
+                    // O cartaz de dicas do Capitão (23/11/2026) fica na sala inicial, mas sem dígito nem
+                    // CLEARANCE: não pode dar o código nem parecer uma das etiquetas.
+                    StartNote note = StartNote.Current;
+                    if (note == null || _level.transform.Find("Cartaz/CartazDeDicas") == null) { Finish(false, "sem o cartaz de dicas do Capitão na sala inicial"); return; }
+                    string noteText = string.Join(" / ", note.Lines);
+                    foreach (char c in noteText)
+                        if (char.IsDigit(c)) { Finish(false, $"o cartaz de dicas tem um dígito: {noteText}"); return; }
+                    if (noteText.Contains("CLEARANCE")) { Finish(false, $"o cartaz de dicas parece uma etiqueta: {noteText}"); return; }
                     // Vermelho com CLEARANCE é só das etiquetas: a placa dos totens é a amarela de DISPLAY ONLY.
                     foreach (Totem totem in Totem.All)
                         if (totem.transform.Find("PlacaTotem") == null) { Finish(false, $"o totem {totem.Index} está sem a placa amarela"); return; }
-                    Notes.Add($"3 etiquetas nas células {string.Join(", ", props.TagCells)}, código {_lock.Code:000}, sem bilhete, {Totem.All.Count} totens com a placa amarela");
+                    Notes.Add($"3 etiquetas nas células {string.Join(", ", props.TagCells)}, código {_lock.Code:000}, sem bilhete, cartaz de dicas sem dígitos, {Totem.All.Count} totens com a placa amarela");
 
                     if (Role == HostLateRole)
                     {

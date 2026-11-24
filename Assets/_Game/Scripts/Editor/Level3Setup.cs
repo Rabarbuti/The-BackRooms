@@ -88,7 +88,12 @@ namespace BackRooms.EditorTools
                     builder.width = Width;
                     builder.height = Height;
                     builder.office = look;
-                    builder.lightFadeDistance = 30f;
+                    // O HDRP só põe no laço de luz de cada quadro as luzes a menos disto da câmera (e
+                    // com dimmer acima de 0): é isto, e não o total de luminárias, que custa por quadro.
+                    // 30 m até 23/11/2026; no andar de 16 x 14 o raio de 30 m pegava ~6% mais luzes
+                    // acesas em média (13% no pior lugar) que no de 14 x 12, e 28 m volta a ficar abaixo
+                    // do antigo (o difusor continua aceso ao longe: só a luz no chão some na névoa).
+                    builder.lightFadeDistance = 28f;
 
                     foreach (Volume volume in Object.FindObjectsByType<Volume>(FindObjectsInactive.Include))
                         if (volume.isGlobal && volume.gameObject.name == "Global Volume")
@@ -665,7 +670,35 @@ namespace BackRooms.EditorTools
                     lines.Add($"seed {seed}: hash {hash:X8}, caminho {d.PathCells.Count} células, salas de aula {Count(kinds, OfficeCell.Classroom)}, " +
                               $"pequenas {Count(kinds, OfficeCell.Small)}, cafeteria {Count(kinds, OfficeCell.Cafe)}, estar {Count(kinds, OfficeCell.Lounge)}, " +
                               $"{lit} luminárias acesas, {lockers} paredes com armário, {d.Decorations.Count} placas de saída, " +
-                              $"{(wave != null ? wave.RunCount : 0)} trechos para a onda de luzes");
+                              $"{(wave != null ? wave.RunCount : 0)} trechos para a onda de luzes, {Drawn(builder)}");
+                }
+
+                // "-comparar 14x12": as mesmas seeds montadas noutro tamanho, só para medir (não confere).
+                string[] args = Environment.GetCommandLineArgs();
+                int compare = Array.IndexOf(args, "-comparar");
+                string[] size = compare >= 0 && compare + 1 < args.Length ? args[compare + 1].Split('x') : null;
+                if (size != null && size.Length == 2 && int.TryParse(size[0], out int cw) && int.TryParse(size[1], out int ch))
+                {
+                    int ow = builder.width, oh = builder.height;
+                    try
+                    {
+                        builder.width = cw;
+                        builder.height = ch;
+                        foreach (int seed in CheckSeeds)
+                        {
+                            builder.seed = seed;
+                            builder.Rebuild();
+                            LevelData d = builder.Data;
+                            var wave = builder.GetComponentInChildren<OfficeLightWave>();
+                            lines.Add($"comparação {cw}x{ch} seed {seed}: caminho {d.PathCells.Count} células, {d.OfficeRooms.Count(r => r.Kind == OfficeCell.Classroom || r.Kind == OfficeCell.Small)} salas, " +
+                                      $"{(wave != null ? wave.RunCount : 0)} trechos, {Drawn(builder)}");
+                        }
+                    }
+                    finally
+                    {
+                        builder.width = ow;
+                        builder.height = oh;
+                    }
                 }
 
                 builder.seed = CheckSeeds[0];
@@ -682,6 +715,28 @@ namespace BackRooms.EditorTools
         }
 
         static int Count(Dictionary<OfficeCell, int> kinds, OfficeCell kind) => kinds.TryGetValue(kind, out int n) ? n : 0;
+
+        // O que pesa no desenho: objetos desenhados (renderers ligados), luzes ligadas, as com sombra
+        // em cache e a resolução dessa sombra, pilhas e interruptores.
+        static string Drawn(LevelBuilder builder)
+        {
+            int renderers = builder.GetComponentsInChildren<Renderer>(false).Count(r => r.enabled);
+            Light[] lights = builder.GetComponentsInChildren<Light>(false).Where(l => l.enabled).ToArray();
+            int shadowed = lights.Count(l => l.shadows != LightShadows.None);
+            var batteries = builder.GetComponentInChildren<BatteryPickups>(true);
+            // Os interruptores só nascem em Play (JanitorDirector): postos e tirados aqui só para contar.
+            int switchCount = 0;
+            var wave = builder.GetComponentInChildren<OfficeLightWave>();
+            BackRooms.Entities.LightSwitches switches = BackRooms.Entities.LightSwitches.Build(builder, wave);
+            if (switches != null)
+            {
+                switchCount = switches.Count;
+                Object.DestroyImmediate(switches.gameObject);
+                Physics.SyncTransforms();
+            }
+            return $"{renderers} objetos desenhados, {lights.Length} luzes ({shadowed} com sombra; {builder.OfficeShadowLights} acesas a {builder.OfficeShadowSize} px), " +
+                   $"{(batteries != null ? batteries.Count : 0)} pilhas, {switchCount} interruptores";
+        }
 
         // Cápsula do tamanho do jogador entre os centros das células do caminho (com as portas da
         // cabine abertas): nada pode barrar.
@@ -769,6 +824,140 @@ namespace BackRooms.EditorTools
                     off.Add($"ponto {i} em {p:F1}");
             }
             return off;
+        }
+
+        /// <summary>
+        /// Linha de comando: fotos de perto dos vãos de porta das salas, com o batente antigo (no plano
+        /// da parede, <see cref="LevelBuilder.DoorFrameInset"/> = 0: "antes") e com o de agora
+        /// ("depois"), nas seeds 1998, 7 e 4242, na qualidade do editor e na mais baixa (a sombra das
+        /// luminárias tem outra resolução em cada uma). Sem a filmadora e sem antisserrilhamento, para o
+        /// defeito não se desfazer em borrão; a vista do corredor também sai como no jogo (_jogo).
+        /// Em Logs/Previews/portas. A sombra é desenhada a cada quadro (fora do Play a em cache não
+        /// sai): defeito só do atlas em cache não aparece aqui. Não confere nada; sai com 0.
+        /// </summary>
+        public static void BatchDoorPhotos()
+        {
+            int qualityBefore = QualitySettings.GetQualityLevel();
+            float insetBefore = LevelBuilder.DoorFrameInset;
+            try
+            {
+                BuildScene();
+                EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+                var builder = Object.FindAnyObjectByType<LevelBuilder>();
+                string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Logs", "Previews", "portas"));
+                Directory.CreateDirectory(folder);
+                foreach (string old in Directory.GetFiles(folder, "*.png")) File.Delete(old);
+
+                int lowest = QualitySettings.names.Length - 1;
+                var lines = new List<string>();
+                foreach (int quality in new[] { qualityBefore, lowest }.Distinct())
+                {
+                    QualitySettings.SetQualityLevel(quality, true);
+                    string q = QualitySettings.names[quality].Replace(" ", "").ToLowerInvariant();
+                    foreach (int seed in new[] { 1998, 7, 4242 })
+                        foreach (bool fixedFrame in new[] { false, true })
+                        {
+                            LevelBuilder.DoorFrameInset = fixedFrame ? insetBefore : 0f;
+                            builder.seed = seed;
+                            builder.Rebuild();
+                            string tag = $"{q}_s{seed}_{(fixedFrame ? "depois" : "antes")}";
+                            lines.Add($"{tag}: sombra a {builder.OfficeShadowSize} px, {DoorShots(builder, folder, tag)}");
+                        }
+                }
+                Debug.Log("[BackRooms] Fotos das portas do Level 3:\n" + string.Join("\n", lines));
+                LevelBuilder.DoorFrameInset = insetBefore;
+                QualitySettings.SetQualityLevel(qualityBefore, true);
+                EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+                Level1Setup.ExitWithLevel0Open(0);
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+                LevelBuilder.DoorFrameInset = insetBefore;
+                QualitySettings.SetQualityLevel(qualityBefore, true);
+                Level1Setup.ExitWithLevel0Open(1);
+            }
+        }
+
+        // Um vão de porta de sala visto do corredor de lado, da sala de lado e de baixo (a verga).
+        // Prefere corredor e sala acesos.
+        static string DoorShots(LevelBuilder builder, string folder, string tag)
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
+            if (prefab == null) return "sem o prefab do jogador";
+            LevelData d = builder.Data;
+
+            int doorX = -1, doorZ = -1, bestScore = -1;
+            WallSide doorSide = WallSide.North;
+            for (int z = 0; z < d.Height; z++)
+                for (int x = 0; x < d.Width; x++)
+                {
+                    if (d.Office[x, z] != OfficeCell.Corridor) continue;
+                    foreach (WallSide s in new[] { WallSide.South, WallSide.North, WallSide.West, WallSide.East })
+                    {
+                        if (d.OfficeEdgeAt(x, z, s) != OfficeEdge.Door || !d.Neighbor(x, z, s, out int nx, out int nz)) continue;
+                        int score = (Lit(x, z) ? 2 : 0) + (Lit(nx, nz) ? 1 : 0);
+                        if (score <= bestScore) continue;
+                        bestScore = score;
+                        doorX = x;
+                        doorZ = z;
+                        doorSide = s;
+                    }
+                }
+            if (doorX < 0) return "sem porta de sala";
+
+            GameObject rig = Level0Preview.CreateCameraRig(prefab, out Camera camera);
+            var cameraData = camera.GetComponent<HDAdditionalCameraData>();
+            HDAdditionalCameraData.AntialiasingMode aaBefore = cameraData != null ? cameraData.antialiasing : default;
+            bool asyncBefore = ShaderUtil.allowAsyncCompilation;
+            ShaderUtil.allowAsyncCompilation = false;
+            var target = new RenderTexture(1280, 720, 24, RenderTextureFormat.ARGB32);
+            var readback = new Texture2D(target.width, target.height, TextureFormat.RGBA32, false);
+            CustomPassVolume[] passes = Object.FindObjectsByType<CustomPassVolume>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            foreach (HDAdditionalLightData light in builder.GetComponentsInChildren<HDAdditionalLightData>(true))
+                light.shadowUpdateMode = ShadowUpdateMode.EveryFrame;
+            int taken = 0;
+            try
+            {
+                camera.targetTexture = target;
+                Vector3 into = Side(doorSide);
+                Vector3 along = Vector3.Cross(Vector3.up, into);
+                Vector3 door = builder.CellCenter(doorX, doorZ) + into * (LevelBuilder.Cell * 0.5f);
+
+                void Shot(string name, Vector3 feet, Vector3 look, float pitch, bool game)
+                {
+                    Vector3 flat = look - feet;
+                    flat.y = 0f;
+                    rig.transform.SetPositionAndRotation(feet, Quaternion.LookRotation(flat.normalized, Vector3.up));
+                    camera.transform.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+                    foreach (CustomPassVolume pass in passes) pass.enabled = game;
+                    if (cameraData != null) cameraData.antialiasing = game ? aaBefore : HDAdditionalCameraData.AntialiasingMode.None;
+                    Level0Preview.Shoot(camera, target, readback, Path.Combine(folder, $"{tag}_{name}{(game ? "_jogo" : "")}.png"));
+                    taken++;
+                }
+
+                // Do corredor, de lado (~35° com a parede), a 1,5 m do vão: as duas faces de dentro.
+                Vector3 fromCorridor = door - into * 1.2f + along * 0.85f;
+                Shot("corredor", fromCorridor, door + into * 0.4f - along * 0.1f, 8f, false);
+                Shot("corredor", fromCorridor, door + into * 0.4f - along * 0.1f, 8f, true);
+                Shot("sala", door + into * 1.2f - along * 0.85f, door - into * 0.4f + along * 0.1f, 8f, false);
+                // De baixo, quase no vão: a verga e o alto dos batentes.
+                Shot("verga", door - into * 0.7f, door + into, -32f, false);
+            }
+            finally
+            {
+                foreach (CustomPassVolume pass in passes) pass.enabled = true;
+                if (cameraData != null) cameraData.antialiasing = aaBefore;
+                camera.targetTexture = null;
+                RenderTexture.active = null;
+                Object.DestroyImmediate(target);
+                Object.DestroyImmediate(readback);
+                Object.DestroyImmediate(rig);
+                ShaderUtil.allowAsyncCompilation = asyncBefore;
+            }
+            return $"porta ({doorX},{doorZ}) {doorSide}, {taken} fotos";
+
+            bool Lit(int x, int z) => d.Lights[x, z] == LightState.On || d.Lights[x, z] == LightState.Flicker;
         }
 
         // ---------------------------------------------------------------- Fotos

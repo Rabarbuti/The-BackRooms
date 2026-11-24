@@ -2,7 +2,8 @@
 
 Visão geral do que se faz em cada fase, em linguagem de jogador, e ideias novas ainda não
 decididas. Escrito em 17/11/2026; atualizado em 21/11/2026 (menu de pausa, inglês, maré nova, os três
-inimigos novos).
+inimigos novos) e em 23/11/2026 (single player, gravação no R, Escritório maior). O resumo do jogo para
+quem não conhece o projeto está no `GDD.md` da raiz.
 
 Cada mecânica traz uma de três marcas:
 
@@ -23,15 +24,18 @@ junto** (sanidade), **se separar** (objetivos), **falar** (coordenação) ou **f
 
 ### Existe
 
-- **Co-op de 1 a 4 por IP.** Um hospeda, os outros entram. Cada máquina monta o mesmo mapa a partir
-  da seed que o host envia.
+- **Um jogador** (desde 21/11/2026). O co-op de 1 a 4 por IP continua no código (um hospeda, os outros
+  entram, cada máquina monta o mesmo mapa a partir da seed que o host envia), mas o menu não mostra mais
+  Host, Join nem endereço (`ConnectionMenu.MultiplayerMenu = false`): jogar é hospedar sozinho. As
+  regras abaixo que falam de "todos" ou de vários jogadores valem para quando a rede voltar ao menu.
 - **Movimento:** anda, corre (6 s de fôlego), agacha, pula.
 - **Lanterna** (F), com bateria: 4 min acesa (era 10 até 21/11/2026), em porcentagem no painel, piscando
   em vermelho abaixo de 20%. **Pilhas no chão** (desde 19/11/2026, `BatteryPickups`):
-  de 4 a 9 cartelas por mapa, postas pela seed; mira + E pega e a lanterna de quem pegou volta cheia;
+  de 4 a 9 cartelas por mapa, postas pela seed (no Escritório, uma a cada ~33 células: 6 no andar de
+  16 x 14); mira + E pega e a lanterna de quem pegou volta cheia;
   quem chega primeiro leva (o host decide).
-- **Filmadora VHS:** a tela inteira é a imagem de uma fita, com contador e hora. F9 grava um vídeo de
-  verdade (AVI na pasta Vídeos\The BackRooms, com o efeito, o painel e o som): parado, o canto diz STBY;
+- **Filmadora VHS:** a tela inteira é a imagem de uma fita, com contador e hora. **R** grava um vídeo de
+  verdade (era o F9 até 21/11/2026) (AVI na pasta Vídeos\The BackRooms, com o efeito, o painel e o som): parado, o canto diz STBY;
   gravando, REC verde piscando com o tempo do clipe; ao parar, SAVED e o nome do arquivo. A tela
   **Recordings** (menu inicial e menu de pausa) lista os clipes, abre no reprodutor do sistema, abre a
   pasta e apaga com confirmação.
@@ -39,7 +43,8 @@ junto** (sanidade), **se separar** (objetivos), **falar** (coordenação) ou **f
 - **Não há morte.** Cair num buraco, ser pego ou se afogar dá NO SIGNAL e o jogador volta para a
   sala inicial.
 - **Porta de saída** (E): todos precisam chegar nela. Quando todos esperam, a fase acaba e o grupo
-  passa para a seguinte. Trancada, a maçaneta chacoalha; abrindo, range e bate.
+  passa para a seguinte (sozinho, abre na hora). Trancada, a maçaneta chacoalha; abrindo, a dobradiça raspa (atrito sem nota,
+  desde 23/11/2026) e a porta bate.
 - **Objetivo em toda fase** (desde 19/11/2026): a porta só destranca cumprido o objetivo da fase.
   Nas fases 0, 2 e 3 é o mesmo componente (`SwitchObjective`, antes a proposta `PC.1`): *pontos
   distantes armados dentro de uma janela de tempo*. Mira + segurar E; enquanto segura, o jogador faz
@@ -57,8 +62,18 @@ junto** (sanidade), **se separar** (objetivos), **falar** (coordenação) ou **f
   **teclas** que valem nesta fase e os botões Continue, Options e Quit to menu.
 - **Opções** (no menu inicial e no de pausa): volume, sensibilidade do mouse e qualidade (os três
   perfis do HDRP).
-- **Cartaz de dicas** (TIPS) pregado na sala inicial das fases 0, 2 e 3: quatro dicas curtas e
-  "ESC: TASKS". A instrução do objetivo está no menu de pausa.
+- **Cartaz de dicas** pregado na sala inicial das quatro fases (desde 23/11/2026 também no Level 1):
+  sete avisos curtos sobre o monstro da fase, como deixados por quem passou por ali, e "ESC: TASKS".
+  A instrução do objetivo e as teclas estão no menu de pausa. Os textos:
+  - Level 0: IT HEARS YOU RUN / CROUCH = SILENCE / IT SEES ONLY AHEAD / HIDE IN WALL NICHES /
+    IT NEVER WALKS PLANKS / THIS ROOM IS SAFE / FOLLOW THE HUM.
+  - Level 1: HE MOVES WHEN UNSEEN / LOOK AT HIM IN LIGHT / DARK: FLASHLIGHT (F) / DO NOT STARE TOO
+    LONG / STATUES NEVER TURN / HIS PEG LEAVES RINGS / HIDE IN A WARDROBE (nenhum dígito: o código
+    é só das etiquetas).
+  - Level 2: IT LIVES IN THE DEEP / SPLASHES WAKE IT / UNDERWATER IS QUIET / CLIMB OUT TO ESCAPE /
+    BE STILL: IT FORGETS / ALARM: RUN BACK HERE / HOLD SPACE TO FLOAT.
+  - Level 3: STAY IN THE LIGHT / SOMEONE MOPS THE DARK / DARK: HIT THE SWITCH / ELEVATOR MAN IS
+    BLIND / BLINKING ARROW = HIM / CROUCH LOW. NEVER RUN / STEP OUT OF HIS WAY.
 - **Tudo o que o jogador lê é em inglês** (desde 21/11/2026): menus, filmadora, placas, etiquetas.
 - **No menu inicial só a música se ouve:** a fase montada atrás dele fica muda.
 - **Fim da fita:** a porta do Level 3 encerra a fita (END OF TAPE) com o tempo de cada fase.
@@ -166,7 +181,8 @@ Projeto completo em `level1-mostruario.md`.
   (digita-se pelo teclado ou clicando; o jogo não para enquanto isso). O código está em **três
   etiquetas vermelhas de CLEARANCE** (liquidação), longe umas das outras, cada uma com o dígito e a
   posição (1/3, 2/3, 3/3). Só elas são vermelhas com CLEARANCE: as outras placas de preço são
-  amarelas (DISPLAY ONLY). Sem bilhete na sala inicial (tirado em 21/11/2026: ficava fácil demais).
+  amarelas (DISPLAY ONLY). Sem bilhete do código na sala inicial (tirado em 21/11/2026: ficava fácil demais); lá fica só o
+  cartaz de dicas do Capitão, sem número.
 - **Som:** jingle de caixinha perto do Capitão, música de loja que some antes do apagão e passos
   diferentes no laminado e no vinílico.
 
@@ -335,8 +351,9 @@ Projeto completo em `level3-escritorio.md`.
 
 ### Existe
 
-- O andar de um prédio vazio: anel de corredores de teto técnico, salas de aula, saguão de
-  elevadores, cafeteria, área de estar e o vão da escada com a saída (a porta corta-fogo no patamar).
+- O andar de um prédio vazio (16 x 14 células de 4 m, 64 x 56 m; 14 x 12 até 23/11/2026): anel de
+  corredores de teto técnico, salas de aula, saguão de elevadores, cafeteria, área de estar e o vão da
+  escada com a saída (a porta corta-fogo no patamar). Atravessar da cabine à escada leva umas 17 células.
 - **A saída se procura** (desde 21/11/2026): a escada fica do lado oposto do andar ao elevador de
   chegada, fora da vista do saguão, e o vão fica atrás de parede: do corredor só se vê uma porta como
   as das salas, com a placa EXIT pequena rente à parede e uma plaquinha de escada. Placa pendurada só
@@ -345,23 +362,32 @@ Projeto completo em `level3-escritorio.md`.
   de um (o Zelador); o silêncio salva do outro (o Ascensorista)**. A salinha acesa protege de um e não
   do outro.
 - **A onda de luzes persegue** (desde 21/11/2026): a cada ~40 s (a partir dos 25 s) o trecho reto de
-  corredor onde está um jogador (revezando entre eles) **pisca 2,5 s** (o reator falha no som: é a hora
+  corredor (de 5 a 10 luminárias; o lado mais comprido do anel tem dois) onde está um jogador (revezando entre eles) **pisca 2,5 s** (o reator falha no som: é a hora
   de sair), apaga em cascata, fica **16 s** apagado e volta uma luminária por vez. O zumbido some onde as
   luzes apagam: dá para ouvir o escuro chegando.
 - **The Janitor (o Zelador)**: só existe no escuro.
   - **Nunca pisa numa célula acesa.** Quem está na luz está a salvo, mesmo a um passo: ele não vê, não
     ouve e não pega. As salinhas acesas são abrigo.
-  - **Nasce perto:** quando o trecho apaga, sobe do chão (com um gorgolejo) na ponta mais perto do
-    jogador que ficou dentro, nunca a menos de 3 células (12 m) de caminhada. Também aparece sozinho em
-    qualquer escuro, longe de todos e fora da vista.
+  - **Nasce perto:** quando o trecho apaga, sobe do chão na ponta mais perto do
+    jogador que ficou dentro, nunca a menos de 3 células (12 m) de caminhada.
+  - **À espreita** (desde 23/11/2026, pedido do usuário jogando): com o jogador na luz, ele fica **na célula
+    escura mais perto dele** (a pé), entre todos os escuros do andar (corredor queimado, trecho da onda,
+    andar sem energia depois do alarme), **na beira, virado para o jogador**. O jogador andou e outro escuro
+    ficou mais perto: na mesma região escura ele vai andando; noutra, afunda e sobe lá (só se a outra ficar
+    uma célula ou mais mais perto por 1,5 s, para não piscar entre duas). Sobe do chão a 2 células (8 m) ou
+    mais de caminhada de todos (e 6 m em linha reta). À espreita não sai da beira por barulho nenhum.
+  - **Pisou no escuro, é caçado na hora**, sem precisar ser visto (a voz de caça começa junto), e ele não
+    desiste enquanto o jogador ficar no escuro. Se o jogador pisa noutra região escura, ele afunda e sobe
+    nela em ~0,4 s, a 3 células (12 m) ou mais de todos e fora da vista; região pequena demais para isso,
+    ele fica espreitando onde está. Voltando à luz, para na beira e volta a espreitar.
   - Enxerga bem no escuro (cone de 60°, 20 m), ouve mal (só corrida, a 4 células). Persegue só pelo
     escuro e para na beira da luz. Pega quem está no escuro ao alcance (NO SIGNAL).
   - **A luz voltando sobre ele o faz afundar e sumir.** A lanterna não o detém: o facho o faz hesitar
     0,6 s (no máximo a cada 4 s).
-  - Pistas (som refeito em 21/11/2026): parado, o esfregão molhado em vaivém e, de tempos em tempos, o
-    pano batendo no balde e torcido; rondando, botas de borracha pesadas, chaves chacoalhando baixo e o
-    rodízio do balde guinchando no ritmo da velocidade, às vezes um resmungo; vindo, o guincho acelera e
-    o balde bate. Arrancar ou parar chacoalha a água do balde.
+  - Pistas (desde 23/11/2026, só estas duas): a vassoura seca passando no piso, uma passada a cada dois
+    passos; rondando, devagar; caçando, depressa e mais forte. Parado ou sumindo, silêncio. E a **voz de
+    caça**: um rosnado rouco e grave quando ele começa a correr atrás de alguém, repetido a cada 3 a 5 s
+    enquanto a caça dura (ouve-se a ~30 m); cala quando ele perde o jogador de vista, pega ou some.
   - Números: ronda a 1,4 m/s, caça a 4,4 por 5 s e cansa (2,4 por 4 s); jogador anda 2,8 e corre 5,0.
 - **Interruptores de luz:** um por trecho de corredor da onda (placa branca com alavanca e luzinha).
   Mira + E com o trecho piscando ou escuro **religa o trecho na hora** e o Zelador dali some. O estalo é
@@ -378,18 +404,20 @@ Projeto completo em `level3-escritorio.md`.
   - **Entra em qualquer sala**; só a cabine do início é abrigo.
   - **Quem ele pega é levado para a cabine dele:** a porta fecha na cara do jogador e só então cai o
     sinal. Os outros veem a porta daquele elevador fechar e reabrir vazia.
-  - Fica uns 75 s no andar (a porta da cabine dele fica aberta e vazia: pista de que ele está fora) e
+  - Fica uns 85 s no andar (75 s até 23/11/2026, quando o andar cresceu) (a porta da cabine dele fica aberta e vazia: pista de que ele está fora) e
     parte; quem estiver dentro da cabine dele vai junto.
   - **Trancar-se numa cabine de poço** (botão de fechar) protege até a vez daquela cabine: se a
     chegada dele cair nela, a seta pisca lá fora 5 s antes.
-  - Pistas: a bengala batendo no piso duro (de longe), o arrasto da bengala correndo, os estalos da
-    boca, a respiração chiada de perto, o ronco da cabine e o plim.
+  - Pistas: a bengala batendo no piso duro (de longe; correndo, vira um arrasto), os estalos da boca
+    quando para para escutar, a respiração chiada de perto, o ronco da cabine e o plim.
 - **Botões dos elevadores:** abrir e fechar no painel de cada cabine, chamar no saguão (mira + E). Um
   poço chamado acende, abre 1,5 s depois e fica 8 s aberto. A porta nunca prende: com alguém no vão,
   reabre. Os elevadores não chegam mais vazios: todo plim é o Ascensorista.
 - **Armários que batem:** de tempos em tempos, uma fileira de portas de armário bate num corredor longe
   de todos, vindo na direção do jogador mais perto. O Ascensorista ouve e vai até lá.
 - **Som ambiente:** ar-condicionado, difusores e o zumbido dos reatores, que cala onde as luzes apagam.
+- **Salas de aula** (desde 21/11/2026): lousas que a caneta risca (traço de marcador) e carteiras onde se
+  senta (mira + E; E de novo, andar ou pular levanta).
 - **Objetivo: o alarme de incêndio** (`SwitchObjective`, alarmes): três acionadores vermelhos, **cada um
   dentro de uma sala** (de aula, de reunião, pequena ou a cafeteria), numa parede que não se vê da porta:
   é preciso entrar e olhar em volta (piscam vermelho e zumbem). Longe da cabine e da escada. **Precisa
@@ -410,5 +438,6 @@ Projeto completo em `level3-escritorio.md`.
 
 A ordem até a entrega, com testes e critério de pronta, está em `plano-de-acao.md` (reescrito em
 19/11/2026). Das propostas acima, nenhuma entra na entrega além de `P0.3` (feita) e `P2.5` (como
-dica no cartaz das Piscinas, "MARK THE SHALLOWS"); a `P2.4` está pronta no código e desligada; as
+dica no cartaz das Piscinas, "MARK THE SHALLOWS", até 23/11/2026, quando o cartaz passou a falar
+só do Undertow); a `P2.4` está pronta no código e desligada; as
 outras ficam para depois.

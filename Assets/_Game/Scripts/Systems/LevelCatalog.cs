@@ -83,7 +83,32 @@ namespace BackRooms
 
         public static bool IsCleared(int index) => index >= 0 && index < ClearedCount;
 
-        public static bool IsUnlocked(int index) => LevelCatalog.IsValid(index) && (DevMode || index <= ClearedCount);
+        public static bool IsUnlocked(int index) =>
+            LevelCatalog.IsValid(index) && (DevMode || CheatActive || index <= ClearedCount);
+
+        // ---------------------------------------------------------------- Atalho que libera tudo
+
+        public const string UnlockAllKey = "BackRooms.UnlockAll";
+
+        /// <summary>
+        /// O atalho secreto do menu (Ctrl + Shift + L) liberou todas as fases nesta máquina. Fica
+        /// numa preferência própria: não mexe no contador de zeradas nem nos tempos, e desligar volta
+        /// ao progresso de verdade. Não é o modo desenvolvedor (sem nota no menu, nada mais muda).
+        /// </summary>
+        public static bool CheatUnlocked
+        {
+            get => PlayerPrefs.GetInt(UnlockAllKey, 0) == 1;
+            set
+            {
+                if (value) PlayerPrefs.SetInt(UnlockAllKey, 1);
+                else PlayerPrefs.DeleteKey(UnlockAllKey);
+                PlayerPrefs.Save();
+            }
+        }
+
+        // Com o modo desenvolvedor forçado (testes), o atalho não conta: DevModeOverride = false
+        // continua querendo dizer "só o progresso de verdade", mesmo com a marca gravada na máquina.
+        static bool CheatActive => !DevModeOverride.HasValue && CheatUnlocked;
 
         /// <summary>Marca o nível como zerado (e, com isso, libera o seguinte).</summary>
         public static void MarkCleared(int index)

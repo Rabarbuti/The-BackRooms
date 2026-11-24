@@ -410,7 +410,8 @@ Os passos 2 e 4 não dependem um do outro e podem andar em paralelo.
 4. **Aparência do Capitão e direitos autorais.** Ele foi desenhado bem perto do personagem do
    filme *Backrooms* (2026), a pedido. Para jogar entre amigos não há problema; antes de publicar
    (Steam, decisão 5 do plano), vale afastar o desenho — trocar cores da roupa, o rosto e o
-   chapéu — para ele ser claramente nosso.
+   chapéu — para ele ser claramente nosso. **Decidido em 23/11/2026: o Capitão fica como está**, com
+   crédito ao filme *Backrooms* (2026) como referência visual (no `README.md` e no `GDD.md`).
 5. **Ideias novas** para esta fase, ainda não decididas (a loja que se rearruma, sala de
    segurança com monitores, alto-falante da loja, empurrar móveis para barricar):
    `mecanicas.md`, seção 3, propostas `P1.1` a `P1.4`.

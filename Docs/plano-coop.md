@@ -17,16 +17,21 @@ Como ler os documentos do projeto:
   e como dividir lotes de modelos entre agentes.
 - `contexto-backrooms.md`, `prompt-fases-visual-fisica.md`, `referencia-your-happy-place.md` —
   referências de design do gênero.
+- **`GDD.md`** e **`README.md`** (na raiz, desde 23/11/2026) — o jogo inteiro para quem não conhece o
+  projeto (design, estados, arte, mudanças de rumo) e como jogar, montar a build e os créditos.
 
-Atualizado em 11/11/2026.
+Atualizado em 11/11/2026, com correções pontuais em 23/11/2026. **Boa parte de "Estado atual" é o retrato
+de 11/11**: o jogo de hoje (quatro fases, cada uma com objetivo e inimigo; só um jogador) está no
+`GDD.md` e em `mecanicas.md`.
 
 ---
 
 ## Estado atual
 
-Existe uma fase, o Level 0, jogável por 1 a 4 pessoas por IP, e uma versão de teste do Level 1
-(seção "Level 1 de teste" abaixo). Não há ainda vitória nem derrota: a saída só registra que o
-jogador chegou. Editor: Unity 6000.6.4f1 com HDRP 17.6 (até 11/11/2026, 6000.3.26f1 / HDRP 17.3).
+*Em 11/11/2026:* existia uma fase, o Level 0, jogável por 1 a 4 pessoas por IP, e uma versão de teste
+do Level 1. *Hoje (23/11/2026):* quatro fases jogáveis, cada uma com objetivo e inimigo, a fita acaba
+na porta do Level 3 (END OF TAPE) e o jogo é **só para um jogador** (a rede continua no código, escondida
+do menu desde 21/11/2026). Editor: Unity 6000.6.4f1 com HDRP 17.6 (até 11/11/2026, 6000.3.26f1 / HDRP 17.3).
 
 ### Fase
 
@@ -70,7 +75,8 @@ juntas pelo relógio `GameSession.SessionSeconds`.
 ### Jogador
 
 - **Movimento:** anda a 2,8 m/s, corre a 5,0 com 6 s de fôlego, agacha a 1,4, pula 0,8 m.
-- **Lanterna** (F), por enquanto com bateria infinita. Passos sintetizados em código.
+- **Lanterna** (F), com bateria de 4 min e pilhas no chão (desde 19/11/2026). Passos sintetizados em
+  código, por piso.
 - **Traje** (`PlayerBody`): o que os outros veem é um explorador de traje de proteção amarelo,
   que anda, agacha, acompanha o olhar e mostra a caneta e a lanterna nas mãos.
 - **Mão em primeira pessoa** (`ItemHand`) segurando o item em uso. Perto de uma superfície o
@@ -115,12 +121,12 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
 
 - **Painel e efeito:** REC, contador, bateria, hora e data desenhados por `Camcorder`; o efeito
   de fita é um Custom Pass (`CamcorderPass` + `CamcorderVHS.shader`).
-- **Gravação de verdade:** F9 grava o que o jogador vê, com som, num AVI de 854 x 480 a 20
+- **Gravação de verdade:** R (era o F9 até 21/11/2026) grava o que o jogador vê, com som, num AVI de 854 x 480 a 20
   quadros por segundo, na pasta Vídeos do usuário, em "The BackRooms". Para sozinha aos 15 min.
 
 ### Fases e progresso
 
-- **Seletor no menu:** lista as fases do `LevelCatalog` (hoje Level 0 e Level 1 de teste); a
+- **Seletor no menu:** lista as fases do `LevelCatalog` (hoje as quatro: Level 0 a Level 3); a
   atual fica em destaque. Escolher outra fecha a sessão e carrega a cena dela
   (`GameSession.SwitchLevel`). Cada fase é uma cena com a própria sessão.
 - **Porta de saída** (`LevelExit`, tecla E): quem chega perto e olha para ela põe a mão na
@@ -132,13 +138,15 @@ para todos e são enviados a quem entra depois. Limites: 300 pontos por traço, 
   na hora. O painel mostra "E - OPEN DOOR", "WAITING 1/2" e, para quem está longe, "EXIT 1/2".
 - **Progresso** (`LevelProgress`, nas preferências desta máquina): uma fase está zerada quando o
   jogador desta máquina passa pela porta de saída dela. Ficam liberadas as zeradas e a próxima.
-  O aviso "LEVEL N ZERADO" aparece no alto da tela.
+  O aviso "LEVEL N CLEARED" aparece no alto da tela. Atalho Ctrl + Shift + L no menu libera todas
+  (`LevelProgress.CheatUnlocked`, desde 23/11/2026).
 - **Modo desenvolvedor:** no editor, em build de desenvolvimento ou com `-brDev`, todas liberadas.
 
 ### Rede
 
 - Host autoritativo por IP direto, porta 7777. Jogar sozinho é hospedar sem ninguém entrar.
-  No menu, H hospeda e J entra; por linha de comando, `-brHost` e `-brJoin <endereço>`.
+  Desde 21/11/2026 o menu é de um jogador só (`ConnectionMenu.MultiplayerMenu = false`: H ou Enter
+  joga, sem Join nem endereço); por linha de comando, `-brHost` e `-brJoin <endereço>` continuam.
 - O host envia a seed, o instante de início da sessão e a fase; cada máquina gera o mesmo mapa.
   Quem entra estando em outra fase troca sozinho para a do host e reconecta no mesmo endereço.
 - Para jogar pela internet hoje é preciso abrir a porta 7777 no roteador de quem hospeda ou
@@ -264,9 +272,11 @@ Vivox entra só com a voz.
   cache; piscam pelo dimmer, sem refazer a sombra. A luz ambiente vem de um céu em degradê.
 - **Névoa volumétrica** existe nos perfis High Fidelity e Balanced; o Performant não tem. O que
   depende dela (a fumaça dos buracos) tem versão que funciona sem.
-- **Figuras** (entidade, traje, mão, Capitão) são montadas em código. Modelos importados: a porta
-  da saída (GLB gerado por IA, `Art/Fontes`) e os móveis do Level 1 (FBX feitos por script no
-  Blender, `Tools/Blender`).
+- **Figuras:** os cinco inimigos são esculpidos por script no Blender e o traje dos jogadores vem da
+  Tripo (reprocessado no Blender), todos vestidos sobre juntas montadas e animadas em código; a mão em
+  primeira pessoa continua em código. Modelos importados: a porta da saída (GLB gerado por IA,
+  `Art/Fontes`), o disjuntor (Tripo) e os móveis do Level 1 (FBX feitos por script no Blender,
+  `Tools/Blender`).
 - **Texturas do Level 0** (papel de parede, carpete, forro, concreto): geradas por IA e já
   emendáveis, em `Art/Fontes/Texturas`; sem o arquivo, o `Level0Setup` volta a pintá-las em código.
 
@@ -282,9 +292,9 @@ Vivox entra só com a voz.
 | 3 | Labirinto por seed, igual em todas as máquinas | Feita (sem NavMesh) |
 | 4 | Entidade: IA no host, ruído, esconderijos, captura e resgate | Feita, menos contenção e resgate |
 | 5 | Voz: Vivox posicional, voz gera ruído, walkie-talkie | Não começada |
-| 6 | Loop completo: disjuntores, código, elevador, sanidade, vitória e derrota | Não começada |
-| 7 | Acabamento: VHS, menu, sala de espera, opções gráficas, build | VHS e gravação feitos |
-| 8+ | Mais níveis, cada um com regra própria | Não começada |
+| 6 | Loop completo: disjuntores, código, elevador, sanidade, vitória e derrota | Feita sem sanidade nem elevador (19/11/2026): objetivo em toda fase, fim da fita; pego volta ao começo |
+| 7 | Acabamento: VHS, menu, sala de espera, opções gráficas, build | Feita sem sala de espera: menu de pausa, opções, build para Windows |
+| 8+ | Mais níveis, cada um com regra própria | Feita: Levels 1, 2 e 3, cada um com inimigo próprio |
 
 Fora do plano original, já existem: caneta, buracos com faixas, apagão, traje dos jogadores e
 gravação em vídeo.
@@ -301,5 +311,5 @@ gravação em vídeo.
 4. **Entidade no apagão** — sem olhos, quase some no escuro. Devolver algum brilho?
 5. **Distribuição** — só entre amigos (o Relay da Unity basta) ou publicar na Steam depois.
 6. **Arte** — decidido em 11/11/2026: modelos novos no **Blender, por script**
-   (`Docs/modelos-blender.md`), exportados em FBX. Os móveis do Level 1 já vêm por esse
-   caminho; figuras (entidade, Capitão, traje) seguem em código até alguém passar para lá.
+   (`Docs/modelos-blender.md`), exportados em FBX. Os móveis do Level 1 e os inimigos esculpidos
+   (desde 12/11/2026) vêm por esse caminho; o traje, da Tripo.

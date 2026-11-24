@@ -19,24 +19,33 @@ namespace BackRooms.Player
         Underwater,
         /// <summary>Laminado de madeira das vitrines do Level 1: oco, um toc de tábua.</summary>
         Laminate,
-        /// <summary>Piso vinílico do estoque do Level 1: estalo seco e um rangido de borracha.</summary>
+        /// <summary>Piso vinílico do estoque do Level 1: estalo seco e baixo, sem rangido.</summary>
         Vinyl
     }
 
     /// <summary>
     /// Passos sintetizados na inicialização (sem arquivos de áudio), escolhidos pela superfície.
     ///
-    /// Carpete (fase sem água): cada passo é ruído filtrado na faixa de 170 a ~700 Hz (o corpo do
-    /// som, audível até em caixa pequena) mais um baque grave, em dois apoios: calcanhar e ponta
-    /// do pé. Quase nada passa de 3 kHz — é o chiado agudo que faz um passo soar como areia. É o
-    /// som de sempre, com a mesma seed (o teste de fumaça mede o pico desses clipes).
+    /// Passo no chão seco (refeito em 23/11/2026; antes eram senos afinados que soavam como bip,
+    /// e o vinílico tinha um guincho de 1,4–1,9 kHz subindo de tom): duas batidas coladas, o
+    /// calcanhar (baque grave de ruído e pulso por um passa-baixas, sem altura definida) e, 20 a
+    /// 110 ms depois, a planta do pé, mais fraca. Por cima, um corpo de ruído na faixa de 200 a
+    /// 900 Hz (o que se ouve em caixa pequena) e o estalo do contato, com a cor de cada piso:
+    /// carpete abafado (quase só grave e um roçar), laminado com modos de tábua curtos e
+    /// amortecidos, vinílico seco e baixo, azulejo com estalo duro e um rabicho de sala (ruído que
+    /// segue a energia do passo, sem reflexões esparsas, que soam metálicas) e o piso duro do
+    /// Escritório, como o azulejo mais seco. Nada é seno sustentado. Há três conjuntos por piso,
+    /// escolhidos pela força do passo: agachado (planta do pé longe e um arrasto), andando e
+    /// correndo (as duas batidas quase juntas e o baque mais forte). Pé esquerdo e direito
+    /// alternam com uma pequena diferença de altura e de volume.
     ///
     /// Nas Piscinas (<see cref="PoolWater.Current"/> existe) o piso é azulejo e a água decide:
-    /// azulejo seco (estalo duro e curto com um pouco de eco de sala de azulejo), vadeando
-    /// (chapinhar), nadando à tona (braçadas, sem batida de pé) e debaixo d'água (borbulhar grave e
-    /// baixo). Cruzar a linha d'água depressa — cair de uma borda, pular, entrar correndo — dá um
-    /// espirro maior, uma vez. Esses clipes são criados só na primeira vez que se precisa deles e
-    /// ficam compartilhados entre todos os jogadores.
+    /// azulejo seco, vadeando (chapinhar), nadando à tona (braçadas, sem batida de pé) e debaixo
+    /// d'água (borbulhar grave e baixo). Cruzar a linha d'água depressa — cair de uma borda, pular,
+    /// entrar correndo — dá um espirro maior, uma vez. No Escritório a superfície é
+    /// <see cref="StepSurface.Tile"/> (os testes contam com isso), com o som do piso duro. Os
+    /// clipes são criados só na primeira vez que se precisa deles e ficam compartilhados entre
+    /// todos os jogadores.
     ///
     /// Passos no chão (carpete, azulejo, vadeando) seguem o <see cref="PlayerController.Stepped"/>
     /// no dono; nadando e debaixo d'água não há chão (o evento não dispara), e a cadência vem da
@@ -101,14 +110,19 @@ namespace BackRooms.Player
         public int PlayedOn(StepSurface surface) => _played[(int)surface];
 
         AudioSource _source;
+        // Os clipes do carpete (os três conjuntos, agachado, andando e correndo, em fila). O teste de
+        // fumaça lê este campo por reflexão e confere o pico.
         AudioClip[] _clips;
-        int _last = -1;
         readonly int[] _played = new int[7];
         readonly int[] _lastBySurface = { -1, -1, -1, -1, -1, -1, -1 };
+        readonly int[] _lastBySet = new int[Floors * Gaits];
+        bool _rightFoot;
+        bool _hardFloor;
 
-        // Clipes das Piscinas e dos pisos do Level 1, um conjunto para todos os jogadores.
+        // Clipes da água, dos pisos secos (piso x passada) e do espirro, um conjunto para todos os
+        // jogadores.
         static AudioClip[][] _water;
-        static AudioClip[][] _floor;
+        static AudioClip[][] _ground;
         static AudioClip[] _splash;
 
         void Awake()
@@ -117,9 +131,11 @@ namespace BackRooms.Player
             _source.playOnAwake = false;
             _source.spatialBlend = 0f;
 
-            _clips = new AudioClip[Variations];
-            var rng = new System.Random(7919);
-            for (int i = 0; i < Variations; i++) _clips[i] = CreateStep(rng, i);
+            for (int i = 0; i < _lastBySet.Length; i++) _lastBySet[i] = -1;
+            EnsureGround(Floor.Carpet);
+            _clips = new AudioClip[Gaits * Variations];
+            for (int g = 0; g < Gaits; g++)
+                Array.Copy(_ground[(int)Floor.Carpet * Gaits + g], 0, _clips, g * Variations, Variations);
 
             if (controller == null) controller = GetComponent<PlayerController>();
             _lastPosition = transform.position;
@@ -205,21 +221,22 @@ namespace BackRooms.Player
             _smoothedSpeed = Mathf.Lerp(_smoothedSpeed, speed, 1f - Mathf.Exp(-10f * dt));
 
             PoolWater water = PoolWater.Current;
+            _hardFloor = water == null && LevelBuilder.HardFloorActive;
             if (water == null)
             {
-                // Fase sem água. No Escritório o piso é duro (placas de porcelanato e madeira), então
-                // os passos são os do azulejo seco. Nas outras, carpete, como sempre foi, a não ser
-                // onde o Level 1 pôs laminado ou vinílico (FloorZones).
-                if (LevelBuilder.HardFloorActive)
+                // Fase sem água. No Escritório o piso é duro (placas de porcelanato e madeira): a
+                // superfície é a do azulejo seco, com o som próprio do piso duro. Nas outras,
+                // carpete, a não ser onde o Level 1 pôs laminado ou vinílico (FloorZones).
+                if (_hardFloor)
                 {
-                    EnsureWaterClips();
+                    EnsureGround(Floor.Office);
                     Surface = StepSurface.Tile;
                 }
                 else
                 {
                     FloorKind floor = FloorZones.Count > 0 ? FloorZones.At(position) : FloorKind.Carpet;
                     Surface = floor == FloorKind.Laminate ? StepSurface.Laminate : floor == FloorKind.Vinyl ? StepSurface.Vinyl : StepSurface.Carpet;
-                    if (Surface != StepSurface.Carpet) EnsureFloorClips();
+                    EnsureGround(FloorOf(Surface));
                 }
                 _waterKnown = false;
                 if (_remote) RemoteGroundSteps(dt);
@@ -227,6 +244,7 @@ namespace BackRooms.Player
             }
 
             EnsureWaterClips();
+            EnsureGround(Floor.Tile);
             float submersion = ReadWater(water, out bool swimming, out bool underwater);
             _submersion = submersion;
             Surface = underwater ? StepSurface.Underwater
@@ -362,26 +380,36 @@ namespace BackRooms.Player
             LastNoise = loudness * NoiseOf(surface);
             MadeNoise?.Invoke(transform.position, LastNoise);
 
-            if (surface == StepSurface.Carpet)
+            if (IsGround(surface))
             {
-                // Evita repetir a mesma variação duas vezes seguidas.
-                int index = UnityEngine.Random.Range(0, Variations - 1);
-                if (index >= _last && _last >= 0) index++;
-                _last = index;
+                // Piso seco: o conjunto da passada (agachado, andando, correndo), sem repetir a
+                // mesma variação duas vezes seguidas. Os pés alternam: o direito um pouco mais grave
+                // e mais baixo, para o passo não soar como metralhadora.
+                Floor floor = surface == StepSurface.Tile && _hardFloor ? Floor.Office : FloorOf(surface);
+                EnsureGround(floor);
+                int key = (int)floor * Gaits + GaitOf(loudness);
+                AudioClip[] clips = _ground[key];
+                int previous = _lastBySet[key];
+                int index = UnityEngine.Random.Range(0, clips.Length - 1);
+                if (index >= previous && previous >= 0) index++;
+                _lastBySet[key] = index;
 
-                _source.pitch = UnityEngine.Random.Range(0.94f, 1.06f);
-                _source.PlayOneShot(_clips[index], volume * Mathf.Lerp(0.5f, 1f, loudness));
+                _rightFoot = !_rightFoot;
+                float quietest = surface == StepSurface.Carpet || surface == StepSurface.Tile ? 0.5f : 0.6f;
+                _source.pitch = UnityEngine.Random.Range(0.95f, 1.05f) * (_rightFoot ? 0.97f : 1f);
+                _source.PlayOneShot(clips[index], volume * Mathf.Lerp(quietest, 1f, loudness) *
+                                                  UnityEngine.Random.Range(0.9f, 1f) * (_rightFoot ? 0.93f : 1f));
                 return;
             }
 
-            AudioClip[] set = surface == StepSurface.Laminate || surface == StepSurface.Vinyl ? _floor[(int)surface] : _water[(int)surface];
+            AudioClip[] set = _water[(int)surface];
             int last = _lastBySurface[(int)surface];
             int pick = UnityEngine.Random.Range(0, set.Length - 1);
             if (pick >= last && last >= 0) pick++;
             _lastBySurface[(int)surface] = pick;
 
-            // Correndo na água espirra bem mais que andando; o azulejo varia menos.
-            float quiet = surface == StepSurface.Wade ? 0.4f : surface == StepSurface.Tile ? 0.5f : 0.6f;
+            // Correndo na água espirra bem mais que andando.
+            float quiet = surface == StepSurface.Wade ? 0.4f : 0.6f;
             _source.pitch = UnityEngine.Random.Range(0.93f, 1.07f);
             _source.PlayOneShot(set[pick], volume * Mathf.Lerp(quiet, 1f, loudness) * UnityEngine.Random.Range(0.9f, 1f));
         }
@@ -392,18 +420,40 @@ namespace BackRooms.Player
         {
             _water = null;
             _splash = null;
-            _floor = null;
+            _ground = null;
         }
 
-        static void EnsureFloorClips()
-        {
-            if (_floor != null && _floor[(int)StepSurface.Vinyl] != null && _floor[(int)StepSurface.Vinyl][0] != null) return;
+        static bool IsGround(StepSurface surface) =>
+            surface == StepSurface.Carpet || surface == StepSurface.Tile || surface == StepSurface.Laminate || surface == StepSurface.Vinyl;
 
-            _floor = new AudioClip[7][];
-            foreach (StepSurface surface in new[] { StepSurface.Laminate, StepSurface.Vinyl })
+        static Floor FloorOf(StepSurface surface) =>
+            surface == StepSurface.Laminate ? Floor.Laminate
+            : surface == StepSurface.Vinyl ? Floor.Vinyl
+            : surface == StepSurface.Tile ? Floor.Tile
+            : Floor.Carpet;
+
+        /// <summary>A passada pela força do passo: 0,25 agachado, 0,55 andando, 1 correndo.</summary>
+        static int GaitOf(float loudness) => loudness < 0.4f ? 0 : loudness < 0.8f ? 1 : 2;
+
+        static void EnsureGround(Floor floor)
+        {
+            if (_ground == null) _ground = new AudioClip[Floors * Gaits][];
+            int first = (int)floor * Gaits;
+            bool ready = true;
+            for (int g = 0; g < Gaits && ready; g++)
             {
-                _floor[(int)surface] = new AudioClip[Variations];
-                for (int i = 0; i < Variations; i++) _floor[(int)surface][i] = CreateClip(surface, i);
+                AudioClip[] set = _ground[first + g];
+                if (set == null) { ready = false; break; }
+                foreach (AudioClip clip in set)
+                    if (clip == null) { ready = false; break; }
+            }
+            if (ready) return;
+
+            for (int g = 0; g < Gaits; g++)
+            {
+                var set = new AudioClip[Variations];
+                for (int i = 0; i < Variations; i++) set[i] = CreateGroundStep(floor, g, i);
+                _ground[first + g] = set;
             }
         }
 
@@ -412,7 +462,7 @@ namespace BackRooms.Player
             if (_water != null && _splash != null && _splash[0] != null && _water[(int)StepSurface.Underwater][0] != null) return;
 
             _water = new AudioClip[5][];
-            for (int s = (int)StepSurface.Tile; s <= (int)StepSurface.Underwater; s++)
+            for (int s = (int)StepSurface.Wade; s <= (int)StepSurface.Underwater; s++)
             {
                 _water[s] = new AudioClip[Variations];
                 for (int i = 0; i < Variations; i++) _water[s][i] = CreateClip((StepSurface)s, i);
@@ -425,40 +475,30 @@ namespace BackRooms.Player
         // ---------------------------------------------------------------- Síntese
 
         /// <summary>
-        /// Um clipe de passo da superfície pedida (variação 0 a 5). O carpete sai igual ao do jogo
-        /// (mesma seed, mesma ordem). Usado também para exportar os sons em WAV.
+        /// Um clipe de passo da superfície pedida (variação 0 a 5), o mesmo que toca no jogo. Nos
+        /// pisos secos, <paramref name="loudness"/> escolhe a passada como no jogo (0,25 agachado,
+        /// 0,55 andando, 1 correndo); na água não muda nada. Usado também para exportar os sons em
+        /// WAV.
         /// </summary>
-        public static AudioClip CreateClip(StepSurface surface, int variation)
+        public static AudioClip CreateClip(StepSurface surface, int variation, float loudness = 0.55f)
         {
-            if (surface == StepSurface.Carpet)
-            {
-                var carpet = new System.Random(7919);
-                AudioClip result = null;
-                for (int i = 0; i <= variation; i++)
-                {
-                    if (result != null) DestroyClip(result);
-                    result = CreateStep(carpet, i);
-                }
-                return result;
-            }
+            if (IsGround(surface)) return CreateGroundStep(FloorOf(surface), GaitOf(loudness), variation);
 
             var rng = new System.Random(7919 + 101 * (int)surface + variation);
             switch (surface)
             {
-                case StepSurface.Tile: return CreateTile(rng, variation);
                 case StepSurface.Wade: return CreateWade(rng, variation);
                 case StepSurface.Swim: return CreateSwim(rng, variation);
-                case StepSurface.Laminate: return CreateLaminate(rng, variation);
-                case StepSurface.Vinyl: return CreateVinyl(rng, variation);
                 default: return CreateUnderwater(rng, variation);
             }
         }
 
-        static void DestroyClip(AudioClip clip)
-        {
-            if (Application.isPlaying) Destroy(clip);
-            else DestroyImmediate(clip);
-        }
+        /// <summary>
+        /// Um clipe de passo no piso duro do Escritório (a superfície lá é <see cref="StepSurface.Tile"/>,
+        /// mas o som é este, mais seco que o azulejo das Piscinas). Para exportar em WAV.
+        /// </summary>
+        public static AudioClip CreateOfficeClip(int variation, float loudness = 0.55f) =>
+            CreateGroundStep(Floor.Office, GaitOf(loudness), variation);
 
         static int Rate => AudioSettings.outputSampleRate > 0 ? AudioSettings.outputSampleRate : 44100;
 
@@ -471,186 +511,272 @@ namespace BackRooms.Player
 
         static float Attack(float t, float seconds) => Mathf.Clamp01(t / seconds);
 
-        // Laminado: o salto bate na tábua e ela soa oca (dois modos graves de madeira que somem
-        // depressa), com o estalo do contato por cima.
-        static AudioClip CreateLaminate(System.Random rng, int variation)
+        /// <summary>
+        /// Filtro de dois polos (fórmulas do "Audio EQ Cookbook"): passa-baixas, passa-altas e
+        /// passa-faixa com ganho 1 no centro. Com Q baixo (até ~6) e excitado por ruído curto, um
+        /// passa-faixa dá cor ao som sem cantar uma nota.
+        /// </summary>
+        struct Biquad
         {
-            int rate = Rate;
-            int length = (int)(rate * 0.22f);
-            var samples = new float[length];
-            float f1 = Range(rng, 170f, 210f), f2 = f1 * Range(rng, 2.6f, 2.9f);
-            float toeDelay = Range(rng, 0.055f, 0.07f);
-            float high = 0f, prev = 0f;
-            for (int i = 0; i < length; i++)
+            float _b0, _b1, _b2, _a1, _a2, _x1, _x2, _y1, _y2;
+
+            static Biquad Make(float b0, float b1, float b2, float a0, float a1, float a2) =>
+                new Biquad { _b0 = b0 / a0, _b1 = b1 / a0, _b2 = b2 / a0, _a1 = a1 / a0, _a2 = a2 / a0 };
+
+            static void Prepare(float frequency, float q, int rate, out float cos, out float alpha)
             {
-                float t = i / (float)rate;
-                float n = Noise(rng);
-                high = 0.7f * (high + n - prev);
-                prev = n;
-                float click = high * Mathf.Exp(-t * 300f) * 0.9f;
-                float wood = Mathf.Sin(2f * Mathf.PI * f1 * t) * Mathf.Exp(-t * 28f) + 0.5f * Mathf.Sin(2f * Mathf.PI * f2 * t) * Mathf.Exp(-t * 55f);
-                // O calcanhar e a ponta do pé: um segundo toque mais fraco, uns 60 ms depois.
-                float t2 = t - toeDelay;
-                float toe = t2 > 0f ? Mathf.Sin(2f * Mathf.PI * f1 * 1.1f * t2) * Mathf.Exp(-t2 * 40f) * 0.4f : 0f;
-                samples[i] = (click + wood * 0.7f + toe) * Attack(t, 0.002f);
+                float w = 2f * Mathf.PI * Mathf.Clamp(frequency, 10f, rate * 0.45f) / rate;
+                cos = Mathf.Cos(w);
+                alpha = Mathf.Sin(w) / (2f * Mathf.Max(0.1f, q));
             }
-            return Clip("Passo_Laminado_" + variation, samples, rate, 0.85f);
+
+            public static Biquad LowPass(float frequency, float q, int rate)
+            {
+                Prepare(frequency, q, rate, out float c, out float a);
+                return Make((1f - c) * 0.5f, 1f - c, (1f - c) * 0.5f, 1f + a, -2f * c, 1f - a);
+            }
+
+            public static Biquad HighPass(float frequency, float q, int rate)
+            {
+                Prepare(frequency, q, rate, out float c, out float a);
+                return Make((1f + c) * 0.5f, -(1f + c), (1f + c) * 0.5f, 1f + a, -2f * c, 1f - a);
+            }
+
+            public static Biquad BandPass(float frequency, float q, int rate)
+            {
+                Prepare(frequency, q, rate, out float c, out float a);
+                return Make(a, 0f, -a, 1f + a, -2f * c, 1f - a);
+            }
+
+            public float Process(float x)
+            {
+                float y = _b0 * x + _b1 * _x1 + _b2 * _x2 - _a1 * _y1 - _a2 * _y2;
+                _x2 = _x1; _x1 = x;
+                _y2 = _y1; _y1 = y;
+                return y;
+            }
         }
 
-        // Vinílico: estalo seco e curto, com um rangido agudo de borracha no fim do passo.
-        static AudioClip CreateVinyl(System.Random rng, int variation)
+        // ---------------------------------------------------------------- Passos no chão
+
+        /// <summary>Os pisos secos, para a síntese (o Escritório é azulejo para o jogo, com som próprio).</summary>
+        enum Floor { Carpet, Laminate, Vinyl, Tile, Office }
+
+        const int Floors = 5;
+        /// <summary>Passadas: 0 agachado, 1 andando, 2 correndo.</summary>
+        const int Gaits = 3;
+
+        /// <summary>A cor de cada piso. Níveis relativos: cada parte é normalizada antes da mistura.</summary>
+        sealed class FloorTone
         {
-            int rate = Rate;
-            int length = (int)(rate * 0.2f);
-            var samples = new float[length];
-            float squeak = Range(rng, 1400f, 1900f);
-            bool squeaks = rng.NextDouble() < 0.7;
-            float low = 0f;
-            float cut = Cut(2400f, rate);
-            for (int i = 0; i < length; i++)
-            {
-                float t = i / (float)rate;
-                low += (Noise(rng) - low) * cut;
-                float tap = low * Mathf.Exp(-t * 90f) * 1.4f + Mathf.Sin(2f * Mathf.PI * 120f * t) * Mathf.Exp(-t * 45f) * 0.5f;
-                float st = t - 0.07f;
-                float rub = st > 0f && squeaks ? Mathf.Sin(2f * Mathf.PI * squeak * (1f + 0.2f * st) * st) * Mathf.Exp(-st * 35f) * 0.18f : 0f;
-                samples[i] = (tap + rub) * Attack(t, 0.0015f);
-            }
-            return Clip("Passo_Vinilico_" + variation, samples, rate, 0.7f);
+            public float seconds;                        // duração depois da planta do pé
+            public float peak;                           // pico do clipe: o volume relativo entre pisos (RMS
+                                                         // em 50 ms igual ao dos passos de antes de 23/11/2026)
+            public float lowPass;                        // passa-baixas final (o carpete come o agudo)
+            public float thumpCut, thump;                // baque do calcanhar: corte do passa-baixas e nível
+            public float bodyFreq, bodyQ, body, bodyDecay;    // corpo de ruído em 200–900 Hz
+            public float clickFreq, clickQ, click, clickDecay; // estalo do contato
+            public float[] modes; public float modeQ, wood;    // tábua oca: modos curtos e amortecidos
+            public float rubFreq, rub;                   // roçar (tecido, sola arrastando)
+            public float room, roomDecay, roomCut;       // rabicho de sala: nível, constante da energia, corte
         }
 
-        static AudioClip Clip(string name, float[] samples, int rate, float peakLevel)
+        static readonly FloorTone[] Tones =
+        {
+            // Carpete: abafado e macio, quase só o baque e um roçar de tecido; nada acima de ~2 kHz.
+            new FloorTone { seconds = 0.2f, peak = 0.9f, lowPass = 1700f,
+                            thumpCut = 140f, thump = 1f,
+                            bodyFreq = 360f, bodyQ = 0.8f, body = 0.8f, bodyDecay = 0.032f,
+                            clickFreq = 750f, clickQ = 0.9f, click = 0.25f, clickDecay = 0.007f,
+                            rubFreq = 850f, rub = 0.3f },
+            // Laminado: o contato excita a tábua, que soa oca (modos graves curtos, Q baixo).
+            new FloorTone { seconds = 0.2f, peak = 0.95f, lowPass = 7500f,
+                            thumpCut = 160f, thump = 0.75f,
+                            bodyFreq = 420f, bodyQ = 1f, body = 0.4f, bodyDecay = 0.02f,
+                            clickFreq = 2300f, clickQ = 1f, click = 0.3f, clickDecay = 0.004f,
+                            modes = new[] { 240f, 560f, 1080f }, modeQ = 5f, wood = 1f,
+                            rubFreq = 1500f, rub = 0.05f },
+            // Vinílico: seco e baixo, estalo curto e abafado, sem rangido.
+            new FloorTone { seconds = 0.17f, peak = 0.6f, lowPass = 4200f,
+                            thumpCut = 150f, thump = 0.9f,
+                            bodyFreq = 520f, bodyQ = 0.9f, body = 0.6f, bodyDecay = 0.014f,
+                            clickFreq = 1400f, clickQ = 1f, click = 0.45f, clickDecay = 0.003f,
+                            rubFreq = 1100f, rub = 0.08f },
+            // Azulejo das Piscinas: estalo duro e curto, pouco grave, e o rabicho da sala de azulejo.
+            new FloorTone { seconds = 0.3f, peak = 0.62f, lowPass = 14000f,
+                            thumpCut = 170f, thump = 0.5f,
+                            bodyFreq = 900f, bodyQ = 1.1f, body = 0.4f, bodyDecay = 0.011f,
+                            clickFreq = 3800f, clickQ = 0.8f, click = 1f, clickDecay = 0.0025f,
+                            room = 0.5f, roomDecay = 0.03f, roomCut = 3200f },
+            // Piso duro do Escritório: como o azulejo, mais seco (sala menor, forro de placas).
+            new FloorTone { seconds = 0.22f, peak = 0.55f, lowPass = 11000f,
+                            thumpCut = 160f, thump = 0.6f,
+                            bodyFreq = 800f, bodyQ = 1.1f, body = 0.45f, bodyDecay = 0.011f,
+                            clickFreq = 3200f, clickQ = 0.8f, click = 0.85f, clickDecay = 0.0025f,
+                            room = 0.22f, roomDecay = 0.018f, roomCut = 2600f },
+        };
+
+        // Envelope de uma batida: sobe em meio cosseno até 'attack' e cai exponencial. Começa em zero.
+        static float Hit(float t, float attack, float decay)
+        {
+            if (t <= 0f) return 0f;
+            if (t < attack) return 0.5f - 0.5f * Mathf.Cos(Mathf.PI * t / attack);
+            return Mathf.Exp(-(t - attack) / decay);
+        }
+
+        static void Normalize(float[] samples)
         {
             float peak = 0f;
             foreach (float v in samples) peak = Mathf.Max(peak, Mathf.Abs(v));
-            if (peak > 0f)
-                for (int i = 0; i < samples.Length; i++) samples[i] *= peakLevel / peak;
-            var clip = AudioClip.Create(name, samples.Length, 1, rate, false);
-            clip.SetData(samples, 0);
-            return clip;
+            if (peak <= 0f) return;
+            for (int i = 0; i < samples.Length; i++) samples[i] /= peak;
         }
 
-        static AudioClip CreateStep(System.Random rng, int index)
+        /// <summary>
+        /// Um passo no piso seco: calcanhar e planta do pé. O baque é um pulso curto (e um pouco de
+        /// ruído) num passa-baixas de dois polos: peso sem altura definida. O corpo e o estalo são
+        /// ruído em faixa com envelope curto; a tábua do laminado, o estalo passando por modos de Q
+        /// baixo; o rabicho de sala, ruído que segue a energia do passo seco. Cada passada muda o
+        /// atraso da planta do pé, a força do baque e o arrasto. A seed é por piso, passada e
+        /// variação: o clipe exportado é o mesmo do jogo.
+        /// </summary>
+        static AudioClip CreateGroundStep(Floor floor, int gait, int variation)
         {
+            FloorTone tone = Tones[(int)floor];
+            var rng = new System.Random(7919 + 1000 * (int)floor + 100 * gait + variation);
             int rate = Rate;
-            int length = (int)(rate * 0.20f);
-            var samples = new float[length];
 
-            float thumpFrequency = 105f + (float)rng.NextDouble() * 30f;
-            float toeDelay = 0.060f + (float)rng.NextDouble() * 0.030f;
-            float toeLevel = 0.45f + (float)rng.NextDouble() * 0.20f;
+            // A passada: agachado, a planta do pé vem bem depois e o pé arrasta; correndo, as duas
+            // batidas quase se juntam e o calcanhar bate mais forte.
+            float toeDelay, toeLevel, heelAttack, toeAttack, thumpScale, clickScale, rubScale, decayScale;
+            switch (gait)
+            {
+                case 0:
+                    toeDelay = Range(rng, 0.075f, 0.115f); toeLevel = Range(rng, 0.6f, 0.8f);
+                    heelAttack = Range(rng, 0.006f, 0.009f); toeAttack = 0.008f;
+                    thumpScale = 0.55f; clickScale = 0.45f; rubScale = 3f; decayScale = 1.3f;
+                    break;
+                case 2:
+                    toeDelay = Range(rng, 0.012f, 0.025f); toeLevel = Range(rng, 0.65f, 0.85f);
+                    heelAttack = Range(rng, 0.001f, 0.0015f); toeAttack = 0.0015f;
+                    thumpScale = 1.4f; clickScale = 1.2f; rubScale = 0.8f; decayScale = 0.85f;
+                    break;
+                default:
+                    toeDelay = Range(rng, 0.04f, 0.065f); toeLevel = Range(rng, 0.45f, 0.6f);
+                    heelAttack = Range(rng, 0.002f, 0.003f); toeAttack = 0.003f;
+                    thumpScale = 1f; clickScale = 1f; rubScale = 1f; decayScale = 1f;
+                    break;
+            }
 
-            // Passa-baixas de dois polos (620 a 820 Hz) e passa-altas de um polo (170 Hz).
-            float lowCut = 1f - Mathf.Exp(-2f * Mathf.PI * (620f + (float)rng.NextDouble() * 200f) / rate);
-            float highCut = 1f - Mathf.Exp(-2f * Mathf.PI * 170f / rate);
-            float l1 = 0f, l2 = 0f, h = 0f;
-            float peak = 0f;
+            // Cada variação mexe um pouco nas cores (frequências e tempos), sem mudar o piso.
+            float J(float value, float spread) => value * Range(rng, 1f - spread, 1f + spread);
+            float thumpCut = J(tone.thumpCut, 0.15f);
+            float bodyFreq = J(tone.bodyFreq, 0.15f), bodyDecay = J(tone.bodyDecay, 0.15f) * decayScale;
+            float clickFreq = J(tone.clickFreq, 0.12f) * (gait == 0 ? 0.75f : 1f);
+            float clickDecay = J(tone.clickDecay, 0.2f) * decayScale;
+            float clickAttack = gait == 0 ? 0.0015f : 0.0004f;
+            float toeShift = Range(rng, 1.08f, 1.25f); // a planta do pé soa um pouco mais aguda
+
+            int length = (int)(rate * (tone.seconds + toeDelay + (gait == 0 ? 0.05f : 0f)));
+            var thump = new float[length];
+            var body = new float[length];
+            var click = new float[length];
+            var rub = new float[length];
+
+            // Baque: pulsos de meio cosseno (o calcanhar largo, a planta mais fraca) e um sopro de
+            // ruído, pelo passa-baixas e por um passa-altas em 40 Hz (sem deslocar o zero).
+            float heelWidth = heelAttack * 2f + 0.002f, toeWidth = toeAttack * 2f + 0.002f;
+            var thumpLow = Biquad.LowPass(thumpCut, 0.75f, rate);
+            var thumpHigh = Biquad.HighPass(40f, 0.7f, rate);
+            var bodyHeel = Biquad.BandPass(bodyFreq, tone.bodyQ, rate);
+            var bodyToe = Biquad.BandPass(bodyFreq * toeShift, tone.bodyQ, rate);
+            var clickHeel = Biquad.BandPass(clickFreq, tone.clickQ, rate);
+            var clickToe = Biquad.BandPass(clickFreq * toeShift, tone.clickQ, rate);
+            var rubBand = Biquad.BandPass(J(tone.rubFreq, 0.15f), 0.7f, rate);
+            float rubFrom = heelAttack, rubTo = toeDelay + (gait == 0 ? 0.08f : 0.04f);
 
             for (int i = 0; i < length; i++)
             {
                 float t = i / (float)rate;
                 float tt = t - toeDelay;
 
-                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
-                l1 += (noise - l1) * lowCut;
-                l2 += (l1 - l2) * lowCut;
-                h += (l2 - h) * highCut;
-                float band = l2 - h;
+                float pulse = t < heelWidth ? 0.5f - 0.5f * Mathf.Cos(2f * Mathf.PI * t / heelWidth) : 0f;
+                if (tt > 0f && tt < toeWidth) pulse += 0.5f * toeLevel * (0.5f - 0.5f * Mathf.Cos(2f * Mathf.PI * tt / toeWidth));
+                float puff = Noise(rng) * 0.4f * (Hit(t, heelAttack, 0.012f) + 0.5f * toeLevel * Hit(tt, toeAttack, 0.012f));
+                thump[i] = thumpHigh.Process(thumpLow.Process(pulse + puff));
 
-                // Dois apoios: calcanhar e, um instante depois, a ponta do pé (mais fraca).
-                float heelEnvelope = Mathf.Exp(-t * 42f) * Mathf.Clamp01(t / 0.005f);
-                float toeEnvelope = tt < 0f ? 0f : Mathf.Exp(-tt * 55f) * toeLevel * Mathf.Clamp01(tt / 0.005f);
+                // O envelope vem antes do filtro: a rajada já sai com a cor do piso (envelope depois
+                // do filtro espalhava o ataque curto pelo espectro inteiro, um clique digital).
+                body[i] = bodyHeel.Process(Noise(rng) * Hit(t, heelAttack, bodyDecay))
+                        + bodyToe.Process(Noise(rng) * toeLevel * Hit(tt, toeAttack, bodyDecay * 0.85f));
 
-                // Baque grave que desce de frequência.
-                float thumpPitch = thumpFrequency * (1f + 0.5f * Mathf.Exp(-t * 70f));
-                float thump = Mathf.Sin(2f * Mathf.PI * thumpPitch * t) * Mathf.Exp(-t * 36f) * Mathf.Clamp01(t / 0.005f);
+                click[i] = clickHeel.Process(Noise(rng) * Hit(t, clickAttack, clickDecay))
+                         + clickToe.Process(Noise(rng) * toeLevel * Hit(tt, clickAttack, clickDecay));
 
-                float release = Mathf.Clamp01((length - i) / (rate * 0.02f));
-                samples[i] = (band * 5f * (heelEnvelope + toeEnvelope) + thump * 0.4f) * release;
-
-                peak = Mathf.Max(peak, Mathf.Abs(samples[i]));
+                float r = t > rubFrom && t < rubTo ? Mathf.Sin(Mathf.PI * (t - rubFrom) / (rubTo - rubFrom)) : 0f;
+                rub[i] = rubBand.Process(Noise(rng) * r * r);
             }
 
-            if (peak > 0f)
+            // Tábua oca: o estalo passa por modos de Q baixo (somem em ~30 ms, não cantam).
+            float[] wood = null;
+            if (tone.modes != null)
             {
-                float gain = 0.9f / peak;
-                for (int i = 0; i < length; i++) samples[i] *= gain;
-            }
-
-            var clip = AudioClip.Create($"Passo_{index}", length, 1, rate, false);
-            clip.SetData(samples, 0);
-            return clip;
-        }
-
-        // Azulejo seco: estalo curto e agudo (sola dura no piso duro), um "toc" ressonante, pouco
-        // grave, em dois apoios; por cima, ecos esparsos e abafados de sala de azulejo.
-        static AudioClip CreateTile(System.Random rng, int index)
-        {
-            int rate = Rate;
-            int length = (int)(rate * 0.34f);
-            var dry = new float[length];
-
-            float toeDelay = Range(rng, 0.05f, 0.08f);
-            float toeLevel = Range(rng, 0.5f, 0.7f);
-            float tok = Range(rng, 1100f, 1500f);
-            float tok2 = tok * Range(rng, 2.2f, 2.5f);
-            float thumpFrequency = Range(rng, 130f, 160f);
-            float clickCut = Cut(1800f, rate), bodyLow = Cut(3200f, rate), bodyHigh = Cut(600f, rate);
-            float c = 0f, b1 = 0f, b2 = 0f, bh = 0f;
-
-            for (int i = 0; i < length; i++)
-            {
-                float t = i / (float)rate;
-                float noise = Noise(rng);
-                c += (noise - c) * clickCut;
-                float click = noise - c; // passa-altas: só o estalo
-                b1 += (noise - b1) * bodyLow;
-                b2 += (b1 - b2) * bodyLow;
-                bh += (b2 - bh) * bodyHigh;
-                float body = b2 - bh;
-
-                float sum = 0f;
-                for (int strike = 0; strike < 2; strike++)
+                wood = new float[length];
+                foreach (float mode in tone.modes)
                 {
-                    float st = strike == 0 ? t : t - toeDelay;
-                    if (st < 0f) continue;
-                    float level = strike == 0 ? 1f : toeLevel;
-                    float attack = Attack(st, 0.0015f);
-                    float s = click * 1.4f * Mathf.Exp(-st * 260f)
-                            + body * 2.2f * Mathf.Exp(-st * 70f)
-                            + Mathf.Sin(2f * Mathf.PI * tok * st) * 0.5f * Mathf.Exp(-st * 90f)
-                            + Mathf.Sin(2f * Mathf.PI * tok2 * st) * 0.2f * Mathf.Exp(-st * 130f)
-                            + Mathf.Sin(2f * Mathf.PI * thumpFrequency * st) * 0.3f * Mathf.Exp(-st * 55f);
-                    sum += s * attack * level;
+                    var resonator = Biquad.BandPass(J(mode, 0.1f), tone.modeQ, rate);
+                    float weight = Range(rng, 0.6f, 1f);
+                    for (int i = 0; i < length; i++) wood[i] += resonator.Process(click[i]) * weight;
                 }
-                dry[i] = sum;
+                Normalize(wood);
             }
 
-            // Eco de sala de azulejo: reflexões esparsas que se adensam e somem em ~0,25 s,
-            // passadas por um passa-baixas (as paredes comem o agudo).
+            Normalize(thump);
+            Normalize(body);
+            Normalize(click);
+            Normalize(rub);
+
             var samples = new float[length];
-            Array.Copy(dry, samples, length);
-            var wet = new float[length];
-            const int taps = 48;
-            for (int k = 0; k < taps; k++)
-            {
-                float delay = Range(rng, 0.008f, 0.24f);
-                float gain = 0.32f * Mathf.Exp(-delay * 14f) * (rng.NextDouble() < 0.5 ? -1f : 1f);
-                int offset = (int)(delay * rate);
-                for (int i = offset; i < length; i++) wet[i] += dry[i - offset] * gain;
-            }
-            float wl = 0f, wetCut = Cut(2600f, rate);
+            var finalLow = Biquad.LowPass(tone.lowPass, 0.7f, rate);
+            float thumpLevel = tone.thump * thumpScale, clickLevel = tone.click * clickScale;
+            float woodLevel = tone.wood * clickScale, rubLevel = tone.rub * rubScale;
             for (int i = 0; i < length; i++)
             {
-                wl += (wet[i] - wl) * wetCut;
-                samples[i] += wl;
+                float s = thump[i] * thumpLevel + body[i] * tone.body + click[i] * clickLevel + rub[i] * rubLevel;
+                if (wood != null) s += wood[i] * woodLevel;
+                samples[i] = finalLow.Process(s);
             }
 
-            return Finish($"Passo_Azulejo_{index}", samples, rate, 0.85f);
+            // Rabicho de sala: ruído (sem o grave e sem o agudo) com a amplitude de uma média móvel
+            // da energia do passo seco — cresce com o passo e some devagar, sem reflexões contáveis.
+            if (tone.room > 0f)
+            {
+                var roomLow = Biquad.LowPass(tone.roomCut, 0.7f, rate);
+                var roomHigh = Biquad.HighPass(300f, 0.7f, rate);
+                float keep = Mathf.Exp(-1f / (tone.roomDecay * rate));
+                float energy = 0f;
+                var tail = new float[length];
+                for (int i = 0; i < length; i++)
+                {
+                    energy = energy * keep + samples[i] * samples[i] * (1f - keep);
+                    tail[i] = roomHigh.Process(roomLow.Process(Noise(rng))) * Mathf.Sqrt(energy);
+                }
+                Normalize(tail);
+                float dryPeak = 0f;
+                foreach (float v in samples) dryPeak = Mathf.Max(dryPeak, Mathf.Abs(v));
+                for (int i = 0; i < length; i++) samples[i] += tail[i] * tone.room * dryPeak;
+            }
+
+            // Agachado, o arrasto encorpa o clipe (RMS acima do andando): o pico desce a 0,7 para o
+            // passo agachado soar mais fraco, além do volume menor que o PlayStep já dá.
+            string[] gaitName = { "Agachado", "Andando", "Correndo" };
+            return Finish($"Passo_{floor}_{gaitName[gait]}_{variation}", samples, rate, tone.peak * (gait == 0 ? 0.7f : 1f));
         }
 
-        // Vadeando: um chapinhar curto — o tapa do pé na água, o chiado do espirro, gotas que
-        // caem logo depois (pequenas bolhas que sobem de tom) e um "tchum" grave.
+        // Vadeando: um chapinhar curto — o tapa do pé na água, o chiado do espirro, o baque abafado
+        // do pé no fundo e gotas que caem logo depois. Desde 23/11/2026 o baque é ruído num
+        // passa-baixas (era um seno que descia de tom) e as gotas são estalinhos de ruído (eram senos
+        // que subiam de tom e chilreavam).
         static AudioClip CreateWade(System.Random rng, int index)
         {
             int rate = Rate;
@@ -659,7 +785,17 @@ namespace BackRooms.Player
 
             float hissLow = Cut(4500f, rate), hissHigh = Cut(350f, rate), washCut = Cut(900f, rate);
             float l1 = 0f, l2 = 0f, hh = 0f, w1 = 0f, w2 = 0f;
-            float plunge = Range(rng, 85f, 105f);
+            var thumpLow = Biquad.LowPass(Range(rng, 100f, 130f), 0.75f, rate);
+            var thumpHigh = Biquad.HighPass(40f, 0.7f, rate);
+            var thumps = new float[length];
+            float width = Range(rng, 0.008f, 0.012f);
+            for (int i = 0; i < length; i++)
+            {
+                float t = i / (float)rate;
+                float pulse = t < width ? 0.5f - 0.5f * Mathf.Cos(2f * Mathf.PI * t / width) : 0f;
+                thumps[i] = thumpHigh.Process(thumpLow.Process(pulse + Noise(rng) * 0.3f * Hit(t, 0.004f, 0.02f)));
+            }
+            Normalize(thumps);
 
             for (int i = 0; i < length; i++)
             {
@@ -672,15 +808,13 @@ namespace BackRooms.Player
                 w1 += (noise - w1) * washCut;
                 w2 += (w1 - w2) * washCut;
 
-                float slap = noise * 0.5f * Mathf.Exp(-t * 120f);
+                float slap = noise * 0.5f * Attack(t, 0.001f) * Mathf.Exp(-t * 120f);
                 float spray = hiss * 2.4f * Attack(t, 0.004f) * Mathf.Exp(-t * 13f);
                 float wash = w2 * 3.5f * Attack(t, 0.03f) * Mathf.Exp(-t * 7f);
-                float pitch = plunge * (1f - 0.35f * Mathf.Min(1f, t * 6f));
-                float thump = Mathf.Sin(2f * Mathf.PI * pitch * t) * 0.3f * Attack(t, 0.004f) * Mathf.Exp(-t * 25f);
-                samples[i] = slap + spray + wash + thump;
+                samples[i] = slap + spray + wash + thumps[i] * 0.3f;
             }
 
-            AddDroplets(rng, samples, rate, rng.Next(8, 15), 0.02f, 0.36f, 700f, 2600f, 0.15f, 0.45f);
+            AddDrops(rng, samples, rate, rng.Next(8, 15), 0.02f, 0.36f, 900f, 3000f, 0.12f, 0.35f);
             return Finish($"Passo_Agua_{index}", samples, rate, 0.9f);
         }
 
@@ -794,6 +928,28 @@ namespace BackRooms.Player
 
             AddDroplets(rng, samples, rate, rng.Next(25, 36), 0.05f, 0.9f, 600f, 3500f, 0.1f, 0.4f);
             return Finish($"Espirro_{index}", samples, rate, 0.92f);
+        }
+
+        // Gotas sem tom: cada uma é um estalinho de ruído de poucos milissegundos num passa-faixa de
+        // Q baixo (a cor da gota), mais densas no começo do intervalo.
+        static void AddDrops(System.Random rng, float[] samples, int rate, int count, float from, float to,
+                             float minFrequency, float maxFrequency, float minLevel, float maxLevel)
+        {
+            for (int k = 0; k < count; k++)
+            {
+                float u = (float)rng.NextDouble();
+                float start = from + (to - from) * u * u;
+                var band = Biquad.BandPass(Range(rng, minFrequency, maxFrequency), 2f, rate);
+                float decay = Range(rng, 0.002f, 0.005f);
+                float level = Range(rng, minLevel, maxLevel) * 3f; // o passa-faixa come uns 10 dB do ruído
+                int first = (int)(start * rate);
+                int count2 = (int)(0.03f * rate);
+                for (int j = 0; j < count2 && first + j < samples.Length; j++)
+                {
+                    float t = j / (float)rate;
+                    samples[first + j] += band.Process(Noise(rng) * Hit(t, 0.0005f, decay)) * level;
+                }
+            }
         }
 
         // Gotas e bolhas: senos curtos que sobem de tom e somem (o som de uma bolha que se forma

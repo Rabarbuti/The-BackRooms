@@ -16,8 +16,11 @@ namespace BackRooms.World
     /// </summary>
     public static class OfficeGenerator
     {
-        public const int DefaultWidth = 14;
-        public const int DefaultHeight = 12;
+        // 16 x 14 desde 23/11/2026 (era 14 x 12): uns 35% a mais de área andável, com a mesma
+        // proporção de corredor, salas e luminárias por célula. A altura 14 deixa o miolo sempre fundo
+        // o bastante para o corredor transversal leste-oeste (mais voltas, não corredores mais longos).
+        public const int DefaultWidth = 16;
+        public const int DefaultHeight = 14;
 
         const int Attempts = 40;
         /// <summary>Células, no mínimo, do caminho entre a cabine e a escada.</summary>
@@ -26,6 +29,10 @@ namespace BackRooms.World
         public const int MinAtriumDistance = 6;
         /// <summary>A placa pendurada da última curva só entra se a curva fica a até tantas células da escada.</summary>
         const int MaxExitSignCells = 3;
+        /// <summary>Trechos de luminárias queimadas no corredor: um a cada tantas células de corredor, em média.</summary>
+        const int DeadStretchCells = 23;
+        /// <summary>Os trechos queimados começam a pelo menos tantas células de corredor da cabine (8 até 23/11/2026, no andar de 14 x 12).</summary>
+        const int DeadStretchFromCab = 9;
         /// <summary>
         /// A entrada da escada fica a pé (só corredor e saguão) a pelo menos esta parte do corredor
         /// mais longe da cabine, medida também em passos (21/11/2026).
@@ -833,14 +840,21 @@ namespace BackRooms.World
                     }
                 }
 
-            // Trechos escuros: 3 a 5 luminárias queimadas seguidas, longe da cabine.
+            // Trechos escuros: 3 a 5 luminárias queimadas seguidas, longe da cabine. Quantos, pelo
+            // tamanho do corredor (um a cada DeadStretchCells células, em média): no andar de 14 x 12
+            // eram sempre 1 ou 2, e o andar maior ficaria mais aceso que o antigo.
             int[] distance = Distances(d, d.SpawnX, d.SpawnZ, corridorsOnly: true);
             var seeds = new List<int>();
+            int corridors = 0;
             for (int z = 0; z < h; z++)
                 for (int x = 0; x < w; x++)
-                    if (d.Office[x, z] == OfficeCell.Corridor && distance[x + z * w] >= 8) seeds.Add(x + z * w);
+                {
+                    if (d.Office[x, z] != OfficeCell.Corridor) continue;
+                    corridors++;
+                    if (distance[x + z * w] >= DeadStretchFromCab) seeds.Add(x + z * w);
+                }
 
-            int stretches = Math.Min(seeds.Count, 1 + p.Rng.Next(2));
+            int stretches = Math.Min(seeds.Count, Math.Max(1, (corridors + p.Rng.Next(DeadStretchCells)) / DeadStretchCells));
             for (int s = 0; s < stretches; s++)
             {
                 int start = seeds[p.Rng.Next(seeds.Count)];

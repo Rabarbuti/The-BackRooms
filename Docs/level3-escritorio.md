@@ -6,8 +6,8 @@ de uma instituição, cartazes e pessoas).
 
 **Já existe:** uma versão de teste jogável (`Scenes/Level3_Test.unity`, menu BackRooms > Montar
 Level 3 (teste)), na lista de fases depois das Piscinas (a porta do Level 2 leva a ela; é a última):
-- **Planta** (`OfficeGenerator`, C# puro, só `System.Random(seed)`, com `Validate` e `Hash`): 14 x 12
-  células de 4 m; anel de corredores recuado 2 ou 3 células da fachada, um transversal norte-sul (às
+- **Planta** (`OfficeGenerator`, C# puro, só `System.Random(seed)`, com `Validate` e `Hash`): 16 x 14
+  células de 4 m (14 x 12 até 23/11/2026; ver "Andar maior" abaixo); anel de corredores recuado 2 ou 3 células da fachada, um transversal norte-sul (às
   vezes também um leste-oeste); saguão de 3 x 2 com a fileira dos elevadores (poço, cabine inicial,
   poço) no miolo; salas de aula e salas pequenas no resto do miolo e na faixa da fachada; cafeteria
   perto do saguão, área de estar e o vão da escada (3 células, longe do saguão) na faixa da fachada.
@@ -45,20 +45,41 @@ Level 3 (teste)), na lista de fases depois das Piscinas (a porta do Level 2 leva
   fechar na cabine, chamar no saguão; o host decide; a porta reabre com alguém no vão.
 - **Passos de piso duro** (`LevelBuilder.HardFloorActive` → `Footsteps` usa os do azulejo seco).
 - **Objetivo** (19/11/2026): a porta corta-fogo fica trancada até o **alarme de incêndio** disparar
-  (`SwitchObjective`, três acionadores vermelhos em paredes de corredor, longe uns dos outros: puxar
-  leva 2 s, o segundo dentro de 8 s do primeiro; sozinho, dois sem janela). Disparado, a sirene toca
+  (`SwitchObjective`, três acionadores vermelhos longe uns dos outros: puxar leva 2 s. Até 21/11/2026
+  ficavam em paredes de corredor e bastavam dois, o segundo dentro de 8 s; desde então **cada um fica
+  dentro de uma sala**, fora da vista da porta, e **valem os três**, dentro de 20 s do primeiro em
+  grupo; sozinho, sem janela). Disparado, a sirene toca
   nos acionadores e a porta destrava; desde 21/11/2026 a sirene chama o Ascensorista e **a energia do
   andar cai** (só as salinhas-abrigo ficam acesas, luzes de emergência a cada 3 células nas rotas até a
   escada, interruptores sem energia).
 - **Dois inimigos próprios** (21/11/2026; a entidade do Level 0 saiu; decisão 4): **The Janitor** (o
   Zelador, `JanitorBrain`: só existe no escuro, nasce na ponta do trecho que a onda apagou, some quando a
-  luz volta; interruptores de luz, `LightSwitches`, religam o trecho com estalo alto e recarregam 25 s) e
+  luz volta; desde 23/11/2026 espreita na beira do escuro mais perto do jogador e caça na hora quem pisa no
+  escuro, `JanitorBrain.Lurk.cs`; o esfregão se recolhe rente à parede, `JanitorBody.Fit`; interruptores de luz, `LightSwitches`, religam o trecho com estalo alto e recarregam 25 s) e
   **The Attendant** (o Ascensorista, `AttendantBrain`: cego, chega de elevador, caça pelo barulho, ouve a
   respiração de perto, entra em qualquer sala e leva quem pega para a cabine). Modelos esculpidos no
   Blender (`zelador.py`, `ascensorista.py`). Regras em `mecanicas.md`, seção 5.
 - **Texto do jogador em inglês** (21/11/2026): avisos da filmadora (`E - LIGHTS ON`, `E - CALL
   ELEVATOR`...), cartaz de dicas (TIPS / HIDE IN A SMALL ROOM / WITH THE LIGHT ON / CROUCH TO STAY QUIET /
   ESC: TASKS), no menu "Level 3 — The Office".
+
+- **Andar maior** (23/11/2026, pedido "expanda um pouco, sem mudar a experiência"): de 14 x 12 para
+  16 x 14 células (64 x 56 m), com o mesmo gerador. Em 508 seeds: 158 → 214 células andáveis (+35%),
+  17,7 → 24,1 salas (+36%), 34 → 47 células de corredor (+36%, a mesma parte do andar), caminho da cabine
+  à escada de 13,4 → 17,0 células. A altura 14 deixa o miolo sempre fundo o bastante para o transversal
+  leste-oeste (sorteado em metade das plantas): o andar maior ganha voltas, não corredores mais longos.
+  O que dependia do tamanho e foi acertado: trechos de luminárias queimadas proporcionais ao corredor
+  (`DeadStretchCells`, um a cada 23 células) e a 9 células da cabine (eram 8); trecho da onda de luzes
+  de no máximo 10 luminárias (`LevelBuilder.MaxWaveRun`: o lado de 12 do anel vira dois, e o andar ganha
+  trechos e interruptores na proporção: nas 8 seeds da conferência, de 5,25 para 7,0 trechos e de 5,0 para
+  6,9 interruptores por planta); pilhas uma a cada ~33 células
+  (6 em vez de 4); alarmes a 7 passos uns dos outros (eram 6), a 6 da cabine (5) e a 5 da escada (4);
+  o Ascensorista fica 85 s no andar (75); sombra das luminárias com até 80% do atlas em cache (60%),
+  para seguir em 128 px com até ~200 luminárias acesas; `lightFadeDistance` de 30 para 28 m, porque o
+  que custa por quadro são as luzes a menos dessa distância da câmera (o HDRP descarta as outras do laço
+  de luz), e com 30 m o andar maior pegava ~6% mais delas em média (13% no pior lugar); com 28 m fica
+  abaixo do antigo. Objetos desenhados: 78 → 82. O que não mudou por ser relativo ao jogador:
+  onde o Zelador nasce, a distância dos armários que batem, a ronda perto do jogador.
 
 **Falta:** jogar à mão (os números dos dois inimigos e da onda são de partida); os modelos do Blender
 do cenário (as peças da seção 4 hoje são caixas e tubos em código); as ideias 3 e 4 da seção 6
@@ -109,8 +130,8 @@ Gerador próprio, como o das Piscinas: um `OfficeGenerator` em C# puro, só `Sys
 
 ### 2.1 Tamanho e estrutura
 
-- **14 x 12 células** (56 x 48 m). O Level 1 tem 10 x 10; esta fase aguenta mais porque é feita de
-  peças repetidas.
+- **16 x 14 células** (64 x 56 m; era 14 x 12, 56 x 48 m, até 23/11/2026). O Level 1 tem 10 x 10;
+  esta fase aguenta mais porque é feita de peças repetidas.
 - **Estrutura de prédio, não de labirinto:** um **anel de corredores** em volta de um miolo, mais 1 ou 2
   corredores transversais que cortam o miolo. Os corredores ficam em linhas e colunas inteiras da grade
   e dividem o resto em **quarteirões** retangulares. Cada quarteirão vira uma ou mais salas.

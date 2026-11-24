@@ -1,9 +1,10 @@
 # The BackRooms
 
-Jogo de terror 3D em co-op no estilo Backrooms, feito em Unity. Hoje existe o Level 0
-jogável por IP, com interface de filmadora VHS, o primeiro item (caneta de riscar), buracos
+Jogo de terror 3D no estilo Backrooms, feito em Unity, hoje **só para um jogador** (a rede co-op por IP
+continua no código, escondida do menu desde 21/11/2026). Existe o Level 0, com interface de filmadora VHS,
+o primeiro item (caneta de riscar), buracos
 com faixas de travessia, apagões periódicos, a primeira entidade, que caça os jogadores pelo
-barulho, gravação da tela em vídeo (F9), música na tela inicial e passos que mudam com o piso e a
+barulho, gravação da tela em vídeo (R), música na tela inicial e passos que mudam com o piso e a
 água (carpete, azulejo, água rasa, nado, debaixo d'água). **Cada fase tem um inimigo próprio** (o Level 3
 tem dois), todos esculpidos no Blender e vestidos sobre juntas montadas em código (seção "Inimigos
 esculpidos"): a entidade (Level 0), o Capitão (Level 1), o Undertow (Level 2), o Zelador e o
@@ -15,7 +16,8 @@ azulejo sorteadas pelo `PoolGenerator` (não o labirinto do Level 0), água em q
 luz só por claraboias e janelas, nado e fôlego, a maré com alarme e o ralo (`PoolTide`), as válvulas que
 drenam (uma delas só se alcança nadando) e o **Undertow**, que muda de água pelos canos, caça pelo
 barulho na água e, na maré alta, pelo mapa inteiro (menos a sala inicial) (`Docs/level2-piscinas.md`, cabeçalho "Já existe / Falta"). A quarta, o **Level 3 — O Escritório**, tem
-projeto e uma versão de teste jogável: um andar de prédio vazio sorteado pelo `OfficeGenerator` (anel de
+projeto e uma versão de teste jogável: um andar de prédio vazio sorteado pelo `OfficeGenerator` (16 x 14
+células de 4 m desde 23/11/2026; era 14 x 12) (anel de
 corredores de teto técnico, salas, saguão de elevadores, cafeteria, vão da escada com a saída), luz fria,
 armários amarelos que batem, a onda de luzes que persegue os jogadores, interruptores de luz, botões de
 elevador, o **Zelador** (só existe no escuro) e o **Ascensorista** (cego, chega de elevador e caça pelo
@@ -68,7 +70,8 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   divisa, salas, vão da escada, elevadores), `LevelBuilder.Office.cs` (piso, tetos, divisas, luminárias)
   e `LevelBuilder.OfficeProps.cs` (mobília, elevadores, vão da escada e saída, placas), e `OfficeEvents`
   (`ElevatorDoors`, `OfficeElevators`, `OfficeLightWave` no lugar do apagão, `OfficeSounds`). Em todas:
-  `SwitchObjective` (o objetivo comum, posto por `LevelBuilder.Objective.cs`), `BatteryPickups` (pilhas
+  `SwitchObjective` (o objetivo comum, posto por `LevelBuilder.Objective.cs`), `StartNote` (o cartaz
+  de dicas sobre o monstro, na sala inicial das quatro fases), `BatteryPickups` (pilhas
   da lanterna), `LevelTasks` (`ITaskSource`: cada objetivo publica as próprias tarefas e teclas para o
   menu de pausa; `SwitchObjective`, `ExitLock` e `LightSwitches` implementam) e `WorldNoise` (barulho do
   mundo para os inimigos: `INoiseListener` + `WorldNoise.Emit(ponto, raio)`; armários, estalo do
@@ -77,7 +80,9 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   Escritório, `OfficeLockers` (`LockerBangs`/`LockerDoor`: os armários que batem pelo relógio) e
   `ElevatorButtons` (`ElevatorControl`/`ElevatorButton`: abrir, fechar e chamar; o host decide).
 - `Scripts/Player` — `PlayerController` (movimento, queda e captura), `Flashlight`, `Footsteps`
-  (passos sintetizados por superfície: carpete sem água na fase; nas Piscinas, azulejo seco, água
+  (passos sintetizados por superfície, só de ruído filtrado: calcanhar e planta do pé, um conjunto
+  agachado, andando e correndo por piso; carpete sem água na fase, laminado e vinílico no Level 1, piso
+  duro no Escritório, que conta como azulejo; nas Piscinas, azulejo seco, água
   rasa, nado à tona, debaixo d'água e um espirro ao cruzar a linha d'água depressa; dos outros
   jogadores, calculado aqui pela altura deles e a água local; `NoiseOf` dá o barulho de cada
   superfície para um inimigo que ouça a água), `PlayerBody` (o traje que os outros veem: o modelo da
@@ -105,7 +110,9 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   no covil, só o ponto de partida; `Paused`),
   `UndertowBody` e `UndertowAudio`. O Zelador do Level 3: `JanitorBrain` (herda do `EntityBrain` pelo
   gancho `CellOpen`: só pisa no escuro; `JanitorBrain.Waves.cs`: escolhe os trechos da onda perto dos
-  jogadores, nasce na ponta, decide o interruptor), `JanitorBody`, `JanitorAudio`, `JanitorDirector` (põe
+  jogadores, nasce na ponta, decide o interruptor; `JanitorBrain.Lurk.cs`: espreita na beira do escuro mais
+  perto do jogador e caça na hora quem pisa no escuro, pelos ganchos `Senses` e `DrivesGoal`), `JanitorBody`
+  (o esfregão, o braço e a cabeça se recolhem onde bateriam na fase, `Fit`), `JanitorAudio`, `JanitorDirector` (põe
   o Zelador e os interruptores; corte de energia do alarme e luz de emergência; `JanitorDark`, o mapa do
   escuro) e `LightSwitches` (interruptores de luz, mira + E). O Ascensorista do Level 3:
   `AttendantBrain` (cego: ganchos `Scripted`, `HasSight`, `CatchNeedsFacing`, `OfficeRoomsShelter`,
@@ -123,9 +130,12 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
 - `Scripts/Systems/CharacterModel.cs` — lê o modelo de personagem do Blender (`.bytes`) e o veste
   nas juntas como `SkinnedMeshRenderer`.
 - `Scripts/UI` — filmadora (`Camcorder`, `CamcorderPass`), gravação em vídeo (`ScreenRecorder`,
-  `AviWriter`, `RecorderAudioTap`), o menu inicial e a tela de fim da fita (`ConnectionMenu`), o menu de
+  `AviWriter`, `RecorderAudioTap`), o menu inicial (com Quit; sozinho hospeda só em 127.0.0.1, e erro ao
+  montar a fase volta a ele com mensagem) e a tela de fim da fita (`ConnectionMenu`), o menu de
   pausa (`PauseMenu`, criado pelo `ConnectionMenu` num documento próprio; o jogo não para) e `MenuKit`
-  (peças de UI e a tela de opções comuns aos dois menus).
+  (peças de UI e a tela de opções comuns aos dois menus). As opções ficam no `GameOptions`
+  (`Scripts/Systems`); sem qualidade salva e com placa de vídeo integrada (`GameOptions.IsIntegratedGpu`),
+  a build começa no Performant sem gravar a escolha (no editor, nada muda).
 - `Scripts/Editor` — gerador do Level 0 (`Level0Setup`, que também monta outras fases por
   `SceneOptions`), modelos GLB gerados por IA (`GlbReader`, `ImportedModels`), pintores de textura
   (`ProceduralPaint`, `StainPainter`, `EntityPainter`), o Level 1 (`Level1Setup`, `Level1Models`,
@@ -160,6 +170,13 @@ Todo o jogo está em `Assets/_Game`. Namespaces seguem a pasta: `BackRooms.World
   mecânicas de cada fase em linguagem de jogador, do que existe ao planejado, e ideias novas não decididas,
   `P0.1`, `P1.2`...), `modelos-blender.md` (modelos do
   Blender ao Unity e como dividir lotes entre agentes). Os outros são referência de design.
+- `GDD.md` (na raiz) — o Game Design Document da entrega: o jogo como ele está, os estados, as fases, a
+  arte, a tecnologia e as **mudanças de trajetória**, para quem não abre o código; fotos em
+  `Docs/imagens`. **Mudou o jogo (regra, tecla, fase, inimigo, som, tela), atualize o GDD junto**, na
+  seção do assunto, e acrescente a virada à tabela "Mudanças de trajetória" quando for mudança de rumo.
+- `README.md` (na raiz) — o que é o jogo, como jogar (base da página do itch.io, com o atalho secreto),
+  como abrir e gerar a build, as pastas, a equipe e os **créditos dos assets** (asset novo de fora entra
+  lá, com a origem; o que não se sabe fica `A CONFIRMAR`).
 
 ## Teclas
 
@@ -172,7 +189,8 @@ interruptor de luz religa o trecho escuro (Escritório), mira + E num botão de 
 chama, mira + E numa carteira das salas de aula do Escritório senta (E de novo, andar ou pular levanta), mira + E no teclado da porta do Level 1 abre o painel do código (números ou clique,
 Backspace apaga, Enter confirma, Esc ou E fecha), R grava a tela, Esc abre o menu de pausa (tarefas, teclas e opções; o jogo não para; fechar
 prende o mouse de novo; Start no controle). No menu: H hospeda, J entra; a lista "Level" troca de nível
-(no editor todas ficam liberadas). Na água funda das
+(no editor todas ficam liberadas); Ctrl + Shift + L, atalho secreto, libera todas as fases e, de novo, tranca
+(`LevelProgress.CheatUnlocked`, preferência `BackRooms.UnlockAll`; ignorado com `DevModeOverride` nos testes). Na água funda das
 Piscinas (piscinas, raias, canais e poços: não dá pé), segurar Espaço sobe e fica à tona; sem tecla,
 afunda devagar até o fundo; Ctrl ou C mergulha; da água funda sai-se por escada ou, à tona,
 empurrando contra uma borda baixa (W, ou Espaço encostado e de frente): sobe nela.
@@ -296,6 +314,11 @@ velho. Mudança só de código não precisa. A cena do Level 1 não tem versão:
   `AddCollider`) e na `PropLayer` (`Spawn`). Não criar um sem o outro. Nas Piscinas, o que é
   curvo (arco, coluna, abóbada, poço) usa `MeshCollider` da mesma malha; enfeite sem colisor
   (sanca, cáustica, corrimão) entra por nome na lista do `Level0ColliderCheck`.
+- **Duas faces no mesmo plano, em materiais diferentes, brigam (z-fighting)**: a tela mostra uma cunha
+  escura serrilhada que treme e parece sombra quebrada. Peça que encosta noutra (batente na ponta da parede,
+  rodapé, moldura) avança alguns milímetros para fora dela. Nos vãos de porta do Escritório o batente branco
+  ficava no plano da parede cinza e da verga até 23/11/2026 (`LevelBuilder.DoorFrameInset`, 4 mm; fotos de
+  comparação em `Level3Setup.BatchDoorPhotos`).
 - **Nas Piscinas, toda célula com piso que não é poço se alcança (a pé, ou nadando na água funda),
   de toda água funda se sai por escada ou pela borda, de todo poço se sai nadando para a funda e o caminho do
   início à saída nunca exige nadar** (`PoolGenerator.FootPath`, só seco e raso). A funda (piso a
@@ -348,6 +371,9 @@ velho. Mudança só de código não precisa. A cena do Level 1 não tem versão:
   desde 21/11/2026 é território do Undertow, que caça no mapa inteiro menos a sala inicial). Maré acima de
   ~1,45 m acaba com onde respirar. Mudou maré, água, jogador, borda ou escada: rode também o
   `Level2HighTideTest`.
+- **Parte de corpo que sai do raio que o cérebro confere (esfregão, braço esticado, cabeça pendurada) se
+  confere contra a fase no corpo** (`UndertowBody.Fit`, `JanitorBody.Fit`), em cada máquina: o cabo de 1,3 m
+  do esfregão do Zelador entrava na parede até 23/11/2026.
 - **O corpo do Undertow é comprido (3,4 m, braços de 2,9 m de ponta a ponta): o meio dentro do território
   não basta.** Cada passo e giro confere os pontos do corpo contra os colisores da fase
   (`UndertowBrain.Fits`, `BodyProbes`), a altura sai do piso medido por raio sob o corpo todo (degraus,
@@ -365,6 +391,18 @@ velho. Mudança só de código não precisa. A cena do Level 1 não tem versão:
 - **Pela fila, chamada pelo bash ou por `powershell -File`, `-Extra '-x','y'` chegava ao Unity como um
   argumento só** e os testes rodavam com a seed padrão sem avisar. A fila normaliza desde 21/11/2026
   (`-Extra '-seed,7'` serve de qualquer shell); confira no log que a seed pedida foi a montada.
+- **Som sintetizado com altura que muda no tempo acumula a fase** (`phase += f(t) / rate;
+  Sin(2π·phase)`), nunca `Sin(2π·f(t)·t)`. Essa forma toca `f + t·f'`: um vibrato de poucos Hz vira um
+  vaivém de centenas de Hz que soa como pato de borracha. Foi assim na roda da válvula e no rangido da
+  porta de saída (23/11/2026). Também **passo, gota, impacto e rangido (roda, dobradiça, sola) não levam tom
+  afinado nem glissando**, nem com a fase certa: o rodízio do Zelador e o vinílico do Level 1 (seno de 1,4
+  a 1,9 kHz subindo) soavam como brinquedo de apertar. A cor do material se faz com ruído em faixa e
+  filtros de Q baixo, com o envelope aplicado antes do filtro.
+- **No HDRP o que custa por quadro é a luz a menos de `fadeDistance` da câmera, com dimmer acima de 0**
+  (`HDProcessedVisibleLightsBuilder`), não o total de luminárias da fase. A sombra em cache só pesa ao
+  ligar a luz e no tamanho do atlas. Ao aumentar um mapa, conte as acesas dentro desse raio, não as que
+  existem: o Escritório de 16 x 14 passou o `lightFadeDistance` de 30 para 28 m (`Level3Setup`) e ficou
+  abaixo do andar antigo.
 
 ## Inimigos esculpidos
 
@@ -443,8 +481,9 @@ são postos, o Capitão e as regras dele, objetivo, som, ordem de construção e
   (o jogador só não comanda: `InputGate.Blocked`). O código de 3 dígitos sai da seed e está em
   três etiquetas vermelhas de CLEARANCE, cada uma com o dígito e a posição (1/3, 2/3, 3/3), em
   blocos diferentes e longe umas das outras. Vermelho com CLEARANCE é só delas: as outras placas da
-  loja são amarelas (DISPLAY ONLY) ou dizem outra coisa. Sem bilhete na sala inicial (tirado em
-  21/11/2026). O cliente manda o código ao host (`GameSession`, mensagens nomeadas), que destranca e
+  loja são amarelas (DISPLAY ONLY) ou dizem outra coisa. Sem bilhete do código na sala inicial (tirado em
+  21/11/2026); lá fica o cartaz de dicas do Capitão (`StartNote.CaptainTips`, sem dígito nem
+  CLEARANCE, desde 23/11/2026). O cliente manda o código ao host (`GameSession`, mensagens nomeadas), que destranca e
   avisa todos, inclusive quem entra depois.
 - **Som e piso:** música de loja baixinha (some antes do aviso do apagão); laminado nas vitrines de
   jantar e de estar e vinílico no estoque, com passos próprios (`Footsteps`: `Laminate`, `Vinyl`).
@@ -474,13 +513,16 @@ do Level 0, Capturar prévia do Undertow, do Zelador e do Ascensorista,
 Capturar prévia, Capturar prévia do Capitão, Móveis do Level 1 > Atualizar e fotografar,
 Testar passos do Level 2, Exportar sons (entidade e passos) (WAV em `Logs/Sons`, para ouvir e
 ajustar os sons sintetizados sem precisar jogar: os da entidade, `passo_carpete_*`,
-`passo_azulejo_*`, `passo_agua_rasa_*`, `nado_bracada_*`, `debaixo_dagua_*`, `espirro_entrada_*`
+`passo_azulejo_*`, `passo_escritorio_*`, `passo_agua_rasa_*` (os pisos secos também com `_agachado_` e
+`_corrida_`), `nado_bracada_*`, `debaixo_dagua_*`, `espirro_entrada_*`
 os do Capitão, `capitao_toc`, `capitao_arrasta` e `capitao_jingle`, e os do Level 1,
 `loja_musica`, `plastico_bolha_*`, `passo_laminado_*` e `passo_vinilico_*`; os da maré, `mare_sirene`,
 `mare_buzina`, `mare_correnteza`, `mare_glub` e `ralo_gorgolejo`; os do Escritório, `escritorio_ar`,
 `escritorio_reator`, `escritorio_difusor`, `armario_bate_*`, `elevador_botao`, `elevador_plim`,
 `elevador_ronco`, `interruptor_estalo` e `reator_falhando`; e os dos inimigos novos, `undertow_*`,
-`zelador_*` e `ascensorista_*`; em lote, `EntitySounds.BatchExport`).
+`zelador_vassoura_*` e `zelador_voz_*` (a vassoura e o rosnado de caça, os dois sons do Zelador) e
+`ascensorista_*` (bengala, arrasto, estalos e respiração); em lote,
+`EntitySounds.BatchExport`).
 
 Por linha de comando, com o **editor fechado** (dois editores não abrem o mesmo projeto). Com mais
 de um agente trabalhando, **sempre pela fila** (um pedido de cada vez; espera o editor do usuário
@@ -608,9 +650,14 @@ Sozinho na máquina, direto:
   tamanho do jogador, chão sob cada ponto da escada, nenhuma passagem entre células de sala de aula
   barrada por móvel para o corpo dos inimigos); fotos em `Logs/Previews/level3_*.png` (cabine,
   saguão, corredor nos dois sentidos, salas, cafeteria, área de estar, porta da escada de perto e de
-  longe, vão da escada, saída, placa). Sai com 0 se passou, 3 se falhou.
+  longe, vão da escada, saída, placa). Escreve no log, por seed, os objetos desenhados, as luzes (com
+  sombra e a resolução dela), as pilhas e os interruptores; com `-Extra '-comparar,14x12'` mede as mesmas
+  seeds noutro tamanho, sem conferir. Sai com 0 se passou, 3 se falhou.
 - `Level3MenuPhoto.BatchRun` — não é teste: o menu inicial com o Level 3 escolhido e a vista do
   Escritório atrás dele (`LevelBuilder.MenuView`), em `Logs/Previews/office/menu_level3.png`.
+- `Level3Setup.BatchDoorPhotos` — não é teste: um vão de porta de sala de perto (do corredor, da sala e a
+  verga de baixo), com o batente antigo e o atual, nas seeds 1998, 7 e 4242, na qualidade do editor e na mais
+  baixa, sem filmadora e sem AA (e a vista do corredor também como no jogo), em `Logs/Previews/portas`.
 - `Level3PlayTest.BatchRun` — o Escritório em Play: nasce na cabine, a porta dela abre sozinha, anda o
   caminho e desce a escada até a porta da saída (passos de piso duro), espera a onda de luzes apagar um
   trecho e abre a porta: última fase, zera e acaba no menu. Restaura o progresso salvo; linha
@@ -667,7 +714,8 @@ Sozinho na máquina, direto:
   Linha `[BackRooms] Teste das regras da entidade`.
 - `BatteryTest.BatchRun` — a lanterna gasta bateria; pilhas no mapa; mira + E pega, some e recarrega;
   não se pega duas vezes. Linha `[BackRooms] Teste das pilhas`.
-- `JanitorTest.BatchRun` — o Zelador em Play: não entra na luz e para na beira, não pega na luz a 0,9 m,
+- `JanitorTest.BatchRun` — o Zelador em Play: não entra na luz e para na beira (a vassoura tocando ao andar),
+  não pega na luz a 0,9 m,
   pega no escuro, some com a luz, aparece sozinho, hesita com a lanterna; a onda escolhe o trecho do
   jogador, pisca antes de apagar, ele nasce na ponta justa; o interruptor religa e ele some, o estalo
   chega ao Ascensorista, a recarga recusa; no alarme, andar escuro com emergência e sem interruptor, e a
@@ -706,7 +754,8 @@ Sozinho na máquina, direto:
   `Builds/Windows/TheBackRooms.exe` (fora do Git; ~40 min na primeira vez). Linha
   `[BackRooms] Build para Windows`.
 - `GameOptionsCheck.BatchRun` — fora do Play: volume, mouse e qualidade presos aos limites, aplicados e
-  guardados (`GameOptions`). Linha `[BackRooms] Conferência das opções`.
+  guardados (`GameOptions`), e a placa integrada reconhecida pelo nome (`IsIntegratedGpu`). Linha
+  `[BackRooms] Conferência das opções`.
 - `Level1Models.BatchUpdateAndCapture` — cria os materiais dos lotes, reimporta os modelos,
   escreve as medidas no log e salva fotos em `Logs/Previews/moveis_*.png` (todos, ou só os de
   `-moveis Nome1,Nome2`), além da vitrine de jantar, da loja e da sala dos sofás.
@@ -774,8 +823,10 @@ tempo. O `LevelBuilder.objective` diz o tipo (`Breaker` no Level 0, posto sempre
 - `LevelExit.Locked` junta o `ExitLock` e o `SwitchObjective`. Nos testes que só querem passar pela
   porta, o host cumpre com `SwitchObjective.Instance.CompleteForTest()` (o `LevelSelectTest` faz isso).
 - Peças em escala (cubos primitivos com o colisor deles): o `Level0ColliderCheck` copia a escala.
-- Cada fase com objetivo comum ganha o cartaz de dicas na sala inicial (`SwitchObjective.PinNote`,
-  em inglês: TIPS, quatro dicas e "ESC: TASKS"; "Placa" sem colisor). A instrução do objetivo fica no
+- Toda fase tem o cartaz de dicas na sala inicial (`StartNote`, desde 23/11/2026; pregado pelo
+  `SwitchObjective` e, no Level 1, pelo `LevelBuilder.BuildObjective`): em inglês, sete dicas curtas
+  sobre o monstro da fase, no tom de aviso de quem passou por ali, e "ESC: TASKS" (até 8 linhas de 21
+  letras, só o que a `PixelFont` desenha; "Placa" sem colisor; os textos no topo do `StartNote`). A instrução do objetivo fica no
   menu de pausa (`ITaskSource`: tarefas com o detalhe de onde ficam os pontos e da janela). A porta do Level 3 encerra a fita: `LevelProgress.EndTape` e a tela de fim
   no `ConnectionMenu`, com os tempos de `LevelProgress.RecordTime`.
 

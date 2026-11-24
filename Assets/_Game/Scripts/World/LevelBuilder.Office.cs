@@ -144,6 +144,8 @@ namespace BackRooms.World
             foreach (LightState state in Data.Lights)
                 if (state == LightState.On || state == LightState.Flicker) lit++;
             _ok.ShadowResolution = OfficeShadowResolution(lit);
+            OfficeShadowLights = lit;
+            OfficeShadowSize = _ok.ShadowResolution;
 
             _ok.TubeMesh = BoxMesh("Tubo", new Vector3(2.4f, 0.075f, 0.075f));
             _ok.LeafMesh = BoxMesh("FolhaDoElevador", new Vector3(0.56f, ElevatorTop, 0.04f));
@@ -350,13 +352,23 @@ namespace BackRooms.World
             }
         }
 
+        /// <summary>Luminárias acesas (cada uma, um spot com sombra em cache) e a resolução da sombra delas, da última montagem do Escritório.</summary>
+        public int OfficeShadowLights { get; private set; }
+        public int OfficeShadowSize { get; private set; }
+
         // Spot = uma face de sombra. Escolhe a maior resolução que cabe no atlas em cache.
+        // Aqui todas as sombras têm o mesmo tamanho, e o atlas em cache do HDRP é uma grade de
+        // casas de 64 px preenchida pela primeira que cabe (HDCachedShadowAtlas.FindSlotInAtlas):
+        // sombras iguais encaixam sem sobra, e a que sai (a onda apaga e acende) deixa a casa para a
+        // próxima do mesmo tamanho. Por isso cabe 80% do atlas, e não os 60% do Level 0 (que mistura
+        // seis faces por luz): no andar de 16 x 14 (23/11/2026) as acesas passam de 153 em uns 20%
+        // das seeds e, com 60%, a sombra caía para 64 px, grossa demais para a parede de 15 cm.
         int OfficeShadowResolution(int lightCount)
         {
             int atlas = 2048;
             if (GraphicsSettings.currentRenderPipeline is HDRenderPipelineAsset asset)
                 atlas = asset.currentPlatformRenderPipelineSettings.hdShadowInitParams.cachedPunctualLightShadowAtlas;
-            long budget = (long)atlas * atlas * 6 / 10;
+            long budget = (long)atlas * atlas * 8 / 10;
             int resolution = Mathf.Max(64, Mathf.ClosestPowerOfTwo(maxShadowResolution));
             while (resolution > 64 && (long)resolution * resolution * Mathf.Max(1, lightCount) > budget) resolution /= 2;
             return resolution;
@@ -760,12 +772,22 @@ namespace BackRooms.World
             if (sideB) OEdgeBox(office.baseboard, o, along, across, a0, a1, T * 0.5f, T * 0.5f + 0.012f, 0f, 0.09f, false);
         }
 
+        /// <summary>
+        /// Quanto o batente branco avança para dentro do vão, além da ponta da parede e da verga. Até
+        /// 23/11/2026 era 0: a face de dentro do batente ficava no mesmo plano da ponta da parede (e a de
+        /// baixo, no da verga), em materiais diferentes, e as duas brigavam no vão (z-fighting: manchas
+        /// escuras que tremiam, lidas como sombra quebrada). Não mexe em colisor: a passagem continua 1 m.
+        /// Só as fotos de comparação (Level3Setup.BatchDoorPhotos) põem 0.
+        /// </summary>
+        public static float DoorFrameInset = 0.004f;
+
         void DoorFrame(Vector3 o, Vector3 along, Vector3 across, float thickness)
         {
             float d = thickness * 0.5f + 0.02f;
-            OEdgeBox(office.frameWhite, o, along, across, -OfficeDoorHalf - 0.06f, -OfficeDoorHalf, -d, d, 0f, OfficeDoorTop + 0.06f, false);
-            OEdgeBox(office.frameWhite, o, along, across, OfficeDoorHalf, OfficeDoorHalf + 0.06f, -d, d, 0f, OfficeDoorTop + 0.06f, false);
-            OEdgeBox(office.frameWhite, o, along, across, -OfficeDoorHalf - 0.06f, OfficeDoorHalf + 0.06f, -d, d, OfficeDoorTop, OfficeDoorTop + 0.06f, false);
+            float inner = OfficeDoorHalf - DoorFrameInset, top = OfficeDoorTop - DoorFrameInset;
+            OEdgeBox(office.frameWhite, o, along, across, -OfficeDoorHalf - 0.06f, -inner, -d, d, 0f, OfficeDoorTop + 0.06f, false);
+            OEdgeBox(office.frameWhite, o, along, across, inner, OfficeDoorHalf + 0.06f, -d, d, 0f, OfficeDoorTop + 0.06f, false);
+            OEdgeBox(office.frameWhite, o, along, across, -OfficeDoorHalf - 0.06f, OfficeDoorHalf + 0.06f, -d, d, top, OfficeDoorTop + 0.06f, false);
         }
 
         // Folha aberta até encostar na parede de dentro da sala (180°): não fecha passagem nenhuma.
@@ -897,7 +919,7 @@ namespace BackRooms.World
             var elevators = events.AddComponent<OfficeElevators>();
             elevators.Init(Data.Seed, _ok.Elevators);
 
-            // Trechos retos de corredor (5 células ou mais) com luminária: a onda corre por eles.
+            // Trechos retos de corredor (5 células ou mais, divididos acima de MaxWaveRun) com luminária: a onda corre por eles.
             var runs = new List<CeilingLight[]>();
             int w = Data.Width, h = Data.Height;
             for (int z = 0; z < h; z++)
@@ -1003,6 +1025,28 @@ namespace BackRooms.World
             }
         }
 
+        /// <summary>
+        /// Trecho mais comprido que a onda percorre, em luminárias. No andar de 14 x 12 os trechos retos
+        /// tinham 6, 8 ou 10; no de 16 x 14 (23/11/2026) os lados do anel chegam a 12 e o trecho maior se
+        /// divide em dois: a cascata, o escuro de onde fugir e a distância da ponta (onde o Zelador
+        /// nasce) ficam como eram, e o andar maior ganha trechos (e interruptores, um por trecho).
+        /// </summary>
+        public const int MaxWaveRun = 10;
+        const int MinWaveRun = 5;
+
+        static void AddRun(List<CeilingLight[]> runs, List<CeilingLight> lamps)
+        {
+            if (lamps.Count < MinWaveRun) return;
+            if (lamps.Count <= MaxWaveRun || lamps.Count < MinWaveRun * 2)
+            {
+                runs.Add(lamps.ToArray());
+                return;
+            }
+            int half = (lamps.Count + 1) / 2;
+            runs.Add(lamps.GetRange(0, half).ToArray());
+            runs.Add(lamps.GetRange(half, lamps.Count - half).ToArray());
+        }
+
         void CollectRuns(List<CeilingLight[]> runs, int length, Func<int, (int x, int z)> cellAt)
         {
             var current = new List<CeilingLight>();
@@ -1030,7 +1074,7 @@ namespace BackRooms.World
                     continue;
                 }
 
-                if (current.Count >= 5) runs.Add(current.ToArray());
+                AddRun(runs, current);
                 current.Clear();
                 if (corridor && light != null) current.Add(light);
             }

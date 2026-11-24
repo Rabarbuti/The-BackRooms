@@ -37,6 +37,12 @@ namespace BackRooms.World
                 var switches = root.AddComponent<SwitchObjective>();
                 switches.Place(this, objective, switchBodyMaterial, switchLampMaterial);
             }
+            else if (TryGetComponent(out PropLayer _))
+            {
+                // Level 1 (objetivo do ExitLock): o cartaz de dicas do Capitão na sala inicial, como o
+                // das outras fases. Fora de "Moveis" e sem sorteio: não mexe na mobília nem no hash dela.
+                StartNote.Pin(this, CreateChild("Cartaz").transform, "CartazDeDicas", StartNote.CaptainTips, switchBodyMaterial);
+            }
 
             // Pilhas da lanterna: depois do objetivo (desviam das peças dele), com outro sorteio.
             if (batteriesEnabled) CreateChild("Pilhas").AddComponent<BatteryPickups>().Place(this, switchBodyMaterial);

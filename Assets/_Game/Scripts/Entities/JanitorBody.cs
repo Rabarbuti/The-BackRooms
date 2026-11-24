@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using BackRooms.Net;
+using BackRooms.World;
 using UnityEngine;
 
 namespace BackRooms.Entities
@@ -17,6 +19,14 @@ namespace BackRooms.Entities
     /// código (cápsulas e esferas). A pose sai de <see cref="Pose"/> (pública para a prévia). Aparecer
     /// e sumir: ele sobe do chão (e afunda nele) em vez de piscar na tela; escondido, sem malha e sem
     /// colisor.
+    ///
+    /// Encaixe na fase (<see cref="Fit"/>, em cada máquina, a cada quadro; só visual): o esfregão
+    /// arrastado atrás e de lado sai do raio que o cérebro confere (1,3 m de cabo) e entrava na parede
+    /// rente a ela, virando, no vão de porta e parado na beira da luz. Onde bateria, ele passa a
+    /// arrastá-lo reto atrás (no rastro por onde veio) e, se nem assim cabe, levanta-o em pé ao lado do
+    /// ombro; sem pressa, com folga para começar antes de encostar, e solta devagar. O braço esquerdo
+    /// esticado na caça e a cabeça pendurada para a frente se recolhem do mesmo jeito. Por onde ele anda
+    /// não muda (molde do Undertow: <see cref="UndertowBody.Fit"/>).
     /// </summary>
     public sealed class JanitorBody : MonoBehaviour
     {
@@ -65,6 +75,20 @@ namespace BackRooms.Entities
         const float SpineLength = 0.58f;
         const float NeckLength = 0.2f;
         const float Height = 2.3f;
+        // O cabo do esfregão sai da junta para cima (no local da junta) e a cabeça de tiras fica além da ponta.
+        const float MopLength = 1.3f;
+        const float MopHeadAt = 1.38f;
+        const float MopHeadHalfWidth = 0.15f;
+
+        // Encaixe: a folga que antecipa o recolhimento, os passos tentados e as velocidades.
+        const float FitMargin = 0.18f;
+        const float FitCheckEvery = 0.1f;
+        const int FitSteps = 8;
+        const float FoldRate = 3.5f;
+        const float RelaxRate = 0.7f;
+        const int SpinePart = 0, ArmPart = 1, MopPart = 2;
+        static readonly float[] FitMax = { 1f, 1f, 2f };
+        static readonly RaycastHit[] Hits = new RaycastHit[16];
 
         readonly HashSet<Transform> _live = new HashSet<Transform>();
         readonly Transform[] _thigh = new Transform[2];
@@ -81,6 +105,18 @@ namespace BackRooms.Entities
         Vector3 _lastPosition;
         float _speed, _phase, _shown = 1f, _flinch;
         bool _built, _visible = true;
+
+        // Encaixe na fase: 0 = a pose animada. _upright endireita o tronco (a cabeça vem para trás),
+        // _armFold baixa o braço esquerdo, _mopFold: 0 a 1 o esfregão vai para reto atrás, 1 a 2 levanta.
+        float _upright, _armFold, _mopFold;
+        readonly float[] _fitWant = new float[3];
+        float _fitCheckAt;
+        Quaternion _mopAnimated = Quaternion.identity;
+        float _poseSpeed, _poseStill, _poseFlinch, _poseTime, _posePhase;
+        readonly Vector3[] _chain = new Vector3[5];
+
+        /// <summary>De 0 (a pose: atrás e de lado) a 1 (reto atrás) e 2 (levantado): quanto o esfregão está recolhido agora.</summary>
+        public float MopFold => _mopFold;
 
         void Awake()
         {
@@ -127,6 +163,10 @@ namespace BackRooms.Entities
             float still = Mathf.Clamp01(1f - _speed / 0.3f);
             Pose(_phase, _speed, still, _flinch, Time.time);
             ApplyRise();
+
+            // De pé, confere contra a fase (subindo ou afundando fica como está: metade do corpo está no chão).
+            GameSession session = GameSession.Instance;
+            if (_shown >= 0.99f && session != null && session.level != null) Fit(session.level, dt);
         }
 
         void SetShown(float shown)
@@ -164,6 +204,11 @@ namespace BackRooms.Entities
         public void Pose(float phase, float speed, float still, float flinch, float time)
         {
             if (!_built) Build();
+            _posePhase = phase;
+            _poseSpeed = speed;
+            _poseStill = still;
+            _poseFlinch = flinch;
+            _poseTime = time;
 
             float walk = Mathf.Clamp01(speed / 1.6f);
             float rush = Mathf.Clamp01((speed - 1.6f) / 2.6f);
@@ -178,13 +223,15 @@ namespace BackRooms.Entities
 
             // Curvado sempre; caçando, quase de quatro.
             float lean = 16f + 6f * walk + 22f * rush + breathe * 0.8f;
+            // Encaixe: rente a uma parede, endireita (a cabeça pendurada não entra nela).
+            lean = Mathf.Lerp(lean, 4f, _upright);
             _spine.localRotation = Quaternion.Euler(lean, swing * 6f * walk, 0f);
             _shoulders.localRotation = Quaternion.Euler(8f, 0f, -8f + sway * 2f);
 
             // Pescoço pendurado para a frente, abaixo dos ombros, e a cabeça erguida de volta, torta,
             // com o rosto para quem está na frente dele; correndo, o pescoço estica adiante.
-            _neck.localRotation = Quaternion.Euler(42f - lean * 0.4f - 22f * rush, 0f, 0f);
-            _head.localRotation = Quaternion.Euler(-32f + 8f * rush + sway * 4f, 6f * sway, 22f - 12f * rush + Mathf.Sin(time * 0.31f) * 4f * still);
+            _neck.localRotation = Quaternion.Euler(Mathf.Lerp(42f - lean * 0.4f - 22f * rush, 12f, _upright), 0f, 0f);
+            _head.localRotation = Quaternion.Euler(Mathf.Lerp(-32f + 8f * rush + sway * 4f, -8f, _upright), 6f * sway, 22f - 12f * rush + Mathf.Sin(time * 0.31f) * 4f * still);
             _jaw.localRotation = Quaternion.Euler(10f + 14f * rush + 4f * breathe, 0f, 0f);
 
             // Pernas: arrasta os pés devagar; correndo, passadas compridas e joelho alto.
@@ -205,6 +252,9 @@ namespace BackRooms.Entities
                 float shoulder = 6f - swing * 12f * walk + 55f * rush + 4f * breathe;
                 shoulder = Mathf.Lerp(shoulder, 105f, flinch);
                 float elbow = Mathf.Lerp(10f + 20f * rush, 115f, flinch);
+                // Encaixe: onde a mão esticada bateria, o braço desce junto do corpo.
+                shoulder = Mathf.Lerp(shoulder, 4f, _armFold);
+                elbow = Mathf.Lerp(elbow, 12f, _armFold);
                 _upperArm[1].localRotation = Quaternion.Euler(-shoulder, 0f, -(6f + 4f * sway) - 10f * flinch);
                 _forearm[1].localRotation = Quaternion.Euler(-elbow, 0f, 20f * flinch);
                 _hand[1].localRotation = Quaternion.Euler(-10f - 25f * rush, 0f, 0f);
@@ -221,6 +271,201 @@ namespace BackRooms.Entities
 
             // As chaves balançam com o passo.
             _keys.localRotation = Quaternion.Euler(swing * 18f * walk + Mathf.Sin(time * 2.1f) * 3f, 0f, lift * 10f * walk);
+        }
+
+        // ---------------------------------------------------------------- Encaixe na fase
+
+        /// <summary>
+        /// Encaixa a pose atual na fase: a cabeça pendurada, o braço esquerdo e o esfregão que bateriam
+        /// num colisor fixo da fase (parede, porta, móvel; jogador e inimigos não contam) se recolhem.
+        /// No jogo (<paramref name="dt"/> > 0) começam a recolher com folga, antes de encostar, sem
+        /// pressa, e soltam devagar; o que ainda bateria sobe na hora. Sem dt (as fotos), direto ao que cabe.
+        /// </summary>
+        public void Fit(LevelBuilder level, float dt = 0f)
+        {
+            if (level == null || _rig == null) return;
+            Transform root = level.transform;
+            bool check = dt <= 0f || Time.time >= _fitCheckAt;
+            if (check) _fitCheckAt = Time.time + FitCheckEvery;
+
+            _upright = FitPart(SpinePart, _upright, dt, check, root);
+            _armFold = FitPart(ArmPart, _armFold, dt, check, root);
+            _mopFold = FitPart(MopPart, _mopFold, dt, check, root);
+        }
+
+        /// <summary>Para as fotos: volta à pose animada, sem nada recolhido (o "antes").</summary>
+        public void Unfit()
+        {
+            _upright = _armFold = _mopFold = 0f;
+            for (int i = 0; i < _fitWant.Length; i++) _fitWant[i] = 0f;
+            if (_built) Repose();
+        }
+
+        /// <summary>
+        /// Para as fotos e os testes: as partes (cabeça, braço esquerdo, esfregão) que entram agora em
+        /// colisor fixo da fase. Vazio se nada entra.
+        /// </summary>
+        public void Penetrations(LevelBuilder level, List<string> where)
+        {
+            where.Clear();
+            if (level == null || _rig == null) return;
+            Transform root = level.transform;
+            if (PartBlocked(SpinePart, root, 0f)) where.Add("cabeça");
+            if (PartBlocked(ArmPart, root, 0f)) where.Add("braço esquerdo");
+            if (PartBlocked(MopPart, root, 0f)) where.Add("esfregão");
+        }
+
+        // O menor recolhimento que cabe (com folga, a cada FitCheckEvery), alcançado sem pressa; o que
+        // ainda entraria num colisor sobe na hora, um passo de cada vez.
+        float FitPart(int part, float current, float dt, bool check, Transform root)
+        {
+            float max = FitMax[part];
+            if (check)
+            {
+                float want = max;
+                for (int k = 0; k <= FitSteps; k++)
+                {
+                    float t = max * k / FitSteps;
+                    SetFold(part, t);
+                    if (PartBlocked(part, root, dt > 0f ? FitMargin : 0f)) continue;
+                    want = t;
+                    break;
+                }
+                _fitWant[part] = want;
+            }
+
+            float target = _fitWant[part];
+            float next = dt > 0f ? Mathf.MoveTowards(current, target, (target > current ? FoldRate : RelaxRate) * dt) : target;
+            SetFold(part, next);
+            while (next < max && PartBlocked(part, root, 0f))
+            {
+                next = Mathf.Min(max, next + max / FitSteps);
+                SetFold(part, next);
+            }
+            return next;
+        }
+
+        void SetFold(int part, float t)
+        {
+            switch (part)
+            {
+                case SpinePart: _upright = t; Repose(); break;
+                case ArmPart: _armFold = t; Repose(); break;
+                default: SetMop(t); break;
+            }
+        }
+
+        // Refaz a pose com os mesmos valores (e o novo recolhimento) e guarda o esfregão animado.
+        void Repose()
+        {
+            Pose(_posePhase, _poseSpeed, _poseStill, _poseFlinch, _poseTime);
+            _mopAnimated = _mop.rotation;
+        }
+
+        // O esfregão: 0 = como a pose o deixa (atrás e de lado), 1 = reto atrás, 2 = em pé ao lado do ombro.
+        void SetMop(float t)
+        {
+            Quaternion animated = _mopAnimated;
+            if (t <= 0f)
+            {
+                _mop.rotation = animated;
+                return;
+            }
+            Vector3 from = animated * Vector3.up;
+            Vector3 behind = MopBehind();
+            Vector3 to = t <= 1f ? Vector3.Slerp(from, behind, t) : Vector3.Slerp(behind, MopRaised(), t - 1f);
+            _mop.rotation = Quaternion.FromToRotation(from, to) * animated;
+        }
+
+        // O cabo reto para trás, a cabeça de tiras no chão no meio do rastro dele (por onde veio).
+        Vector3 MopBehind()
+        {
+            Vector3 forward = Flat(transform.forward).normalized;
+            Vector3 right = Vector3.Cross(Vector3.up, forward);
+            Vector3 grip = _mop.position;
+            float lateral = Vector3.Dot(grip - transform.position, right);
+            float drop = Mathf.Max(0.05f, grip.y - transform.position.y - 0.05f);
+            float reach = Mathf.Sqrt(Mathf.Max(0f, MopHeadAt * MopHeadAt - drop * drop));
+            float back = Mathf.Sqrt(Mathf.Max(0.01f, reach * reach - lateral * lateral));
+            return (-forward * back - right * lateral + Vector3.down * drop).normalized;
+        }
+
+        // O cabo em pé, um pouco para trás e para dentro: a cabeça de tiras acima do ombro direito.
+        Vector3 MopRaised()
+        {
+            Vector3 forward = Flat(transform.forward).normalized;
+            Vector3 right = Vector3.Cross(Vector3.up, forward);
+            return (Vector3.up * 0.97f - forward * 0.12f - right * 0.15f).normalized;
+        }
+
+        // A parte bateria em colisor da fase? A folga estica a ponta (começa a recolher antes de encostar).
+        bool PartBlocked(int part, Transform root, float margin)
+        {
+            if (part == MopPart) return MopBlocked(root, margin);
+            if (part == SpinePart)
+            {
+                _chain[0] = _pelvis.position;
+                _chain[1] = _shoulders.position;
+                _chain[2] = _head.position;
+                _chain[3] = _head.TransformPoint(0f, 0.1f, 0.15f);
+            }
+            else
+            {
+                _chain[0] = _upperArm[1].position;
+                _chain[1] = _forearm[1].position;
+                _chain[2] = _hand[1].position;
+                _chain[3] = _hand[1].TransformPoint(0f, -0.22f, 0f);
+            }
+            if (margin > 0f)
+            {
+                Vector3 d = _chain[3] - _chain[2];
+                if (d.sqrMagnitude > 1e-6f) _chain[3] += d.normalized * margin;
+            }
+            for (int k = 0; k < 3; k++)
+                if (SegmentHits(root, _chain[k], _chain[k + 1])) return true;
+            return false;
+        }
+
+        // O cabo (da mão à cabeça de tiras) e a cabeça: a ponta e os dois lados. Arrastada no chão, a
+        // cabeça é conferida um palmo acima dele (o raio não pode achar o piso).
+        bool MopBlocked(Transform root, float margin)
+        {
+            Vector3 grip = _mop.position;
+            Vector3 along = _mop.up;
+            Vector3 head = grip + along * MopHeadAt;
+            float floor = transform.position.y + 0.2f;
+            if (head.y < floor) head.y = floor;
+            Vector3 flat = Flat(along);
+            bool lying = flat.sqrMagnitude > 0.01f;
+            Vector3 outward = lying ? flat.normalized : along;
+            Vector3 side = lying ? Vector3.Cross(Vector3.up, outward) : transform.right;
+            float wide = MopHeadHalfWidth + margin;
+            return SegmentHits(root, grip, head) ||
+                   SegmentHits(root, head, head + outward * (0.14f + margin)) ||
+                   SegmentHits(root, head, head + side * wide) ||
+                   SegmentHits(root, head, head - side * wide);
+        }
+
+        // O trecho encosta em colisor da fase? Nos dois sentidos: o raio não acha a face de quem começa dentro.
+        static bool SegmentHits(Transform root, Vector3 a, Vector3 b)
+        {
+            Vector3 d = b - a;
+            float length = d.magnitude;
+            if (length <= 0.001f) return false;
+            Vector3 dir = d / length;
+            int count = Physics.RaycastNonAlloc(a, dir, Hits, length, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+                if (Hits[i].collider.transform.IsChildOf(root)) return true;
+            count = Physics.RaycastNonAlloc(b, -dir, Hits, length, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+                if (Hits[i].collider.transform.IsChildOf(root)) return true;
+            return false;
+        }
+
+        static Vector3 Flat(Vector3 v)
+        {
+            v.y = 0f;
+            return v;
         }
 
         // ---------------------------------------------------------------- Montagem
