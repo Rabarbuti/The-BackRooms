@@ -95,12 +95,7 @@ namespace BackRooms.World
         const string BreakerKey = "switch on a breaker";
         const string ValveKey = "turn a valve";
         const string AlarmKey = "pull a fire alarm";
-        // Cartaz de dicas da sala inicial (PixelFont: só A-Z, 0-9 e : . , / - = ( ); até 21 letras, 5 linhas).
-        static readonly string[] BreakerTips = { "TIPS", "FOLLOW THE HUM", "NEVER RUN NEAR IT", "THIS ROOM IS SAFE", "ESC: TASKS" };
-        static readonly string[] ValveTips = { "TIPS", "MARK THE SHALLOWS", "STAY OFF THE DRAINS", "HOLD SPACE TO FLOAT", "ESC: TASKS" };
-        static readonly string[] AlarmTips = { "TIPS", "3 ALARMS, IN ROOMS", "HIDE IN A SMALL ROOM", "WITH THE LIGHT ON", "ESC: TASKS" };
-        // Sem três salas que sirvam, os alarmes voltam aos corredores e o cartaz é o antigo.
-        static readonly string[] AlarmTipsCorridor = { "TIPS", "HIDE IN A SMALL ROOM", "WITH THE LIGHT ON", "CROUCH TO STAY QUIET", "ESC: TASKS" };
+        // O cartaz de dicas da sala inicial (sobre o monstro da fase) tem os textos no StartNote.
 
         /// <summary>O objetivo da fase aberta; nulo onde a fase não tem (Level 1 usa o <see cref="ExitLock"/>).</summary>
         public static SwitchObjective Instance { get; private set; }
@@ -196,13 +191,16 @@ namespace BackRooms.World
         /// <summary>Onde ficou a segunda válvula (só nas Piscinas; Dry se ficaram as duas no seco).</summary>
         public WaterValveSpot WaterSpot { get; private set; } = WaterValveSpot.Dry;
 
-        static readonly WallSide[] Sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
+        internal static readonly WallSide[] Sides = { WallSide.South, WallSide.North, WallSide.West, WallSide.East };
         static readonly int UnlitColorId = Shader.PropertyToID("_UnlitColor");
 
         sealed class Point
         {
             public Transform Root;
             public Transform Lever;
+            // Giro da alavanca em X (graus): desligada e armada.
+            public float LeverOff = -35f;
+            public float LeverOn = 35f;
             public Renderer Lamp;
             public AudioSource Hum;
             public AudioSource Voice;
@@ -229,6 +227,10 @@ namespace BackRooms.World
         }
 
         readonly List<Point> _points = new List<Point>();
+        // O disjuntor da Tripo (LevelBuilder.switchBreaker*); nulo = a caixa de peças primitivas.
+        Mesh _breakerBox, _breakerHandle;
+        Material _breakerMaterial;
+        Vector3 _breakerPivot;
         InputAction _use;
         MaterialPropertyBlock _block;
         AudioClip _humClip, _clickClip, _doneClip, _alarmClip;
@@ -282,6 +284,10 @@ namespace BackRooms.World
             Kind = kind;
             if (Application.isPlaying) Instance = this;
             LevelData data = level.Data;
+            _breakerBox = level.switchBreakerBox;
+            _breakerHandle = level.switchBreakerHandle;
+            _breakerMaterial = level.switchBreakerMaterial;
+            _breakerPivot = level.switchBreakerPivot;
             int count, spacing, fromStart;
             float height;
             switch (kind)
@@ -292,7 +298,9 @@ namespace BackRooms.World
                     break;
                 case SwitchKind.FireAlarm:
                     // Os três valem (RequiredFor); em grupo, a janela tem de dar para três salas longe.
-                    count = 3; spacing = 6; fromStart = 4; height = 1.35f;
+                    // spacing 6 até 23/11/2026 (andar de 14 x 12); no de 16 x 14, 7 (as distâncias
+                    // crescem ~16%; o sorteio afrouxa sozinho se a planta não der).
+                    count = 3; spacing = 7; fromStart = 4; height = 1.35f;
                     HoldSeconds = 2f; WindowSeconds = 20f;
                     break;
                 default:
@@ -424,85 +432,27 @@ namespace BackRooms.World
             PinNote(level, bodyTemplate);
         }
 
-        /// <summary>O bilhete de ensino da sala inicial (Etapa 6 do plano), ou nulo se não coube.</summary>
+        /// <summary>O cartaz de dicas da sala inicial (<see cref="StartNote"/>), ou nulo se não coube.</summary>
         public Transform Note { get; private set; }
 
-        // As linhas do cartaz: dicas curtas de sobrevivência da fase (o que fazer está no menu de
-        // pausa, Esc). Até 21 letras por linha.
+        // As linhas do cartaz: dicas sobre o monstro da fase (o que fazer está no menu de pausa, Esc).
         string[] NoteLines()
         {
             switch (Kind)
             {
-                case SwitchKind.Valve: return ValveTips;
-                case SwitchKind.FireAlarm: return AlarmsInRooms ? AlarmTips : AlarmTipsCorridor;
-                default: return BreakerTips;
+                case SwitchKind.Valve: return StartNote.UndertowTips;
+                case SwitchKind.FireAlarm: return StartNote.OfficeTips;
+                default: return StartNote.EntityTips;
             }
         }
-
-        /// <summary>O desenho do cartaz (128 x 64 pontos): até 5 linhas centradas, tinta azul no papel.</summary>
-        public static Texture2D NoteTexture(string[] lines)
-        {
-            const int w = 128, h = 64;
-            var pixels = new Color32[w * h];
-            var paper = new Color32(236, 228, 196, 255);
-            var ink = new Color32(30, 34, 90, 255);
-            for (int i = 0; i < pixels.Length; i++) pixels[i] = paper;
-            for (int i = 0; i < lines.Length; i++)
-                PixelFont.Draw(pixels, w, h, (w - PixelFont.Measure(lines[i], 1)) / 2, 5 + i * 11, lines[i], 1, ink);
-            var texture = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, name = "BilheteEnsino" };
-            texture.SetPixels32(pixels);
-            texture.Apply(false);
-            return texture;
-        }
-
-        /// <summary>As linhas dos cartazes das três fases (para as fotos de conferência).</summary>
-        public static string[][] AllTips => new[] { BreakerTips, ValveTips, AlarmTips };
 
         /// <summary>As linhas do cartaz de dicas da sala inicial (para os testes).</summary>
         public string[] NoteText => (string[])NoteLines().Clone();
 
-        // Prega o bilhete na primeira parede lisa em volta do meio da sala inicial (ordem fixa: igual
-        // em todas as máquinas). Sem colisor: "Placa" é enfeite para o Level0ColliderCheck.
         void PinNote(LevelBuilder level, Material template)
         {
-            LevelData data = level.Data;
-            // Uma parede fechada de alguma célula da sala inicial, em ordem fixa (z, x, lado).
-            for (int z = data.RoomZ0; z < data.RoomZ0 + Mathf.Max(1, data.RoomHeight); z++)
-            for (int x = data.RoomX0; x < data.RoomX0 + Mathf.Max(1, data.RoomWidth); x++)
-            foreach (WallSide wall in Sides)
-            {
-                if (x < 0 || z < 0 || x >= data.Width || z >= data.Height || !data.HasWall(x, z, wall)) continue;
-                Vector3 dir = level.transform.TransformDirection(SideDirection(wall));
-                Vector3 center = level.CellCenter(x, z) + Vector3.up * 1.4f;
-                if (!Physics.Raycast(center, dir, out RaycastHit hit, LevelBuilder.Cell * 0.5f + 0.4f, ~0, QueryTriggerInteraction.Ignore)) continue;
-                if (Vector3.Dot(hit.normal, -dir) < 0.97f) continue;
-                Vector3 side = Vector3.Cross(Vector3.up, hit.normal).normalized;
-                bool flat = true;
-                for (int s = -1; s <= 1; s += 2)
-                    if (!Physics.Raycast(center + side * (0.3f * s), dir, out RaycastHit other, hit.distance + 0.3f, ~0, QueryTriggerInteraction.Ignore) ||
-                        Mathf.Abs(other.distance - hit.distance) > 0.03f) flat = false;
-                if (!flat) continue;
-
-                Texture2D texture = NoteTexture(NoteLines());
-
-                var root = new GameObject("Bilhete");
-                root.transform.SetParent(transform, false);
-                root.transform.SetPositionAndRotation(hit.point + hit.normal * 0.012f, Quaternion.LookRotation(-hit.normal, Vector3.up));
-                var card = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                card.name = "Placa";
-                Collider c = card.GetComponent<Collider>();
-                if (Application.isPlaying) Destroy(c); else DestroyImmediate(c);
-                card.transform.SetParent(root.transform, false);
-                card.transform.localScale = new Vector3(0.48f, 0.24f, 1f);
-                Material material = Tinted(template, Color.white, 0.2f);
-                material.name = "BilheteEnsino";
-                material.SetTexture("_BaseColorMap", texture);
-                var renderer = card.GetComponent<MeshRenderer>();
-                renderer.sharedMaterial = material;
-                renderer.shadowCastingMode = ShadowCastingMode.Off;
-                Note = root.transform;
-                return;
-            }
+            StartNote note = StartNote.Pin(level, transform, "Bilhete", NoteLines(), template);
+            Note = note != null ? note.transform : null;
         }
 
         /// <summary>Um número que muda se qualquer ponto mudar de lugar (para comparar máquinas).</summary>
@@ -582,7 +532,7 @@ namespace BackRooms.World
             }
         }
 
-        static Vector3 SideDirection(WallSide side)
+        internal static Vector3 SideDirection(WallSide side)
         {
             switch (side)
             {
@@ -633,7 +583,7 @@ namespace BackRooms.World
 
         // Quem entra depois monta a fase com os outros já andando (ou boiando na frente da válvula):
         // os raios da montagem ignoram jogadores, senão a parede escolhida mudaria só naquela máquina.
-        static bool WallRay(Vector3 origin, Vector3 direction, float distance, out RaycastHit hit)
+        internal static bool WallRay(Vector3 origin, Vector3 direction, float distance, out RaycastHit hit)
         {
             hit = default;
             int n = Physics.RaycastNonAlloc(origin, direction, PlaceHits, distance, ~0, QueryTriggerInteraction.Ignore);
@@ -691,9 +641,10 @@ namespace BackRooms.World
 
         // ---------------------------------------------------------------- Montagem: os alarmes do Escritório
 
-        // Distância mínima, em passos de célula, da cabine de chegada e da boca da escada.
-        const int AlarmFromCab = 5;
-        const int AlarmFromStairs = 4;
+        // Distância mínima, em passos de célula, da cabine de chegada e da boca da escada (5 e 4 até
+        // 23/11/2026, no andar de 14 x 12; crescem com as distâncias do andar de 16 x 14).
+        const int AlarmFromCab = 6;
+        const int AlarmFromStairs = 5;
         // Altura dos olhos de quem olha da porta (e de dentro da sala).
         const float AlarmEyeHeight = 1.6f;
 
@@ -1230,6 +1181,12 @@ namespace BackRooms.World
                 }
                 default:
                 {
+                    if (_breakerBox != null && _breakerHandle != null && _breakerMaterial != null)
+                    {
+                        MountModeledBreaker(p, grey);
+                        break;
+                    }
+
                     // Caixa de disjuntor cinza, faixa amarela, a alavanca e a lâmpada em cima.
                     Box(root.transform, "Caixa", new Vector3(0f, 0f, 0.07f), new Vector3(0.44f, 0.6f, 0.14f), grey);
                     Box(root.transform, "Faixa", new Vector3(0f, 0.22f, 0.142f), new Vector3(0.36f, 0.06f, 0.004f), yellow);
@@ -1261,6 +1218,47 @@ namespace BackRooms.World
             return p;
         }
 
+        // O disjuntor da Tripo: caixa de ferro com alça de puxar. O modelo tem a frente para -Z e o
+        // ponto, para +Z: vai num filho girado meia volta. A caixa tem o colisor da própria malha; a
+        // alça (sem colisor, na lista do Level0ColliderCheck) gira em X de pendurada (desligado) a
+        // erguida (armado). O eletroduto e a lâmpada continuam peças primitivas.
+        void MountModeledBreaker(Point p, Material grey)
+        {
+            var model = new GameObject("Modelo").transform;
+            model.SetParent(p.Root, false);
+            model.localRotation = Quaternion.Euler(0f, 180f, 0f);
+
+            var shell = new GameObject("CaixaDoDisjuntor");
+            shell.transform.SetParent(model, false);
+            shell.AddComponent<MeshFilter>().sharedMesh = _breakerBox;
+            shell.AddComponent<MeshRenderer>().sharedMaterial = _breakerMaterial;
+            shell.AddComponent<MeshCollider>().sharedMesh = _breakerBox;
+
+            var pivot = new GameObject("EixoDaAlca").transform;
+            pivot.SetParent(model, false);
+            pivot.localPosition = _breakerPivot;
+            var handle = new GameObject("AlcaDoDisjuntor");
+            handle.transform.SetParent(pivot, false);
+            handle.AddComponent<MeshFilter>().sharedMesh = _breakerHandle;
+            handle.AddComponent<MeshRenderer>().sharedMaterial = _breakerMaterial;
+            p.Lever = pivot;
+            p.LeverOff = 0f;
+            p.LeverOn = 95f;
+
+            Bounds b = _breakerBox.bounds;
+            float top = b.max.y, front = -b.min.z;
+            Box(p.Root, "Conduite", new Vector3(0.12f, top + 0.65f, 0.04f), new Vector3(0.06f, 1.3f, 0.06f), grey);
+            // Na moldura, no canto de cima do lado oposto ao da alça.
+            p.Lamp = Box(p.Root, "Lampada", new Vector3(b.max.x - 0.05f, top - 0.045f, front + 0.012f),
+                         new Vector3(0.04f, 0.04f, 0.024f), null).GetComponent<Renderer>();
+        }
+
+        /// <summary>Para a prévia (fora do Play): põe a alavanca do ponto <paramref name="i"/> em t (0 desligado, 1 armado).</summary>
+        public void ShowLever(int i, float t)
+        {
+            if (i >= 0 && i < _points.Count) SetLever(_points[i], t);
+        }
+
         static Transform Box(Transform parent, string name, Vector3 position, Vector3 size, Material material)
         {
             // A caixa primitiva: colisor e malha do mesmo tamanho (nascem juntos).
@@ -1275,7 +1273,7 @@ namespace BackRooms.World
             return box.transform;
         }
 
-        static Material Tinted(Material template, Color color, float smoothness)
+        internal static Material Tinted(Material template, Color color, float smoothness)
         {
             Material material = template != null ? new Material(template) : new Material(Shader.Find("HDRP/Lit"));
             material.name = "Objetivo";
@@ -1689,8 +1687,9 @@ namespace BackRooms.World
         static void SetLever(Point p, float t)
         {
             if (p.Lever == null) return;
-            // Alavanca para cima (desligado) e para baixo (ligado); o puxador do alarme desce.
-            p.Lever.localRotation = Quaternion.Euler(Mathf.Lerp(-35f, 35f, t), 0f, 0f);
+            // Alavanca para cima (desligado) e para baixo (ligado); o puxador do alarme desce; a alça do
+            // disjuntor da Tripo sobe.
+            p.Lever.localRotation = Quaternion.Euler(Mathf.Lerp(p.LeverOff, p.LeverOn, t), 0f, 0f);
         }
 
         void Play(Point p, AudioClip clip, float volume)
@@ -1733,15 +1732,30 @@ namespace BackRooms.World
             }
             _humClip = Clip("Zumbido_" + Kind, hum, rate);
 
-            // Clique da alavanca (ou rangido da roda).
+            // Clique da alavanca (ou a roda da válvula raspando). A roda era um seno com a frequência
+            // dentro da fase, sin(2π·(520 + 180·sen 30t)·t), que na verdade saltava de 60 Hz a 1,7 kHz
+            // em 0,35 s e soava como um pato de borracha a cada meia volta (23/11/2026). Agora é metal
+            // raspando: ruído na faixa média, picotado pelos trancos da rosca, sem altura definida.
             int c = (int)(rate * (Kind == SwitchKind.Valve ? 0.35f : 0.06f));
             var click = new float[c];
+            float scrapeLow = 0f, scrapeBase = 0f;
             for (int i = 0; i < c; i++)
             {
                 float t = i / (float)rate;
                 float env = Mathf.Exp(-t * (Kind == SwitchKind.Valve ? 9f : 70f));
-                float tone = Kind == SwitchKind.Valve ? Mathf.Sin(2f * Mathf.PI * (520f + 180f * Mathf.Sin(t * 30f)) * t) : Mathf.Sin(2f * Mathf.PI * 1800f * t);
-                click[i] = (tone * 0.5f + (float)(rng.NextDouble() * 2.0 - 1.0) * 0.5f) * env * 0.8f;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                if (Kind == SwitchKind.Valve)
+                {
+                    scrapeLow += (noise - scrapeLow) * 0.35f;         // corta acima de ~3 kHz
+                    scrapeBase += (scrapeLow - scrapeBase) * 0.06f;   // e abaixo de ~400 Hz
+                    float tick = Mathf.Pow(1f - (t * 26f - Mathf.Floor(t * 26f)), 6f);
+                    click[i] = (scrapeLow - scrapeBase) * (0.35f + 0.65f * tick) * env * 2.2f;
+                }
+                else
+                {
+                    float tone = Mathf.Sin(2f * Mathf.PI * 1800f * t);
+                    click[i] = (tone * 0.5f + noise * 0.5f) * env * 0.8f;
+                }
             }
             _clickClip = Clip("Clique_" + Kind, click, rate);
 

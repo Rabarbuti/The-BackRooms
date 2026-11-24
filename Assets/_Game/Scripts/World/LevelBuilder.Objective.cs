@@ -15,6 +15,14 @@ namespace BackRooms.World
         public Material switchBodyMaterial;
         [Tooltip("Lâmpada das peças do objetivo (sem luz; a cor vem de um MaterialPropertyBlock).")]
         public Material switchLampMaterial;
+        [Tooltip("Disjuntor da Tripo (ImportedModels.EnsureLever): a caixa, com o centro em Y = 0, o fundo em Z = 0 e a frente " +
+                 "para -Z. Vazio = a caixa de peças primitivas.")]
+        public Mesh switchBreakerBox;
+        [Tooltip("A alça do disjuntor da Tripo, com a origem no eixo de giro; girada 0° é desligada (pendurada).")]
+        public Mesh switchBreakerHandle;
+        public Material switchBreakerMaterial;
+        [Tooltip("Eixo de giro da alça, no espaço da caixa do modelo.")]
+        public Vector3 switchBreakerPivot;
         [Tooltip("Pilhas da lanterna espalhadas pelo chão (P0.3), com sorteio próprio.")]
         public bool batteriesEnabled;
         [Tooltip("Válvulas (Level 2): onde fica a segunda. AcrossWater = numa ilha ou na parede sobre a funda (só se chega nadando); WellBottom = no fundo de um poço que não é o covil (o passo seguinte, se ainda ficar fácil); Dry = as duas no seco, como até 21/11/2026.")]
@@ -28,6 +36,12 @@ namespace BackRooms.World
                 GameObject root = CreateChild("Objetivo");
                 var switches = root.AddComponent<SwitchObjective>();
                 switches.Place(this, objective, switchBodyMaterial, switchLampMaterial);
+            }
+            else if (TryGetComponent(out PropLayer _))
+            {
+                // Level 1 (objetivo do ExitLock): o cartaz de dicas do Capitão na sala inicial, como o
+                // das outras fases. Fora de "Moveis" e sem sorteio: não mexe na mobília nem no hash dela.
+                StartNote.Pin(this, CreateChild("Cartaz").transform, "CartazDeDicas", StartNote.CaptainTips, switchBodyMaterial);
             }
 
             // Pilhas da lanterna: depois do objetivo (desviam das peças dele), com outro sorteio.

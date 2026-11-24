@@ -110,6 +110,17 @@ namespace BackRooms.World
             LockerDoor locker = root.AddComponent<LockerDoor>();
             locker.Init(x, z, back * (center - hinge));
             _ok.LockerDoors.Add(locker);
+
+            // Fechada (quase sempre), a porta é desenhada pelas duas malhas de todas as portas soltas.
+            if (_ok.LockerLeaves == null)
+            {
+                _ok.LockerLeaves = OfficeFused("FolhasFechadas", office.lockerYellow, ShadowCastingMode.On, _ok.Lockers);
+                _ok.LockerHandles = OfficeFused("PuxadoresFechados", office.darkMetal, ShadowCastingMode.Off, _ok.Lockers);
+            }
+            Matrix4x4 place = Matrix4x4.TRS(hinge, turn, Vector3.one);
+            int item = _ok.LockerLeaves.Add(_ok.LockerLeafMesh, place * Matrix4x4.Translate(leaf.transform.localPosition));
+            _ok.LockerHandles.Add(_ok.LockerHandleMesh, place * Matrix4x4.Translate(handle.transform.localPosition));
+            locker.UseFused(_ok.LockerLeaves, _ok.LockerHandles, item, new Renderer[] { leaf, handle });
         }
 
         // Quadros elétricos, extintores e câmeras de segurança.
@@ -262,25 +273,51 @@ namespace BackRooms.World
             }
 
             Quaternion facing = Quaternion.LookRotation(face, Vector3.up);
-            Vector3 tableSize = Abs(side) * 1.6f + Abs(face) * 0.7f + Vector3.up * 0.75f;
+            const float tableWide = 1.3f, rowDeep = 1.35f;
+            Vector3 tableSize = Abs(side) * tableWide + Abs(face) * 0.7f + Vector3.up * 0.75f;
 
-            for (float d = 2.6f; d < length - 2.2f; d += 1.85f)
+            // Os inimigos andam de centro de célula em centro de célula (LevelNav): as faixas entre
+            // os centros ficam livres, e as mesas vão em blocos entre elas (LaneGap de cada lado).
+            // Em cada bloco, fileiras de mesa + cadeira de frente para o quadro.
+            float sign = Vector3.Dot(face, Vector3.one);
+            int longCell = longX ? room.X0 : room.Z0, longCells = longX ? room.Width : room.Height;
+            int shortCell = longX ? room.Z0 : room.X0, shortCells = longX ? room.Height : room.Width;
+            float firstLane = float.MaxValue;
+
+            foreach ((float a, float b) depth in FreeBands(longMin, longMax, longCell, longCells))
             {
-                int tables = Mathf.FloorToInt((width - 2.2f) / 1.6f);
-                float first = -tables * 0.8f + 0.8f;
-                for (int t = 0; t < tables; t++)
+                // Em distância a partir da parede do quadro.
+                float d0 = Mathf.Min((frontLong - depth.a) * sign, (frontLong - depth.b) * sign);
+                float d1 = Mathf.Max((frontLong - depth.a) * sign, (frontLong - depth.b) * sign);
+                if (d0 > 0.5f) firstLane = Mathf.Min(firstLane, d0 - LaneGap);
+
+                int rows = Mathf.FloorToInt((d1 - d0 + 0.001f) / rowDeep);
+                float rowStart = (d0 + d1) * 0.5f - rows * rowDeep * 0.5f;
+                for (int r = 0; r < rows; r++)
                 {
-                    Vector3 p = Point(d, first + t * 1.6f);
-                    Table(p, tableSize, office.frameWhite);
-                    foreach (float k in new[] { -0.4f, 0.4f })
+                    float d = rowStart + r * rowDeep;
+                    // A frente da sala (quadro, tela, mesa do professor) e o fundo ficam livres.
+                    if (d < 2.3f || d + rowDeep > length - 0.4f) continue;
+
+                    foreach ((float a, float b) across in FreeBands(shortMin, shortMax, shortCell, shortCells))
                     {
-                        if (rng.NextDouble() < 0.12) continue;
-                        float yaw = rng.NextDouble() < 0.15 ? (float)(rng.NextDouble() * 140.0 - 70.0) : (float)(rng.NextDouble() * 16.0 - 8.0);
-                        Vector3 seat = p - face * (0.7f + (float)rng.NextDouble() * 0.15f) + side * k;
-                        Quaternion turn = facing * Quaternion.Euler(0f, yaw, 0f);
-                        Collider chair = Chair(seat, turn, true);
-                        // Carteira: senta-se nela de frente para a lousa, mesmo na cadeira torta (ClassroomSeats).
-                        if (_officeSeats != null) _officeSeats.Add(new ClassroomSeats.Seat { Feet = seat, Yaw = facing.eulerAngles.y, Collider = chair });
+                        int tables = Mathf.FloorToInt((across.b - across.a + 0.001f) / tableWide);
+                        float first = (across.a + across.b) * 0.5f - shortMid - (tables - 1) * tableWide * 0.5f;
+                        for (int t = 0; t < tables; t++)
+                        {
+                            Vector3 p = Point(d + 0.35f, first + t * tableWide);
+                            Table(p, tableSize, office.frameWhite);
+                            foreach (float k in new[] { -0.33f, 0.33f })
+                            {
+                                if (rng.NextDouble() < 0.12) continue;
+                                float yaw = rng.NextDouble() < 0.15 ? (float)(rng.NextDouble() * 140.0 - 70.0) : (float)(rng.NextDouble() * 16.0 - 8.0);
+                                Vector3 seat = p - face * 0.7f + side * k;
+                                Quaternion turn = facing * Quaternion.Euler(0f, yaw, 0f);
+                                Collider chair = Chair(seat, turn, true);
+                                // Carteira: senta-se nela de frente para a lousa, mesmo na cadeira torta (ClassroomSeats).
+                                if (_officeSeats != null) _officeSeats.Add(new ClassroomSeats.Seat { Feet = seat, Yaw = facing.eulerAngles.y, Collider = chair });
+                            }
+                        }
                     }
                 }
             }
@@ -306,7 +343,37 @@ namespace BackRooms.World
             Vector3 projector = Point(Mathf.Min(3.2f, length * 0.4f), 0f) + Vector3.up * (OfficeRoomCeiling - 0.32f);
             OBox(office.frameWhite, projector, new Vector3(0.38f, 0.14f, 0.32f));
             OBox(office.steel, projector + Vector3.up * 0.25f, new Vector3(0.04f, 0.36f, 0.04f));
-            Table(Point(1.3f, width * 0.25f), Abs(side) * 1.4f + Abs(face) * 0.7f + Vector3.up * 0.75f, office.frameWhite);
+            // Mesa do professor: antes da primeira faixa que cruza a sala, no meio do bloco livre
+            // mais perto de um quarto da largura.
+            float deskDepth = Mathf.Min(1.3f, firstLane - LaneGap - 0.37f);
+            float deskSide = float.MaxValue;
+            foreach ((float a, float b) across in FreeBands(shortMin, shortMax, shortCell, shortCells))
+            {
+                if (across.b - across.a < 1.4f) continue;
+                float mid = (across.a + across.b) * 0.5f - shortMid;
+                if (Mathf.Abs(mid - width * 0.25f) < Mathf.Abs(deskSide - width * 0.25f)) deskSide = mid;
+            }
+            if (deskDepth > 0.4f && deskSide < float.MaxValue)
+                Table(Point(deskDepth, deskSide), Abs(side) * 1.4f + Abs(face) * 0.7f + Vector3.up * 0.75f, office.frameWhite);
+        }
+
+        /// <summary>Meia largura da faixa livre entre os centros de duas células, onde os inimigos andam.</summary>
+        const float LaneGap = 0.6f;
+
+        // Os trechos de um eixo da sala (de min a max, em metros da fase) que não cruzam nenhuma
+        // faixa de centro de célula: a beirada até a primeira faixa, entre faixas e depois da última.
+        static List<(float a, float b)> FreeBands(float min, float max, int firstCell, int cells)
+        {
+            var bands = new List<(float a, float b)>();
+            float from = min;
+            for (int i = 0; i < cells; i++)
+            {
+                float lane = (firstCell + i + 0.5f) * Cell;
+                if (lane - LaneGap > from) bands.Add((from, lane - LaneGap));
+                from = lane + LaneGap;
+            }
+            if (max > from) bands.Add((from, max));
+            return bands;
         }
 
         /// <summary>Todas as divisas daquele lado da sala são parede lisa ou janela.</summary>
@@ -872,11 +939,12 @@ namespace BackRooms.World
             AtBox(office.baseboard, u0, c - h - 0.06f, face - 0.012f, face, 0f, 0.09f, false);
             AtBox(office.baseboard, c + h + 0.06f, u1, face - 0.012f, face, 0f, 0.09f, false);
 
-            // Batente branco dos dois lados, como em DoorFrame.
-            float d = T * 0.5f + 0.02f;
-            AtBox(office.frameWhite, c - h - 0.06f, c - h, -d, d, 0f, OfficeDoorTop + 0.06f, false);
-            AtBox(office.frameWhite, c + h, c + h + 0.06f, -d, d, 0f, OfficeDoorTop + 0.06f, false);
-            AtBox(office.frameWhite, c - h - 0.06f, c + h + 0.06f, -d, d, OfficeDoorTop, OfficeDoorTop + 0.06f, false);
+            // Batente branco dos dois lados, como em DoorFrame (um pouco para dentro do vão: no mesmo
+            // plano da parede, os dois brigavam).
+            float d = T * 0.5f + 0.02f, inset = DoorFrameInset;
+            AtBox(office.frameWhite, c - h - 0.06f, c - h + inset, -d, d, 0f, OfficeDoorTop + 0.06f, false);
+            AtBox(office.frameWhite, c + h - inset, c + h + 0.06f, -d, d, 0f, OfficeDoorTop + 0.06f, false);
+            AtBox(office.frameWhite, c - h - 0.06f, c + h + 0.06f, -d, d, OfficeDoorTop - inset, OfficeDoorTop + 0.06f, false);
 
             // Folha aberta a 90°, para dentro, presa no batente do lado do vão: fica entre o caminho
             // da escada e o guarda-corpo do patamar.

@@ -119,6 +119,10 @@ namespace BackRooms.World
             public readonly List<LockerDoor> LockerDoors = new List<LockerDoor>();
             public Transform Lockers;
             public Mesh TubeMesh, PanelMesh, DomeMesh, SpotsMesh, LeafMesh, LockerLeafMesh, LockerHandleMesh, ButtonMesh;
+            /// <summary>Difusores das luminárias: uma malha das acesas e uma das apagadas por tipo.</summary>
+            public FusedMesh TubeOn, TubeOff, PanelOn, PanelOff, DomeOn, DomeOff;
+            /// <summary>As portas de armário soltas enquanto fechadas (folhas e puxadores).</summary>
+            public FusedMesh LockerLeaves, LockerHandles;
         }
 
         OfficeKit _ok;
@@ -140,6 +144,8 @@ namespace BackRooms.World
             foreach (LightState state in Data.Lights)
                 if (state == LightState.On || state == LightState.Flicker) lit++;
             _ok.ShadowResolution = OfficeShadowResolution(lit);
+            OfficeShadowLights = lit;
+            OfficeShadowSize = _ok.ShadowResolution;
 
             _ok.TubeMesh = BoxMesh("Tubo", new Vector3(2.4f, 0.075f, 0.075f));
             _ok.LeafMesh = BoxMesh("FolhaDoElevador", new Vector3(0.56f, ElevatorTop, 0.04f));
@@ -149,6 +155,15 @@ namespace BackRooms.World
             _ok.LockerLeafMesh = BoxMesh("PortaDeArmario", new Vector3(0.37f, 0.41f, 0.012f));
             _ok.LockerHandleMesh = BoxMesh("Puxador", new Vector3(0.03f, 0.05f, 0.006f));
             _ok.ButtonMesh = BoxMesh("BotaoDoElevador", new Vector3(0.04f, 0.04f, 0.012f));
+
+            // Os difusores não são um objeto por luminária: cada tipo tem uma malha das acesas e
+            // uma das apagadas, e a luminária aparece numa ou na outra (FusedMesh).
+            _ok.TubeOn = OfficeFused("TubosAcesos", office.tubeOn, ShadowCastingMode.Off, _ok.Fixtures);
+            _ok.TubeOff = OfficeFused("TubosApagados", office.tubeOff, ShadowCastingMode.Off, _ok.Fixtures);
+            _ok.PanelOn = OfficeFused("EmbutidasAcesas", office.panelOn, ShadowCastingMode.Off, _ok.Fixtures);
+            _ok.PanelOff = OfficeFused("EmbutidasApagadas", office.panelOff, ShadowCastingMode.Off, _ok.Fixtures);
+            _ok.DomeOn = OfficeFused("PendentesAcesos", office.domeOn, ShadowCastingMode.Off, _ok.Fixtures);
+            _ok.DomeOff = OfficeFused("PendentesApagados", office.domeOff, ShadowCastingMode.Off, _ok.Fixtures);
 
             BuildOfficeFloors();
             BuildOfficeCeilings();
@@ -161,6 +176,9 @@ namespace BackRooms.World
             BuildOfficeAtrium();
             BuildOfficeSigns();
             FlushOffice();
+            foreach (FusedMesh fused in new[] { _ok.TubeOn, _ok.TubeOff, _ok.PanelOn, _ok.PanelOff, _ok.DomeOn, _ok.DomeOff,
+                                                _ok.LockerLeaves, _ok.LockerHandles })
+                if (fused != null) fused.Finish();
             BuildOfficeEvents();
             _ok = null;
         }
@@ -292,6 +310,30 @@ namespace BackRooms.World
             return mb.ToMesh("SpotsDaCabine");
         }
 
+        FusedMesh OfficeFused(string objectName, Material material, ShadowCastingMode shadows, Transform parent)
+        {
+            return CreateRenderer(objectName, null, material, shadows, parent).gameObject.AddComponent<FusedMesh>();
+        }
+
+        // O objeto de uma luminária: sem desenho próprio (o difusor está nas malhas juntadas), só
+        // o lugar, as luzes e o componente CeilingLight.
+        Transform FixtureHolder(string objectName, Vector3 localPosition, Quaternion localRotation)
+        {
+            var go = new GameObject(objectName);
+            go.transform.SetParent(_ok.Fixtures, false);
+            go.transform.localPosition = localPosition;
+            go.transform.localRotation = localRotation;
+            return go.transform;
+        }
+
+        // Põe o difusor nas duas malhas do tipo e devolve o número da peça.
+        static int AddFixture(FusedMesh on, FusedMesh off, Mesh mesh, Transform holder)
+        {
+            Matrix4x4 place = Matrix4x4.TRS(holder.localPosition, holder.localRotation, Vector3.one);
+            off.Add(mesh, place);
+            return on.Add(mesh, place);
+        }
+
         void FlushOffice()
         {
             var parent = CreateChild("Escritorio").transform;
@@ -310,13 +352,23 @@ namespace BackRooms.World
             }
         }
 
+        /// <summary>Luminárias acesas (cada uma, um spot com sombra em cache) e a resolução da sombra delas, da última montagem do Escritório.</summary>
+        public int OfficeShadowLights { get; private set; }
+        public int OfficeShadowSize { get; private set; }
+
         // Spot = uma face de sombra. Escolhe a maior resolução que cabe no atlas em cache.
+        // Aqui todas as sombras têm o mesmo tamanho, e o atlas em cache do HDRP é uma grade de
+        // casas de 64 px preenchida pela primeira que cabe (HDCachedShadowAtlas.FindSlotInAtlas):
+        // sombras iguais encaixam sem sobra, e a que sai (a onda apaga e acende) deixa a casa para a
+        // próxima do mesmo tamanho. Por isso cabe 80% do atlas, e não os 60% do Level 0 (que mistura
+        // seis faces por luz): no andar de 16 x 14 (23/11/2026) as acesas passam de 153 em uns 20%
+        // das seeds e, com 60%, a sombra caía para 64 px, grossa demais para a parede de 15 cm.
         int OfficeShadowResolution(int lightCount)
         {
             int atlas = 2048;
             if (GraphicsSettings.currentRenderPipeline is HDRenderPipelineAsset asset)
                 atlas = asset.currentPlatformRenderPipelineSettings.hdShadowInitParams.cachedPunctualLightShadowAtlas;
-            long budget = (long)atlas * atlas * 6 / 10;
+            long budget = (long)atlas * atlas * 8 / 10;
             int resolution = Mathf.Max(64, Mathf.ClosestPowerOfTwo(maxShadowResolution));
             while (resolution > 64 && (long)resolution * resolution * Mathf.Max(1, lightCount) > budget) resolution /= 2;
             return resolution;
@@ -720,12 +772,22 @@ namespace BackRooms.World
             if (sideB) OEdgeBox(office.baseboard, o, along, across, a0, a1, T * 0.5f, T * 0.5f + 0.012f, 0f, 0.09f, false);
         }
 
+        /// <summary>
+        /// Quanto o batente branco avança para dentro do vão, além da ponta da parede e da verga. Até
+        /// 23/11/2026 era 0: a face de dentro do batente ficava no mesmo plano da ponta da parede (e a de
+        /// baixo, no da verga), em materiais diferentes, e as duas brigavam no vão (z-fighting: manchas
+        /// escuras que tremiam, lidas como sombra quebrada). Não mexe em colisor: a passagem continua 1 m.
+        /// Só as fotos de comparação (Level3Setup.BatchDoorPhotos) põem 0.
+        /// </summary>
+        public static float DoorFrameInset = 0.004f;
+
         void DoorFrame(Vector3 o, Vector3 along, Vector3 across, float thickness)
         {
             float d = thickness * 0.5f + 0.02f;
-            OEdgeBox(office.frameWhite, o, along, across, -OfficeDoorHalf - 0.06f, -OfficeDoorHalf, -d, d, 0f, OfficeDoorTop + 0.06f, false);
-            OEdgeBox(office.frameWhite, o, along, across, OfficeDoorHalf, OfficeDoorHalf + 0.06f, -d, d, 0f, OfficeDoorTop + 0.06f, false);
-            OEdgeBox(office.frameWhite, o, along, across, -OfficeDoorHalf - 0.06f, OfficeDoorHalf + 0.06f, -d, d, OfficeDoorTop, OfficeDoorTop + 0.06f, false);
+            float inner = OfficeDoorHalf - DoorFrameInset, top = OfficeDoorTop - DoorFrameInset;
+            OEdgeBox(office.frameWhite, o, along, across, -OfficeDoorHalf - 0.06f, -inner, -d, d, 0f, OfficeDoorTop + 0.06f, false);
+            OEdgeBox(office.frameWhite, o, along, across, inner, OfficeDoorHalf + 0.06f, -d, d, 0f, OfficeDoorTop + 0.06f, false);
+            OEdgeBox(office.frameWhite, o, along, across, -OfficeDoorHalf - 0.06f, OfficeDoorHalf + 0.06f, -d, d, top, OfficeDoorTop + 0.06f, false);
         }
 
         // Folha aberta até encostar na parede de dentro da sala (180°): não fecha passagem nenhuma.
@@ -798,9 +860,8 @@ namespace BackRooms.World
             Quaternion turn = runsAlongX ? Quaternion.Euler(0f, 90f, 0f) : Quaternion.identity;
             Vector3 tubeAxis = turn * Vector3.right;
 
-            MeshRenderer tube = CreateRenderer($"Tubo_{x}_{z}", _ok.TubeMesh, office.tubeOff, ShadowCastingMode.Off, _ok.Fixtures);
-            tube.transform.localPosition = c + Vector3.up * OfficeTubeHeight;
-            tube.transform.localRotation = turn;
+            Transform tube = FixtureHolder($"Tubo_{x}_{z}", c + Vector3.up * OfficeTubeHeight, turn);
+            int item = AddFixture(_ok.TubeOn, _ok.TubeOff, _ok.TubeMesh, tube);
             AddCollider(tube.gameObject, Vector3.zero, new Vector3(2.4f, 0.075f, 0.075f));
 
             foreach (float s in new[] { -0.95f, 0.95f })
@@ -809,24 +870,24 @@ namespace BackRooms.World
             HDAdditionalLightData[] lights = null;
             if (state != LightState.Dead)
                 // Girar o tubo em Y não muda o "para baixo" do spot.
-                lights = new[] { OfficeSpot(tube.transform, new Vector3(0f, -0.06f, 0f), Quaternion.Euler(90f, 0f, 0f), officeTubeCandela, 7.5f, 150f, 5200f, true) };
+                lights = new[] { OfficeSpot(tube, new Vector3(0f, -0.06f, 0f), Quaternion.Euler(90f, 0f, 0f), officeTubeCandela, 7.5f, 150f, 5200f, true) };
 
             CeilingLight light = tube.gameObject.AddComponent<CeilingLight>();
-            light.Init(state, lights, tube, office.tubeOn, office.tubeOff);
+            light.InitFused(state, lights, _ok.TubeOn, _ok.TubeOff, item);
             _ok.CorridorLights[x + z * Data.Width] = light;
         }
 
         void RecessedLight(int x, int z, LightState state)
         {
             Vector3 c = OCellCenter(x, z);
-            MeshRenderer panel = CreateRenderer($"Embutida_{x}_{z}", _ok.PanelMesh, office.panelOff, ShadowCastingMode.Off, _ok.Fixtures);
-            panel.transform.localPosition = c + Vector3.up * (OfficeRoomCeiling - 0.004f);
+            Transform panel = FixtureHolder($"Embutida_{x}_{z}", c + Vector3.up * (OfficeRoomCeiling - 0.004f), Quaternion.identity);
+            int item = AddFixture(_ok.PanelOn, _ok.PanelOff, _ok.PanelMesh, panel);
 
             HDAdditionalLightData[] lights = null;
             if (state != LightState.Dead)
-                lights = new[] { OfficeSpot(panel.transform, new Vector3(0f, -0.04f, 0f), Quaternion.Euler(90f, 0f, 0f), officeRoomCandela, 7.5f, 150f, 4300f, true) };
+                lights = new[] { OfficeSpot(panel, new Vector3(0f, -0.04f, 0f), Quaternion.Euler(90f, 0f, 0f), officeRoomCandela, 7.5f, 150f, 4300f, true) };
 
-            panel.gameObject.AddComponent<CeilingLight>().Init(state, lights, panel, office.panelOn, office.panelOff);
+            panel.gameObject.AddComponent<CeilingLight>().InitFused(state, lights, _ok.PanelOn, _ok.PanelOff, item);
         }
 
         // Pendente em meia-esfera preta, pendurado das ripas.
@@ -838,15 +899,15 @@ namespace BackRooms.World
             OM(office.blackPlastic).AddDisc(c + Vector3.up * (bottom + 0.22f), Vector3.up, Vector3.right, 0.3f, 20);
             OBox(office.blackPlastic, c + Vector3.up * ((bottom + 0.22f + OfficeSlatsBottom) * 0.5f), new Vector3(0.008f, OfficeSlatsBottom - bottom - 0.22f, 0.008f), caps: false);
 
-            MeshRenderer dome = CreateRenderer($"Pendente_{x}_{z}", _ok.DomeMesh, office.domeOff, ShadowCastingMode.Off, _ok.Fixtures);
-            dome.transform.localPosition = c + Vector3.up * (bottom + 0.03f);
+            Transform dome = FixtureHolder($"Pendente_{x}_{z}", c + Vector3.up * (bottom + 0.03f), Quaternion.identity);
+            int item = AddFixture(_ok.DomeOn, _ok.DomeOff, _ok.DomeMesh, dome);
 
             float candela = Data.Office[x, z] == OfficeCell.Lounge ? officePendantCandela * 0.55f : officePendantCandela;
             HDAdditionalLightData[] lights = null;
             if (state != LightState.Dead)
-                lights = new[] { OfficeSpot(dome.transform, new Vector3(0f, -0.02f, 0f), Quaternion.Euler(90f, 0f, 0f), candela, 7f, 115f, 3600f, true) };
+                lights = new[] { OfficeSpot(dome, new Vector3(0f, -0.02f, 0f), Quaternion.Euler(90f, 0f, 0f), candela, 7f, 115f, 3600f, true) };
 
-            dome.gameObject.AddComponent<CeilingLight>().Init(state, lights, dome, office.domeOn, office.domeOff);
+            dome.gameObject.AddComponent<CeilingLight>().InitFused(state, lights, _ok.DomeOn, _ok.DomeOff, item);
         }
 
         // ---------------------------------------------------------------- Eventos
@@ -858,7 +919,7 @@ namespace BackRooms.World
             var elevators = events.AddComponent<OfficeElevators>();
             elevators.Init(Data.Seed, _ok.Elevators);
 
-            // Trechos retos de corredor (5 células ou mais) com luminária: a onda corre por eles.
+            // Trechos retos de corredor (5 células ou mais, divididos acima de MaxWaveRun) com luminária: a onda corre por eles.
             var runs = new List<CeilingLight[]>();
             int w = Data.Width, h = Data.Height;
             for (int z = 0; z < h; z++)
@@ -964,6 +1025,28 @@ namespace BackRooms.World
             }
         }
 
+        /// <summary>
+        /// Trecho mais comprido que a onda percorre, em luminárias. No andar de 14 x 12 os trechos retos
+        /// tinham 6, 8 ou 10; no de 16 x 14 (23/11/2026) os lados do anel chegam a 12 e o trecho maior se
+        /// divide em dois: a cascata, o escuro de onde fugir e a distância da ponta (onde o Zelador
+        /// nasce) ficam como eram, e o andar maior ganha trechos (e interruptores, um por trecho).
+        /// </summary>
+        public const int MaxWaveRun = 10;
+        const int MinWaveRun = 5;
+
+        static void AddRun(List<CeilingLight[]> runs, List<CeilingLight> lamps)
+        {
+            if (lamps.Count < MinWaveRun) return;
+            if (lamps.Count <= MaxWaveRun || lamps.Count < MinWaveRun * 2)
+            {
+                runs.Add(lamps.ToArray());
+                return;
+            }
+            int half = (lamps.Count + 1) / 2;
+            runs.Add(lamps.GetRange(0, half).ToArray());
+            runs.Add(lamps.GetRange(half, lamps.Count - half).ToArray());
+        }
+
         void CollectRuns(List<CeilingLight[]> runs, int length, Func<int, (int x, int z)> cellAt)
         {
             var current = new List<CeilingLight>();
@@ -991,7 +1074,7 @@ namespace BackRooms.World
                     continue;
                 }
 
-                if (current.Count >= 5) runs.Add(current.ToArray());
+                AddRun(runs, current);
                 current.Clear();
                 if (corridor && light != null) current.Add(light);
             }

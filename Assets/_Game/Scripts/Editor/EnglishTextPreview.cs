@@ -8,8 +8,8 @@ namespace BackRooms.EditorTools
     /// <summary>
     /// Fotos de conferência dos textos pintados no mundo (a língua do jogo é o inglês), fora do
     /// Play: as etiquetas do Level 1 (<see cref="ExitLock"/>), as placas de papelão
-    /// (<see cref="PropLayer.SignTexture"/>) e os cartazes de dicas das outras fases
-    /// (<see cref="SwitchObjective.NoteTexture"/>). Cada desenho sai ampliado (pontos nítidos) em
+    /// (<see cref="PropLayer.SignTexture"/>) e os cartazes de dicas das quatro fases
+    /// (<see cref="StartNote.Texture"/>). Cada desenho sai ampliado (pontos nítidos) em
     /// <c>Logs/Previews/ingles/textura_*.png</c>.
     ///
     /// Linha de comando: -executeMethod BackRooms.EditorTools.EnglishTextPreview.BatchCapture.
@@ -46,9 +46,7 @@ namespace BackRooms.EditorTools
             for (int i = 0; i < 3; i++) count += Save(ExitLock.TagTexture(digits[i], i + 1), "textura_etiqueta_" + (i + 1));
             foreach (var sign in PropLayer.SignTexts)
                 count += Save(PropLayer.SignTexture(sign.text, sign.ink, sign.paper), "textura_placa_" + sign.text.Replace(' ', '_').ToLowerInvariant());
-            string[] levels = { "level0", "level2", "level3" };
-            string[][] tips = SwitchObjective.AllTips;
-            for (int i = 0; i < tips.Length; i++) count += Save(SwitchObjective.NoteTexture(tips[i]), "textura_cartaz_" + levels[i]);
+            foreach (var note in StartNote.All) count += Save(StartNote.Texture(note.lines), "textura_cartaz_" + note.level);
             return count;
         }
 

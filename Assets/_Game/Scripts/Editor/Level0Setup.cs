@@ -46,7 +46,7 @@ namespace BackRooms.EditorTools
         /// ou valores padrão do LevelBuilder. O Level0AutoUpdate compara com o que está
         /// gravado na cena e oferece recriar.
         /// </summary>
-        public const int ContentVersion = 24;
+        public const int ContentVersion = 25;
 
         /// <summary>Música da tela inicial (cópia do arquivo mandado pelo usuário; não é gerada).</summary>
         public const string MenuMusicPath = "Assets/_Game/Audio/Musica/Menu_Tema.mp3";
@@ -311,6 +311,10 @@ namespace BackRooms.EditorTools
             builder.batteriesEnabled = true;
             builder.switchBodyMaterial = EnsureMaterial("Objetivo_Peca", new Color(0.45f, 0.46f, 0.47f), null, null, 0.5f, Color.black);
             builder.switchLampMaterial = EnsureUnlit("Objetivo_Lampada", Color.white, null, false);
+            // O disjuntor da Tripo (Art/Fontes/Alavanca, de Tools/Blender/tripo/alavanca.py). Sem o
+            // arquivo, a caixa de peças primitivas.
+            ImportedModels.EnsureLever(ArtFolder, out builder.switchBreakerBox, out builder.switchBreakerHandle,
+                                       out builder.switchBreakerMaterial, out builder.switchBreakerPivot);
             builder.exitDoorMaterial = exitDoor;
             builder.exitDoorModel = exitDoorModel;
             builder.exitDoorModelMaterial = exitDoorModelMaterial;
@@ -560,6 +564,14 @@ namespace BackRooms.EditorTools
             figure.rubberMaterial = rubber;
             figure.visorMaterial = visor;
             figure.gearMaterial = gear;
+            // O traje da Tripo (Art/Personagens/Traje, de Tools/Blender/personagens/traje.py), com as
+            // medidas dele. Sem o modelo, a figura de código.
+            figure.model = CharacterModels.Model("Traje");
+            if (figure.model != null)
+            {
+                figure.modelMaterials = CharacterModels.Materials("Traje");
+                CharacterModels.ApplySuitMeasures(figure);
+            }
 
             // Rede: o dono manda a própria posição (resposta imediata no controle).
             player.AddComponent<NetworkObject>();

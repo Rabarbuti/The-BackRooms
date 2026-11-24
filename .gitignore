@@ -116,3 +116,8 @@ InitTestScene*.unity*
 # Cache do Python dos scripts do Blender (Tools/Blender)
 __pycache__/
 *.pyc
+
+# Chegada da ponte da Tripo (Tools > Tripo3D Bridge): os modelos são trazidos pelos scripts
+# de Tools/Blender/tripo e o original não vai para o Git.
+/[Aa]ssets/TripoModels/
+/[Aa]ssets/TripoModels.meta

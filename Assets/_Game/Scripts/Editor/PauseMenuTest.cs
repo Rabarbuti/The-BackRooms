@@ -440,17 +440,22 @@ namespace BackRooms.EditorTools
             }
         }
 
-        // O cartaz da sala inicial: dicas, a lembrança do Esc e nada de "ao mesmo tempo".
+        // O cartaz da sala inicial (as quatro fases têm um, desde 23/11/2026 também o Level 1):
+        // dicas, a lembrança do Esc e nada de "ao mesmo tempo".
         static bool CheckNote()
         {
-            SwitchObjective objective = SwitchObjective.Instance;
-            if (objective == null) return true;
-            if (objective.Note == null) { Finish(false, "sem o cartaz de dicas na sala inicial"); return false; }
-            string note = string.Join(" / ", objective.NoteText);
+            StartNote shown = StartNote.Current;
+            if (shown == null) { Finish(false, "sem o cartaz de dicas na sala inicial"); return false; }
+            string[] lines = shown.Lines;
+            string note = string.Join(" / ", lines);
             if (!Clean(note, "o cartaz")) return false;
             if (!note.Contains("ESC: TASKS")) { Finish(false, $"o cartaz não lembra do Esc: {note}"); return false; }
-            foreach (string line in objective.NoteText)
+            if (lines.Length > 8) { Finish(false, $"cartaz com {lines.Length} linhas (cabem 8): {note}"); return false; }
+            foreach (string line in lines)
                 if (line.Length > 21) { Finish(false, $"linha do cartaz com mais de 21 letras: {line}"); return false; }
+            foreach (string line in lines)
+                foreach (char c in line)
+                    if (c != ' ' && !PixelFont.CanDraw(c)) { Finish(false, $"o cartaz usa \"{c}\", que a fonte não desenha: {line}"); return false; }
             Notes.Add("cartaz: " + note);
             return true;
         }

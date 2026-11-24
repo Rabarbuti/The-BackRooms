@@ -71,8 +71,9 @@ namespace BackRooms.Entities
         public float comingSeconds = 5f;
         [Tooltip("Parado na cabine, escutando, depois que a porta começa a abrir.")]
         public float doorwaySeconds = 2.4f;
+        // 75 s até 23/11/2026; o andar de 16 x 14 tem distâncias ~16% maiores e a ronda leva mais tempo.
         [Tooltip("Tempo no andar, depois de sair da cabine.")]
-        public float staySeconds = 75f;
+        public float staySeconds = 85f;
         [Tooltip("Cada destino da ronda (e a cada listenEvery segundos andando): para e escuta por isto.")]
         public float listenSeconds = 2.5f;
         [Tooltip("Rondando, para para escutar pelo menos a cada tantos segundos.")]

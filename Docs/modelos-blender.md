@@ -194,3 +194,43 @@ Limites conhecidos: o mapa UV automático tem muitas ilhas pequenas (peças redu
 retalhos); a gola da camisa e partes finas perdem pedaços na redução; o relevo assado da
 entidade é fraco (os cipós são assados deles mesmos). Melhorias: retopologia mais cuidadosa das
 peças finas, mais triângulos para as mangas e UV por peça antes de juntar.
+
+## 10. O traje dos jogadores e a alavanca, vindos da Tripo
+
+Dois modelos feitos na Tripo (exportados pela ponte do Unity em FBX, em `Assets/TripoModels`, fora
+do Git) entram por scripts próprios, porque um se mexe por juntas e o outro tem peça que gira. A
+exportação original não vai para o Git: o que vai é a fonte reduzida que os scripts gravam. Para
+mudar, exporte de novo da Tripo e rode os scripts.
+
+**Traje dos jogadores** (o corpo que os outros veem; o `PlayerBody` veste o modelo nas juntas):
+
+1. `Tools/Blender/tripo/traje_fonte.py` lê o FBX (2 milhões de triângulos, 65 MB), cola os vértices
+   repetidos (o FBX vem cortado em toda divisa do UV), reduz para 150 mil, abre um UV novo e assa
+   nele a cor do original: `Art/Fontes/Traje/Traje.glb` (~6,5 MB, cor em JPEG dentro). Só reduzir
+   não serve: a redução junta triângulos de recortes vizinhos da textura da Tripo, e eles pegam a
+   cor do recorte errado (riscos claros).
+2. `Tools/Blender/personagens/traje.py`: sem opção, fotografa o traje com as juntas por cima
+   (`Logs/Blender/personagens/traje_juntas_*.png`); `--medidas` grava `traje_medidas.json`. Aqui o
+   **esqueleto segue o modelo**: as pernas do traje são mais curtas que as da figura de código, e
+   esticá-las deformaria o desenho. As medidas (comprimentos dos ossos, abertura e inclinação dos
+   braços na pose de encaixe) têm os nomes dos campos do `PlayerBody`, e o Unity as aplica com
+   `CharacterModels.ApplySuitMeasures` (no prefab e ao gravar o esqueleto).
+3. No Unity: Exportar esqueletos (grava `esqueleto_traje.json`, na `PlayerBody.BindPose`: tudo
+   reto, braços abertos e para a frente como no modelo).
+4. `traje.py -- --exportar` faz o resto como nos inimigos (30 mil triângulos, cor da textura da
+   fonte, relevo da malha da fonte, pesos por distância aos ossos) e grava `Art/Personagens/Traje`.
+   Cuidados que já custaram uma rodada: a cópia reduzida herda o UV da fonte e ele tem de ser
+   apagado antes de abrir o UV do jogo (senão a cor é assada num UV e o modelo usa outro: manchas);
+   e a imagem da fonte é renomeada ao carregar (com o mesmo nome, `Traje_Cor`, a assada ia para
+   `Traje_Cor.001.png` e o modelo lia a textura velha: bolinhas).
+5. `conferir_modelo.py -- Traje` e `Level0Preview.BatchSceneAndCapture` (fotos `jogador_*.png`).
+
+**Disjuntor do Level 0** (a aparência dos pontos `Breaker` do `SwitchObjective`):
+`Tools/Blender/tripo/alavanca.py` junta as 12 texturas das partes numa folha só, separa a caixa da
+alça (as partes que giram em volta do eixo dos dois pinos), põe no espaço da peça (caixa de 0,56 m,
+centro em Y = 0, fundo na parede em Z = 0, frente para -Z) e grava `Art/Fontes/Alavanca/Alavanca.glb`
+(materiais "Caixa" e "Manivela") e `Alavanca.json` (o eixo da alça). O `Level0Setup` lê os dois
+(`ImportedModels.EnsureLever`, que assa em `Art/Level0/Alavanca_*`) e passa ao `LevelBuilder`
+(`switchBreaker*`); o `SwitchObjective` monta a caixa com o colisor da própria malha e gira a alça
+de pendurada (desligado) a erguida 95° (armado). O eletroduto e a lâmpada continuam peças
+primitivas. Sem o GLB, volta a caixa de peças primitivas.

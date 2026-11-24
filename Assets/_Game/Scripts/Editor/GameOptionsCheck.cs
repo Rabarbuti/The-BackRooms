@@ -15,7 +15,7 @@ namespace BackRooms.EditorTools
         public static void BatchRun()
         {
             string problem = Check();
-            Debug.Log("[BackRooms] Conferência das opções " + (problem == null ? "PASSOU: volume, mouse e qualidade presos aos limites, aplicados e guardados" : "FALHOU: " + problem));
+            Debug.Log("[BackRooms] Conferência das opções " + (problem == null ? "PASSOU: volume, mouse e qualidade presos aos limites, aplicados e guardados; placas integradas reconhecidas" : "FALHOU: " + problem));
             EditorApplication.Exit(problem == null ? 0 : 3);
         }
 
@@ -50,6 +50,12 @@ namespace BackRooms.EditorTools
                 if (last < 2) return $"só {last + 1} perfis de qualidade (eram 3)";
                 GameOptions.SetQuality(99);
                 if (QualitySettings.GetQualityLevel() != last || PlayerPrefs.GetInt(GameOptions.QualityKey) != last) return "a qualidade não foi presa ao último perfil";
+
+                // Placa integrada (primeira execução começa no Performant) ou não; na dúvida, não.
+                if (!GameOptions.IsIntegratedGpu("Intel(R) Iris(R) Xe Graphics", "Intel", 8000)) return "Intel Iris Xe não foi tida como integrada";
+                if (!GameOptions.IsIntegratedGpu("AMD Radeon(TM) Graphics", "ATI", 512)) return "AMD Radeon Graphics não foi tida como integrada";
+                foreach (string card in new[] { "NVIDIA Quadro T2000", "NVIDIA GeForce RTX 3060", "AMD Radeon RX 6600", "Intel(R) Arc(TM) A750 Graphics", "Null Device", "" })
+                    if (GameOptions.IsIntegratedGpu(card, card.Split(' ')[0], 4096)) return $"\"{card}\" foi tida como integrada";
 
                 // Carregar de novo devolve o que foi guardado.
                 GameOptions.SetMouseScale(1f, false);

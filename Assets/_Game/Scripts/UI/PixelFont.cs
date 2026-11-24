@@ -18,6 +18,9 @@ namespace BackRooms.UI
         /// <summary>Passo de um caractere ao seguinte, em pontos (5 de letra + 1 de espaço).</summary>
         public const int Advance = 6;
 
+        /// <summary>A fonte desenha este caractere? (O espaço não tem desenho, só avança.)</summary>
+        public static bool CanDraw(char c) => Glyphs.ContainsKey(char.ToUpperInvariant(c));
+
         public static int Measure(string text, int scale)
         {
             return text.Length == 0 ? 0 : text.Length * Advance * scale - scale;

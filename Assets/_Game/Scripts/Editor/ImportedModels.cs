@@ -62,6 +62,100 @@ namespace BackRooms.EditorTools
             return Ensure("ExitDoor", artFolder, fit, out mesh, out material);
         }
 
+        /// <summary>O que vem no Alavanca.json, ao lado do GLB (gravado por Tools/Blender/tripo/alavanca.py).</summary>
+        [Serializable]
+        sealed class LeverInfo
+        {
+            public float[] pivo;
+        }
+
+        /// <summary>
+        /// Alavanca de energia do Level 0, da Tripo (caixa de ferro com alça de puxar). O GLB já vem
+        /// no espaço da alavanca (centro da caixa em Y = 0, fundo em Z = 0, frente para -Z), feito
+        /// por Tools/Blender/tripo/alavanca.py, com a caixa no material "Caixa" e a alça no
+        /// "Manivela" (a mesma folha de textura). A alça sai com a origem no eixo de giro
+        /// (Alavanca.json): girada 0° é a alavanca desligada. Sem o GLB, devolve falso e a
+        /// alavanca fica com a caixa feita em código.
+        /// </summary>
+        public static bool EnsureLever(string artFolder, out Mesh box, out Mesh handle, out Material material, out Vector3 pivot)
+        {
+            const string name = "Alavanca";
+            string boxPath = $"{artFolder}/{name}_Caixa.asset";
+            string handlePath = $"{artFolder}/{name}_Manivela.asset";
+            string materialPath = $"{artFolder}/{name}_Model.mat";
+            string source = $"{SourceFolder}/{name}/{name}.glb";
+            string infoPath = $"{SourceFolder}/{name}/{name}.json";
+
+            box = handle = null;
+            material = null;
+            pivot = Vector3.zero;
+            if (!File.Exists(source) || !File.Exists(infoPath))
+            {
+                Debug.Log($"[BackRooms] {source} não existe: a alavanca fica com a caixa feita em código.");
+                return false;
+            }
+
+            var info = JsonUtility.FromJson<LeverInfo>(File.ReadAllText(infoPath));
+            pivot = new Vector3(info.pivo[0], info.pivo[1], info.pivo[2]);
+
+            box = AssetDatabase.LoadAssetAtPath<Mesh>(boxPath);
+            handle = AssetDatabase.LoadAssetAtPath<Mesh>(handlePath);
+            material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+            if (box != null && handle != null && material != null) return true;
+
+            GlbReader.Model model = GlbReader.Read(source);
+            box = Combine(model, "Caixa", Vector3.zero, name + "_Caixa");
+            handle = Combine(model, "Manivela", pivot, name + "_Manivela");
+            AssetDatabase.CreateAsset(box, boxPath);
+            AssetDatabase.CreateAsset(handle, handlePath);
+
+            GlbReader.MaterialInfo look = model.Materials.Find(m => m.Name == "Caixa") ?? model.Materials[0];
+            material = BakeMaterial(look, name, artFolder, materialPath, new Fit { AlbedoSize = 2048 });
+            // As manchas de parede são sorteadas sem saber da caixa: ela não as recebe.
+            material.SetFloat("_SupportDecals", 0f);
+            HDMaterial.ValidateMaterial(material);
+            EditorUtility.SetDirty(material);
+
+            Debug.Log($"[BackRooms] Alavanca: caixa com {box.triangles.Length / 3} triângulos " +
+                      $"({box.bounds.size.x:F2} x {box.bounds.size.y:F2} x {box.bounds.size.z:F2} m), alça com {handle.triangles.Length / 3}, eixo em {pivot}.");
+            return true;
+        }
+
+        // Junta as partes de um material numa malha, deslocadas para a origem ficar em `origin`.
+        static Mesh Combine(GlbReader.Model model, string materialName, Vector3 origin, string meshName)
+        {
+            int material = model.Materials.FindIndex(m => m.Name == materialName);
+            if (material < 0) throw new InvalidDataException($"O GLB da alavanca não tem o material {materialName}.");
+
+            var positions = new List<Vector3>();
+            var normals = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            var triangles = new List<int>();
+
+            foreach (GlbReader.Primitive primitive in model.Primitives)
+            {
+                if (primitive.Material != material) continue;
+                int start = positions.Count;
+                foreach (Vector3 p in primitive.Positions) positions.Add(p - origin);
+                if (primitive.Normals != null) normals.AddRange(primitive.Normals);
+                else for (int i = 0; i < primitive.Positions.Length; i++) normals.Add(Vector3.up);
+                if (primitive.Uvs != null) uvs.AddRange(primitive.Uvs);
+                else for (int i = 0; i < primitive.Positions.Length; i++) uvs.Add(Vector2.zero);
+                foreach (int t in primitive.Triangles) triangles.Add(start + t);
+            }
+
+            var mesh = new Mesh { name = meshName };
+            mesh.indexFormat = positions.Count > 65535 ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
+            mesh.SetVertices(positions);
+            mesh.SetNormals(normals);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateBounds();
+            mesh.RecalculateTangents();
+            mesh.UploadMeshData(false);
+            return mesh;
+        }
+
         static bool Ensure(string name, string artFolder, Fit fit, out Mesh mesh, out Material material)
         {
             string meshPath = $"{artFolder}/{name}_Model.asset";

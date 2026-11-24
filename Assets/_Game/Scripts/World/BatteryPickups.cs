@@ -76,7 +76,9 @@ namespace BackRooms.World
             if (Instance == this) { Instance = null; Prompt = null; }
         }
 
-        /// <summary>Espalha as pilhas: uma a cada ~45 células com piso, de 4 a 9.</summary>
+        const float OfficeCellsPerBattery = 33f;
+
+        /// <summary>Espalha as pilhas: uma a cada ~45 células com piso (no Escritório, ~33), de 4 a 9.</summary>
         public void Place(LevelBuilder level, Material template)
         {
             if (Application.isPlaying) Instance = this;
@@ -92,7 +94,12 @@ namespace BackRooms.World
                     cells.Add(new Vector2Int(x, z));
                 }
 
-            int count = Mathf.Clamp(cells.Count / 45, 4, 9);
+            // No Escritório, uma a cada ~33 células (arredondado): no andar de 14 x 12 dava as mesmas
+            // 4 de sempre; no de 16 x 14 (23/11/2026) dá 6, e a densidade de pilhas fica a mesma (com
+            // a conta das outras fases ficariam 4 num andar 40% maior).
+            int count = data.HasOffice
+                ? Mathf.Clamp(Mathf.RoundToInt(cells.Count / OfficeCellsPerBattery), 4, 9)
+                : Mathf.Clamp(cells.Count / 45, 4, 9);
             var rng = new System.Random(level.seed ^ 0x50494C48); // "PILH"
             Physics.SyncTransforms();
             Material box = Tinted(template, new Color(0.08f, 0.09f, 0.1f));

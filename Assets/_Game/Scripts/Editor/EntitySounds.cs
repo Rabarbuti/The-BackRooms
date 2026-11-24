@@ -67,20 +67,10 @@ namespace BackRooms.EditorTools
             Save(folder, "undertow_rosnado", UndertowAudio.CreateGrowl());
             Save(folder, "undertow_gorgolejo", UndertowAudio.CreateGurgle());
             Save(folder, "undertow_puxao", UndertowAudio.CreateGrab());
-            // O Zelador (Level 3), refeito em 21/11/2026: botas, chaves chacoalhando, o rodízio do
-            // balde guinchando, as rodas (laço), o esfregão em vaivém (laço), a água no balde, o
-            // balde batendo, o esfregão torcido, a voz (resmungo, pigarro), subir e afundar no chão.
-            for (int i = 0; i < 3; i++) Save(folder, "zelador_bota_" + i, JanitorAudio.CreateBoot(i));
-            for (int i = 1; i <= 4; i++) Save(folder, "zelador_chaves_" + i, JanitorAudio.CreateKeys(i));
-            for (int i = 0; i < 4; i++) Save(folder, "zelador_rodizio_" + i, JanitorAudio.CreateSqueak(i));
-            Save(folder, "zelador_rodas", JanitorAudio.CreateRoll());
-            Save(folder, "zelador_esfregao", JanitorAudio.CreateMop());
-            for (int i = 0; i < 3; i++) Save(folder, "zelador_balde_" + i, JanitorAudio.CreateSlosh(i));
-            for (int i = 0; i < 2; i++) Save(folder, "zelador_balde_bate_" + i, JanitorAudio.CreateBang(i));
-            Save(folder, "zelador_torce", JanitorAudio.CreateWring());
-            for (int i = 0; i < 3; i++) Save(folder, "zelador_voz_" + i, JanitorAudio.CreateGrumble(i));
-            Save(folder, "zelador_sobe", JanitorAudio.CreateRise());
-            Save(folder, "zelador_afunda", JanitorAudio.CreateSink());
+            // O Zelador (Level 3): desde 23/11/2026 a vassoura seca, uma passada a cada dois passos, e a
+            // voz de caça (rosnado rouco, enquanto corre atrás de alguém).
+            for (int i = 0; i < 4; i++) Save(folder, "zelador_vassoura_" + i, JanitorAudio.CreateSweep(i));
+            for (int i = 0; i < 4; i++) Save(folder, "zelador_voz_" + i, JanitorAudio.CreateGrowl(i));
             Save(folder, "interruptor_estalo", LightSwitches.CreateClack());
             Save(folder, "reator_falhando", BackRooms.World.OfficeSounds.Sputter);
             // O Ascensorista (Level 3): bengala, arrasto, estalos da boca, respiração; e o plim e o ronco do elevador.
@@ -107,8 +97,24 @@ namespace BackRooms.EditorTools
                 Save(folder, "passo_agua_rasa_" + i, Footsteps.CreateClip(StepSurface.Wade, i));
                 Save(folder, "nado_bracada_" + i, Footsteps.CreateClip(StepSurface.Swim, i));
                 Save(folder, "debaixo_dagua_" + i, Footsteps.CreateClip(StepSurface.Underwater, i));
+                // O piso duro do Escritório (superfície Tile, som próprio).
+                Save(folder, "passo_escritorio_" + i, Footsteps.CreateOfficeClip(i));
             }
             for (int i = 0; i < 2; i++) Save(folder, "espirro_entrada_" + i, Footsteps.CreateSplash(i));
+
+            // Os pisos secos também têm um conjunto agachado (força 0,25) e um correndo (1); os
+            // sem sufixo acima são andando (0,55).
+            for (int i = 0; i < 2; i++)
+            {
+                foreach (var (surface, name) in new[] { (StepSurface.Carpet, "carpete"), (StepSurface.Laminate, "laminado"),
+                                                        (StepSurface.Vinyl, "vinilico"), (StepSurface.Tile, "azulejo") })
+                {
+                    Save(folder, $"passo_{name}_agachado_{i}", Footsteps.CreateClip(surface, i, 0.25f));
+                    Save(folder, $"passo_{name}_corrida_{i}", Footsteps.CreateClip(surface, i, 1f));
+                }
+                Save(folder, $"passo_escritorio_agachado_{i}", Footsteps.CreateOfficeClip(i, 0.25f));
+                Save(folder, $"passo_escritorio_corrida_{i}", Footsteps.CreateOfficeClip(i, 1f));
+            }
 
             // A maré das Piscinas (PoolTide): sirene e buzina do alarme, água correndo, glub e ralo.
             Save(folder, "mare_sirene", BackRooms.World.PoolTide.CreateSiren());

@@ -1,0 +1,12 @@
+{
+  "footHeight": 0.1,
+  "shinLength": 0.27,
+  "thighLength": 0.35,
+  "hipWidth": 0.14,
+  "torsoLength": 0.64,
+  "shoulderWidth": 0.24,
+  "upperArmLength": 0.27,
+  "forearmLength": 0.23,
+  "bindArmSpread": 15.0,
+  "bindArmForward": 18.0
+}

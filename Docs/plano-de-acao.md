@@ -52,6 +52,14 @@ inglês, menu inicial em silêncio (só a música). Feitos também: o som ambien
 do Escritório, os botões dos elevadores e a conferência de planta, objetivo, pilhas e maré do Level 2
 e do Level 3 em dois editores (`NetTests`).
 
+**Depois de 21/11/2026 (tarde) e 23/11/2026:** o jogo ficou **só para um jogador** (o menu esconde Host,
+Join e endereço; a rede continua no código) e **quem testa é o usuário, jogando**: as rodadas desde então
+passaram só por compilação e pelas conferências dos geradores, não pelos testes em Play nem pelos de dois
+editores. Em 23/11: sons de "pato de borracha" tirados, passos refeitos, Escritório de 16 x 14, um som por
+monstro no Escritório, o atalho Ctrl + Shift + L que libera as fases (para a build do itch.io) e o
+`GDD.md` e o `README.md` na raiz (a rubrica pede GDD atualizado e créditos dos assets). Ver
+`historico.md`.
+
 ---
 
 ## Como trabalhar
@@ -241,6 +249,7 @@ Cada uma é uma branch curta própria, em qualquer ordem:
 
 | O quê | Por quê fica de fora |
 |---|---|
+| Co-op no menu (desde 21/11/2026) | O jogo é entregue para um jogador; a rede por IP continua no código e testada em dois editores até 21/11, mas o menu não a mostra. |
 | Voz por proximidade e walkie-talkie (Vivox) | Depende de conta e serviço da Unity, custo por uso e credenciais no projeto; o grupo joga com voz de fora (Discord). As mecânicas não dependem dela. |
 | Entrar por código de sala (Relay) | Precisa ativar o projeto no painel da Unity Cloud (ação de quem tem a conta). O IP direto basta para jogar entre amigos; volta ao plano se o jogo for publicado. |
 | Sanidade e alucinações | Sistema grande, que mexe em todas as fases e ainda não tem desenho fechado (D2 já trocou o efeito por chuvisco). As ameaças de cada fase já cumprem o papel. |

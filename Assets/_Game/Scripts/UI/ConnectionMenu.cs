@@ -54,6 +54,10 @@ namespace BackRooms.UI
         const string LocalIp = "Local IP ";
         const string Or = " or ";
         const string NoLocalIp = "Local IP not found";
+        const string CheatOnNotice = "ALL LEVELS UNLOCKED";
+        const string CheatOffNotice = "LEVELS LOCKED AGAIN";
+        // Sair do jogo (fecha o programa; no editor, sai do Play). Sem atalho de teclado.
+        const string QuitText = "Quit";
 
         VisualElement _panel;
         TextField _address;
@@ -83,6 +87,11 @@ namespace BackRooms.UI
 
             BuildPanel(root);
             BuildHud(root);
+            if (Time.unscaledTime < s_cheatNoticeUntil)
+            {
+                _notice.text = s_cheatNotice;
+                _noticeUntil = s_cheatNoticeUntil;
+            }
 
             BuildEnding(root);
             _recordings = new RecordingsScreen(root);
@@ -184,7 +193,8 @@ namespace BackRooms.UI
 
             BuildLevelList();
 
-            _panel.Add(MenuButton(MultiplayerMenu ? HostText : PlayText, () => session.Host()));
+            // Sozinho, hospeda só em 127.0.0.1: nada escuta na rede e o Firewall do Windows não pergunta.
+            _panel.Add(MenuButton(MultiplayerMenu ? HostText : PlayText, () => session.Host(!MultiplayerMenu)));
 
             var joinLabel = Text(AddressLabel, 14, Paper);
             joinLabel.style.marginTop = 22;
@@ -216,6 +226,12 @@ namespace BackRooms.UI
 
             BuildOptions();
 
+            Button quit = MenuButton(QuitText, QuitGame);
+            quit.style.marginTop = 14;
+            quit.style.height = 36;
+            quit.style.fontSize = 16;
+            _panel.Add(quit);
+
             _status = Text("", 15, Paper);
             _status.style.marginTop = 18;
             _status.style.whiteSpace = WhiteSpace.Normal;
@@ -225,6 +241,16 @@ namespace BackRooms.UI
 
         // Opções desta máquina (GameOptions): as mesmas do menu de pausa (MenuKit).
         void BuildOptions() => _options = MenuKit.AddOptions(_panel);
+
+        // Botão "Quit": fecha o jogo. No editor, Application.Quit não faz nada; sai-se do Play.
+        static void QuitGame()
+        {
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
+        }
 
         void OnDestroy()
         {
@@ -379,17 +405,28 @@ namespace BackRooms.UI
                 return;
             }
 
+            bool typing = MultiplayerMenu && _address.focusController != null &&
+                          _address.focusController.focusedElement is VisualElement focused &&
+                          (focused == _address || _address.Contains(focused));
+
+            // Atalho secreto: Ctrl + Shift + L libera todas as fases (de novo, volta a trancar).
+            // Só no menu inicial, fora do campo de endereço.
+            if (!typing && keyboard.lKey.wasPressedThisFrame &&
+                (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed) &&
+                (keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed))
+            {
+                ToggleUnlockAll();
+                return;
+            }
+
             // Enquanto se digita o endereço, H e J são só letras.
             if (!MultiplayerMenu)
             {
                 if (keyboard.hKey.wasPressedThisFrame || keyboard.enterKey.wasPressedThisFrame ||
-                    keyboard.numpadEnterKey.wasPressedThisFrame) session.Host();
+                    keyboard.numpadEnterKey.wasPressedThisFrame) session.Host(!MultiplayerMenu);
                 return;
             }
 
-            bool typing = _address.focusController != null &&
-                          _address.focusController.focusedElement is VisualElement focused &&
-                          (focused == _address || _address.Contains(focused));
             if (typing)
             {
                 if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
@@ -400,6 +437,26 @@ namespace BackRooms.UI
             if (keyboard.hKey.wasPressedThisFrame) session.Host();
             else if (keyboard.jKey.wasPressedThisFrame) session.Join(_address.value);
         }
+
+        // Liga ou desliga o "libera tudo" (LevelProgress.CheatUnlocked), atualiza a lista na hora e
+        // mostra um aviso curto no alto da tela.
+        void ToggleUnlockAll()
+        {
+            bool on = !LevelProgress.CheatUnlocked;
+            LevelProgress.CheatUnlocked = on;
+            _notice.text = s_cheatNotice = on ? CheatOnNotice : CheatOffNotice;
+            _noticeUntil = s_cheatNoticeUntil = Time.unscaledTime + 3f;
+            RefreshLevels();
+
+            // Trancou de novo com uma fase que só o atalho liberava escolhida: o Play a começaria
+            // (o Host não confere). Volta para a última fase liberada de verdade.
+            if (!on && !LevelProgress.IsUnlocked(session.LevelIndex))
+                session.SwitchLevel(Mathf.Min(LevelProgress.ClearedCount, LevelCatalog.Count - 1));
+        }
+
+        // O aviso do atalho sobrevive à troca de cena que a volta acima provoca (o menu é da cena).
+        static string s_cheatNotice;
+        static float s_cheatNoticeUntil;
 
         // Endereços IPv4 desta máquina na rede local, para passar a quem vai entrar.
         static string FindLocalAddresses()

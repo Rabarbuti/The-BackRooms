@@ -16,7 +16,8 @@ namespace BackRooms.EditorTools
     /// O Zelador, o inimigo do escuro do Level 3: o prefab de rede (Prefabs/Janitor.prefab, gravado a
     /// cada montagem do Level 3 pelo <see cref="Level3Setup"/>), os materiais das peças de código e as
     /// fotos dentro do Escritório (Logs/Previews/zelador): de frente na luz, no escuro com a lanterna,
-    /// de lado, de costas, de baixo e o rosto.
+    /// de lado, de costas, de baixo e o rosto; e rente à parede, antes e depois do encaixe do esfregão
+    /// (<see cref="JanitorBody.Fit"/>; o log diz o que entrava na parede em cada uma).
     ///
     /// Menu BackRooms > Capturar prévia do Zelador. Precisa da cena do Level 3 montada.
     /// </summary>
@@ -102,6 +103,9 @@ namespace BackRooms.EditorTools
             brain.eyeHeight = 1.9f;
             brain.bodyRadius = 0.38f;
             brain.catchRadius = 1.3f;
+            // À espreita na beira do escuro mais perto do jogador; caça na hora quem pisa no escuro.
+            brain.emergeMinCells = 3;
+            brain.lurkMinCells = 2;
 
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(janitor, PrefabPath);
             UnityEngine.Object.DestroyImmediate(janitor);
@@ -236,6 +240,40 @@ namespace BackRooms.EditorTools
                 Pair("zelador_de_lado", spot - dir * 4.5f, -4f);
                 figure.rotation = Quaternion.LookRotation(dir, Vector3.up);
                 Pair("zelador_costas", spot - dir * 4.5f, -4f);
+
+                // Rente à parede (o esfregão entrava nela): andando com a parede à direita e parado de
+                // costas para ela, antes (a pose crua) e depois do encaixe (JanitorBody.Fit).
+                Vector3 wallSide = Vector3.Cross(Vector3.up, dir);
+                Physics.SyncTransforms();
+                if (Physics.Raycast(spot + Vector3.up, wallSide, out RaycastHit wall, 6f, ~0, QueryTriggerInteraction.Ignore))
+                {
+                    Vector3 rente = wall.point - wallSide * 0.42f;
+                    rente.y = spot.y;
+                    var where = new List<string>();
+                    void WallPair(string name, Quaternion turn, float phase, float speed, float still, Vector3 eye)
+                    {
+                        figure.SetPositionAndRotation(rente, turn);
+                        body.Unfit();
+                        body.Pose(phase, speed, still, 0f, 0.3f);
+                        Physics.SyncTransforms();
+                        body.Penetrations(builder, where);
+                        string before = where.Count == 0 ? "nada" : string.Join(", ", where);
+                        camera.transform.localRotation = Quaternion.Euler(12f, 0f, 0f);
+                        Level0Preview.ShootPair(player, camera, null, target, readback, folder, name + "_antes", eye, rente - eye);
+                        body.Fit(builder);
+                        body.Penetrations(builder, where);
+                        string after = where.Count == 0 ? "nada" : string.Join(", ", where);
+                        Level0Preview.ShootPair(player, camera, null, target, readback, folder, name + "_depois", eye, rente - eye);
+                        taken.Add(name + "_antes");
+                        taken.Add(name + "_depois");
+                        Debug.Log($"[BackRooms] Zelador rente à parede ({name}): antes entrava na fase: {before}; depois: {after} (esfregão recolhido {body.MopFold:F2} de 2)");
+                    }
+                    WallPair("zelador_parede_andando", Quaternion.LookRotation(dir, Vector3.up), 0.3f, 1.4f, 0f, rente - dir * 3.2f - wallSide * 1.3f);
+                    WallPair("zelador_parede_costas", Quaternion.LookRotation(-wallSide, Vector3.up), 0f, 0f, 1f, rente + dir * 3.2f - wallSide * 1.1f);
+                    body.Unfit();
+                    figure.position = spot;
+                }
+                else Debug.LogWarning("[BackRooms] Sem parede ao lado do corredor: sem foto do esfregão rente à parede.");
 
                 // No escuro, como o jogador vai vê-lo: o corredor apagado, só a lanterna.
                 figure.rotation = facing;

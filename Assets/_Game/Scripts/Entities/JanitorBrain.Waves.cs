@@ -40,7 +40,7 @@ namespace BackRooms.Entities
         public int FlipRequests { get; private set; }
         public string LastSwitchRefusal { get; private set; } = "";
         public int LastWaveRun { get; private set; } = -1;
-        /// <summary>Como foi a última aparição: "na onda" (ponta do trecho) ou "no escuro" (qualquer).</summary>
+        /// <summary>Como foi a última aparição: "na onda" (ponta do trecho), "no escuro do jogador" (na região escura de quem pisou no escuro), "no escuro" (outro escuro, alguém no escuro) ou "à espreita" (todos na luz).</summary>
         public string LastEmergeKind { get; private set; } = "";
         /// <summary>Distância de caminhada (células) da última aparição até o jogador mais perto.</summary>
         public int LastEmergeCells { get; private set; } = -1;

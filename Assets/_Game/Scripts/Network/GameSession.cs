@@ -46,6 +46,11 @@ namespace BackRooms.Net
         /// <summary>Do abrir da porta até a troca de cena, em segundos (a tela fica preta).</summary>
         public const float PassSeconds = 1.6f;
 
+        // Erro ao montar a fase: volta ao menu com esta mensagem, em vez de ficar em "Opening the session...".
+        const string BuildFailedText = "Could not build the level. Press Play to try again.";
+        // Fase montada e o jogador local ainda não ficou pronto depois deste prazo (s): mesma saída.
+        const float ReadyTimeout = 30f;
+
         public static GameSession Instance { get; private set; }
 
         [Header("Cena")]
@@ -122,6 +127,10 @@ namespace BackRooms.Net
         float _playStart = -1f;
         // Fase pedida pelo host a um cliente que está em outra; a troca acontece no Update.
         int _switchTo = -1;
+        // Tempo desde que a fase desta sessão ficou montada (LevelReady), para o prazo de ReadyTimeout;
+        // negativo fora dessa espera. Soma quadro a quadro com teto, para um quadro travado (o primeiro
+        // desenho numa máquina fraca) não gastar o prazo sozinho.
+        float _readyWait = -1f;
 
         // Sobrevivem à troca de cena: o endereço para reconectar depois de trocar de fase e a
         // marca de que a linha de comando já foi lida (para não hospedar de novo a cada fase).
@@ -196,6 +205,17 @@ namespace BackRooms.Net
                 string address = Address;
                 EndSession("");
                 LoadLevel(target, address);
+                return;
+            }
+
+            // Fase montada e o jogador nunca ficou pronto (algo falhou ao pô-lo no mapa): volta ao
+            // menu em vez de prender a tela em "Opening the session...". Só conta depois da montagem,
+            // então a espera pela conexão (cliente) e por uma montagem demorada não entram no prazo.
+            if (Phase == SessionPhase.Connecting && LevelReady && _readyWait >= 0f &&
+                (_readyWait += Mathf.Min(Time.unscaledDeltaTime, 0.1f)) > ReadyTimeout)
+            {
+                Debug.LogError("[BackRooms] A fase ficou montada, mas o jogador não ficou pronto em " + ReadyTimeout + " s.");
+                Fail(BuildFailedText);
                 return;
             }
 
@@ -642,6 +662,7 @@ namespace BackRooms.Net
             _passRoutine = null;
             Passing = false;
             LevelReady = false;
+            _readyWait = -1f;
             ClearDrawings();
 
             Cursor.lockState = CursorLockMode.None;
@@ -685,29 +706,65 @@ namespace BackRooms.Net
         {
             // Apaga o mapa antigo e espera um quadro antes de criar o novo: assim as luzes
             // antigas já liberaram seu espaço no atlas de sombras quando as novas pedem o delas.
-            level.Clear();
+            // (Depois de uma montagem que falhou, o mapa velho pode estar pela metade.) O erro só é
+            // tratado depois do yield: antes dele a rotina ainda roda dentro do StartCoroutine, e o
+            // Fail trocaria o _building antes de quem a chamou guardá-lo.
+            Exception clearError = null;
+            try { level.Clear(); }
+            catch (Exception e) { clearError = e; }
             yield return null;
+            if (clearError != null)
+            {
+                BuildFailed(clearError, seed, forSession);
+                yield break;
+            }
 
             level.seed = seed;
-            level.Rebuild();
-
-            if (menuCamera != null)
+            // Um erro na montagem (seed ruim, peça faltando) não pode prender o jogador em
+            // "Opening the session...": volta ao menu com a mensagem. Sem yield dentro do try.
+            try
             {
-                if (level.MenuView(out Vector3 viewEye, out Quaternion viewLook))
+                level.Rebuild();
+
+                if (menuCamera != null)
                 {
-                    menuCamera.transform.SetPositionAndRotation(viewEye, viewLook);
-                    _menuView = viewLook;
+                    if (level.MenuView(out Vector3 viewEye, out Quaternion viewLook))
+                    {
+                        menuCamera.transform.SetPositionAndRotation(viewEye, viewLook);
+                        _menuView = viewLook;
+                    }
+                    else
+                    {
+                        Vector3 eye = level.ScenicPosition();
+                        menuCamera.transform.position = new Vector3(eye.x, 1.65f, eye.z);
+                        _menuView = null;
+                    }
                 }
-                else
-                {
-                    Vector3 eye = level.ScenicPosition();
-                    menuCamera.transform.position = new Vector3(eye.x, 1.65f, eye.z);
-                    _menuView = null;
-                }
+            }
+            catch (Exception e)
+            {
+                BuildFailed(e, seed, forSession);
+                yield break;
             }
 
             _building = null;
-            if (forSession) LevelReady = true;
+            if (forSession)
+            {
+                LevelReady = true;
+                _readyWait = 0f;
+            }
+        }
+
+        // Erro dentro da BuildRoutine (que acaba logo depois, sem o EndSession precisar pará-la).
+        void BuildFailed(Exception e, int seed, bool forSession)
+        {
+            Debug.LogException(e);
+            Debug.LogError("[BackRooms] Erro ao montar a fase (seed " + seed + (forSession ? ")." : ", fundo do menu)."));
+            _building = null;
+            // A sessão volta ao menu, e o EndSession remonta o fundo (com a seed do menu, que começa
+            // limpando o que ficou pela metade). Se o erro foi no próprio fundo do menu, só registra:
+            // chamar o Fail de novo remontaria o fundo a cada quadro.
+            if (forSession) Fail(BuildFailedText);
         }
     }
 }

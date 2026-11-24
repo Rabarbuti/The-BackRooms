@@ -18,6 +18,9 @@ namespace BackRooms.World
         MeshRenderer _panel;
         Material _onMaterial;
         Material _offMaterial;
+        FusedMesh _fusedOn;
+        FusedMesh _fusedOff;
+        int _fusedItem = -1;
         LightState _state;
         PowerPhase _power = PowerPhase.Steady;
         bool _lit;
@@ -59,6 +62,19 @@ namespace BackRooms.World
             // Nasce no meio de um aviso ou de um apagão? Já entra na fase certa.
             if (!All.Contains(this)) All.Add(this);
             SetPower(LightsOut.Instance != null ? LightsOut.Instance.Phase : PowerPhase.Steady);
+        }
+
+        /// <summary>
+        /// Como <see cref="Init"/>, para a luminária cujo difusor está em duas malhas juntadas (a
+        /// das acesas e a das apagadas, na peça <paramref name="item"/> de cada uma) em vez de ser
+        /// um objeto próprio que troca de material.
+        /// </summary>
+        public void InitFused(LightState state, HDAdditionalLightData[] lights, FusedMesh on, FusedMesh off, int item)
+        {
+            _fusedOn = on;
+            _fusedOff = off;
+            _fusedItem = item;
+            Init(state, lights, null, null, null);
         }
 
         /// <summary>Fase da energia do andar. Quem chama é o <see cref="LightsOut"/>.</summary>
@@ -132,6 +148,12 @@ namespace BackRooms.World
                     if (data != null) data.lightDimmer = lit ? 1f : 0f;
 
             if (_panel != null) _panel.sharedMaterial = lit ? _onMaterial : _offMaterial;
+
+            if (_fusedItem >= 0)
+            {
+                if (_fusedOn != null) _fusedOn.SetShown(_fusedItem, lit);
+                if (_fusedOff != null) _fusedOff.SetShown(_fusedItem, !lit);
+            }
         }
     }
 }

@@ -51,7 +51,7 @@ namespace BackRooms.EditorTools
         static JanitorBrain _janitor;
         static readonly Vector2Int[] _run = new Vector2Int[5];
         static Vector3 _dir, _start;
-        static int _catches, _vanishes, _hesitations;
+        static int _catches, _vanishes, _hesitations, _sweeps;
         static float _farthest;
         static List<Vector2Int> _route;
         static float _routeDistance;
@@ -116,6 +116,9 @@ namespace BackRooms.EditorTools
 
         static float Now => Time.time;
         static float InStage => Now - _stageStart;
+
+        /// <summary>Passadas de vassoura do Zelador até agora (-1 sem o <see cref="JanitorAudio"/>).</summary>
+        static int Sweeps => _janitor != null && _janitor.TryGetComponent(out JanitorAudio audio) ? audio.Sweeps : -1;
 
         static void Goto(int stage, string note = null)
         {
@@ -194,6 +197,7 @@ namespace BackRooms.EditorTools
                     _janitor.ManifestAt(CellCenter(_run[0]), _dir);
                     _janitor.Alert(_local.transform.position);
                     _catches = _janitor.Catches;
+                    _sweeps = Sweeps;
                     _farthest = 0f;
                     Next($"trecho escuro de 4 células e o jogador na 5ª, acesa, a {Vector3.Distance(CellCenter(_run[0]), _local.transform.position):F1} m");
                     break;
@@ -210,7 +214,10 @@ namespace BackRooms.EditorTools
                     {
                         float gap = Flat(_janitor.transform.position - _local.transform.position).magnitude;
                         if (_farthest < 9f) { Finish(false, $"andou só {_farthest:F1} m pelo escuro em 9 s (estado {_janitor.State})"); return; }
-                        Next($"andou {_farthest:F1} m pelo escuro e parou na beira, a {gap:F1} m do jogador na luz");
+                        // A vassoura toca uma passada a cada dois passos: andando, tem de ter tocado.
+                        int swept = Sweeps - _sweeps;
+                        if (swept < 3) { Finish(false, $"andou {_farthest:F1} m pelo escuro e a vassoura tocou só {swept} vezes"); return; }
+                        Next($"andou {_farthest:F1} m pelo escuro (a vassoura passou {swept} vezes) e parou na beira, a {gap:F1} m do jogador na luz");
                         // Os dois colados na divisa: ele 0,5 m dentro do escuro, o jogador 0,4 m dentro da luz.
                         Vector3 border = CellCenter(_run[3]) + _dir * (LevelBuilder.Cell * 0.5f);
                         _janitor.ManifestAt(border - _dir * 0.5f, _dir);
@@ -278,7 +285,8 @@ namespace BackRooms.EditorTools
                     {
                         float straight = Flat(_janitor.transform.position - _local.transform.position).magnitude;
                         if (!JanitorDark.IsDarkAt(_janitor.transform.position)) { Finish(false, "apareceu numa célula acesa"); return; }
-                        if (straight < LevelBuilder.Cell * 3f) { Finish(false, $"apareceu a {straight:F1} m do jogador"); return; }
+                        // Com o jogador na luz (aqui, na cabine) ele espreita: aparece a lurkMinCells ou mais (a pé; 3/4 disso em linha reta).
+                        if (straight < LevelBuilder.Cell * _janitor.lurkMinCells * 0.75f - 0.1f) { Finish(false, $"apareceu a {straight:F1} m do jogador"); return; }
                         Next($"apareceu sozinho no escuro a {straight:F1} m do jogador em {InStage:F1} s");
                         JanitorBrain.HoldEmerge = true;
                         _janitor.ManifestAt(CellCenter(_run[0]), _dir);

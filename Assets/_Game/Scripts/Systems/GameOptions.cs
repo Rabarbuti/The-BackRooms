@@ -1,4 +1,6 @@
+using System.Text.RegularExpressions;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace BackRooms
 {
@@ -6,7 +8,8 @@ namespace BackRooms
     /// As opções desta máquina, guardadas em <c>PlayerPrefs</c> e aplicadas ao abrir o jogo: volume
     /// geral, sensibilidade do mouse (multiplica a do <c>PlayerController</c>) e qualidade (os três
     /// perfis do HDRP em ProjectSettings/QualitySettings: High Fidelity, Balanced, Performant).
-    /// A tela fica no menu (<c>ConnectionMenu</c>, botão Opções).
+    /// A tela fica no menu (<c>ConnectionMenu</c>, botão Opções). Na primeira execução (sem qualidade
+    /// salva) com placa de vídeo integrada, começa no Performant (<see cref="FirstRunQuality"/>).
     /// </summary>
     public static class GameOptions
     {
@@ -30,6 +33,9 @@ namespace BackRooms
         /// </summary>
         public static bool MenuSilence { get; private set; }
 
+        /// <summary>Nome do perfil escolhido sozinho para placa integrada na primeira execução.</summary>
+        public const string IntegratedProfile = "Performant";
+
         /// <summary>Perfil de qualidade (índice em QualitySettings.names).</summary>
         public static int Quality => QualitySettings.GetQualityLevel();
 
@@ -41,6 +47,55 @@ namespace BackRooms
             SetMouseScale(PlayerPrefs.GetFloat(MouseKey, 1f), false);
             int quality = PlayerPrefs.GetInt(QualityKey, -1);
             if (quality >= 0) SetQuality(quality, false);
+            else FirstRunQuality();
+        }
+
+        /// <summary>
+        /// Sem qualidade salva (primeira execução, ou o jogador nunca mexeu em Options): com placa de
+        /// vídeo integrada, aplica o Performant, como a tela de Options faria, mas sem gravar; assim a
+        /// conta se refaz a cada abertura até o jogador escolher um perfil, e a escolha dele (gravada
+        /// por <see cref="SetQuality"/>) nunca é sobrescrita. Placa dedicada ou na dúvida: nada muda
+        /// (abre no perfil padrão do projeto). No editor e sem placa (-batchmode, -nographics) não
+        /// faz nada: no editor o perfil ativo é o do projeto.
+        /// </summary>
+        static void FirstRunQuality()
+        {
+            if (Application.isEditor || SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null) return;
+            string name = SystemInfo.graphicsDeviceName, vendor = SystemInfo.graphicsDeviceVendor;
+            int memory = SystemInfo.graphicsMemorySize;
+            bool integrated = IsIntegratedGpu(name, vendor, memory);
+            int target = integrated ? System.Array.IndexOf(QualitySettings.names, IntegratedProfile) : -1;
+            if (target >= 0) SetQuality(target, false);
+            Debug.Log($"[BackRooms] Placa de vídeo: {name} ({vendor}, {memory} MB), {(integrated ? "integrada" : "dedicada ou desconhecida")}; sem qualidade salva, perfil {QualityName}{(target >= 0 ? " (escolhido pela placa)" : " (o padrão)")}.");
+        }
+
+        static readonly Regex Discrete = new Regex(@"nvidia|geforce|quadro|tesla|\brtx\b|\bgtx\b|\bt\d{3,4}\b|\barc\b|\brx\b|radeon pro|firepro|instinct", RegexOptions.CultureInvariant);
+        static readonly Regex IntelIntegrated = new Regex(@"\b(uhd|hd|iris)\b.*graphics|\biris\b", RegexOptions.CultureInvariant);
+        static readonly Regex AmdIntegrated = new Regex(@"^(amd )?radeon (graphics|vega \d+ graphics|\d{3}m graphics|\d{3}m)$", RegexOptions.CultureInvariant);
+
+        /// <summary>
+        /// A placa de vídeo é integrada (Intel UHD/HD/Iris, AMD "Radeon Graphics" sem modelo, Vega ou
+        /// 680M/780M de APU)? Conservadora: na dúvida, não. NVIDIA, AMD RX/Pro e Intel Arc nunca são.
+        /// A memória só reforça um caso antigo (Intel ou AMD "... Graphics" com até 512 MB); memória
+        /// grande não diz nada, porque a integrada informa a memória compartilhada.
+        /// </summary>
+        public static bool IsIntegratedGpu(string deviceName, string vendor, int memoryMB)
+        {
+            string name = Normalize(deviceName), maker = Normalize(vendor);
+            if (name.Length == 0 || name.Contains("null")) return false;
+            if (Discrete.IsMatch(name) || maker.Contains("nvidia")) return false;
+            bool intel = name.Contains("intel") || maker.Contains("intel");
+            bool amd = name.Contains("amd") || name.Contains("radeon") || maker.Contains("amd") || maker.Contains("advanced micro") || maker == "ati" || maker.StartsWith("ati ");
+            if (intel && IntelIntegrated.IsMatch(name)) return true;
+            if (amd && AmdIntegrated.IsMatch(name)) return true;
+            return (intel || amd) && name.EndsWith(" graphics") && memoryMB > 0 && memoryMB <= 512;
+        }
+
+        static string Normalize(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            text = text.ToLowerInvariant().Replace("(tm)", " ").Replace("(r)", " ").Replace("™", " ").Replace("®", " ");
+            return Regex.Replace(text, @"\s+", " ").Trim();
         }
 
         public static void SetVolume(float volume, bool save = true)

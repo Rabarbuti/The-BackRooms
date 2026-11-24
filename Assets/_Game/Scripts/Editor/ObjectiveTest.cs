@@ -290,18 +290,21 @@ namespace BackRooms.EditorTools
                     // O outro jogador arma o ponto 0 agora, dentro da janela do 1 (o host recebe o
                     // aviso dele como recebe o de um cliente, sem a conferência de distância).
                     _objective.HostArm(0, null);
+                    // No Escritório valem todos os alarmes (SwitchObjective.RequiredFor, desde 21/11/2026):
+                    // os que faltam também, dentro da janela.
+                    for (int extra = 2; extra < _objective.Required && extra < _objective.Count; extra++) _objective.HostArm(extra, null);
                     Next("ponto 1 armado com o 0 vencido: não cumpriu");
                     break;
 
                 case 8:
                     if (!_objective.Complete)
                     {
-                        if (InStage > 1f) Finish(false, $"dois pontos dentro da janela não cumpriram (valendo {_objective.ActiveNow})");
+                        if (InStage > 1f) Finish(false, $"{_objective.Required} pontos dentro da janela não cumpriram (valendo {_objective.ActiveNow})");
                         break;
                     }
                     if (SwitchObjective.Locked || LevelExit.Locked) { Finish(false, "cumprido, a porta continuou trancada"); return; }
                     _waterBefore = PoolWater.Current != null ? PoolWater.Current.SurfaceY : 0f;
-                    Next("dois pontos dentro da janela cumpriram o objetivo e destrancaram a porta");
+                    Next($"{_objective.Required} pontos dentro da janela cumpriram o objetivo e destrancaram a porta");
                     break;
 
                 case 9:
