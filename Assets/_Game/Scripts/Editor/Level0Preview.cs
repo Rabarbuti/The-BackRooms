@@ -119,6 +119,12 @@ namespace BackRooms.EditorTools
                 hand.suitMaterial = source.suitMaterial;
                 hand.gloveMaterial = source.gloveMaterial;
                 hand.penMaterial = source.penMaterial;
+                hand.suitModel = source.suitModel;
+                hand.suitModelMaterials = source.suitModelMaterials;
+                hand.sleeveRoll = source.sleeveRoll;
+                hand.sleeveScale = source.sleeveScale;
+                hand.modelGrip = source.modelGrip;
+                hand.modelPenRadius = source.modelPenRadius;
                 hand.Build();
 
                 // Face de dentro da parede norte da sala inicial, no meio da sala.
@@ -872,6 +878,12 @@ namespace BackRooms.EditorTools
             hand.suitMaterial = source.suitMaterial;
             hand.gloveMaterial = source.gloveMaterial;
             hand.penMaterial = source.penMaterial;
+            hand.suitModel = source.suitModel;
+            hand.suitModelMaterials = source.suitModelMaterials;
+            hand.sleeveRoll = source.sleeveRoll;
+            hand.sleeveScale = source.sleeveScale;
+            hand.modelGrip = source.modelGrip;
+            hand.modelPenRadius = source.modelPenRadius;
             hand.Build();
 
             try
@@ -880,6 +892,12 @@ namespace BackRooms.EditorTools
                 player.position = builder.SpawnCenter + new Vector3(0f, 0.05f, LevelBuilder.Cell - 1.5f);
                 player.rotation = Quaternion.identity;
                 Shoot(camera, target, readback, Path.Combine(folder, "mao_com_caneta.png"));
+
+                // De perto, no meio da tela: para conferir a junção do punho com a manga.
+                Vector3 usual = holder.transform.localPosition;
+                holder.transform.localPosition = new Vector3(0.03f, 0.0f, 0.3f);
+                Shoot(camera, target, readback, Path.Combine(folder, "mao_de_perto.png"));
+                holder.transform.localPosition = usual;
             }
             finally
             {

@@ -23,6 +23,17 @@ namespace BackRooms.Player
     {
         public Material suitMaterial;
         public Material gloveMaterial;
+        [Tooltip("O modelo do traje (o mesmo do corpo, PlayerBody.model). Com ele, a manga é o braço direito do modelo; vazio, a manga de peças de código.")]
+        public TextAsset suitModel;
+        public Material[] suitModelMaterials;
+        [Tooltip("Giro do braço do modelo em volta da caneta, em graus: 0 deixa o polegar para cima e para a esquerda.")]
+        public float sleeveRoll = 0f;
+        [Tooltip("Tamanho do braço do modelo na mão em primeira pessoa (1 = o do corpo).")]
+        public float sleeveScale = 0.95f;
+        [Tooltip("Onde a caneta encosta na mão do modelo, a partir do punho: ao longo dos dedos, para o lado do polegar e para a palma, em metros do modelo.")]
+        public Vector3 modelGrip = new Vector3(0.075f, 0.03f, 0.012f);
+        [Tooltip("Raio da caneta na mão do modelo (um marcador grosso, que enche a luva).")]
+        public float modelPenRadius = 0.0095f;
         [Tooltip("Material inicial da caneta. A cor muda com a tinta escolhida.")]
         public Material penMaterial;
         [Tooltip("De quem ler se o jogador está riscando.")]
@@ -348,17 +359,12 @@ namespace BackRooms.Player
             hull.CopyTo(_hull);
         }
 
-        /// <summary>Monta as peças. Pode ser chamado mais de uma vez; só a primeira constrói.</summary>
-        public void Build()
+        // A mão antiga, de peças: manga, punhos e o punho fechado em volta da caneta. Só quando
+        // não há modelo do traje.
+        void BuildCodeHand(Transform hand, Material glove)
         {
-            if (_built) return;
-            _built = true;
-
-            Material glove = gloveMaterial != null ? gloveMaterial : suitMaterial;
-
-            // Neste objeto, +Z é para a frente (para longe do olho), +Y para cima e +X para a
-            // direita. O punho fica na origem; a manga desce para trás e para a direita, para
-            // fora da tela, de onde viria o braço.
+            // O punho fica na origem; a manga desce para trás e para a direita, para fora da
+            // tela, de onde viria o braço.
             Transform wrist = FigureKit.Joint(transform, "Punho", Vector3.zero);
             wrist.localRotation = Quaternion.FromToRotation(Vector3.down, new Vector3(0.30f, -0.42f, -0.86f).normalized);
             FigureKit.Limb(wrist, "Manga", 0.55f, 0.052f, true, suitMaterial, false);
@@ -366,7 +372,6 @@ namespace BackRooms.Player
             FigureKit.Ball(wrist, "Punho_Do_Traje", new Vector3(0f, -0.085f, 0f), new Vector3(0.122f, 0.05f, 0.122f), suitMaterial, false);
 
             // Mão fechada em torno da caneta, com as costas viradas para cima e para a direita.
-            Transform hand = FigureKit.Joint(transform, "Mao", new Vector3(-0.005f, 0.012f, 0.03f), new Vector3(-12f, -24f, -38f));
             FigureKit.Ball(hand, "Palma", new Vector3(0f, 0f, 0.035f), new Vector3(0.088f, 0.05f, 0.105f), glove, false);
 
             // Quatro dedos: saem da frente da palma, descem e voltam, fechando o punho.
@@ -389,13 +394,231 @@ namespace BackRooms.Player
             Transform thumbTip = FigureKit.Limb(thumb, "Polegar_Ponta", 0.042f, 0.013f, true, glove, false);
             thumbTip.localRotation = Quaternion.Euler(-18f, 0f, 30f);
             FigureKit.Limb(thumbTip, "Polegar_Fim", 0.030f, 0.0115f, true, glove, false);
+        }
 
-            // Caneta: atravessa o punho fechado, com a ponta para a frente e um pouco para cima.
+        static readonly Dictionary<TextAsset, Mesh> SleeveCache = new Dictionary<TextAsset, Mesh>();
+
+        // O braço direito do modelo do traje (o que o PlayerBody veste), recortado do punho até
+        // perto do ombro e com a luva: na malha, o punho fica na origem, os dedos seguem em +Y e o
+        // polegar aponta para +Z. Nulo sem modelo.
+        Mesh ModelArm()
+        {
+            if (suitModel == null || suitModelMaterials == null || suitModelMaterials.Length == 0) return null;
+
+            if (!SleeveCache.TryGetValue(suitModel, out Mesh arm) || arm == null)
+            {
+                arm = CutSleeve(CharacterModel.Load(suitModel));
+                SleeveCache[suitModel] = arm;
+            }
+            return arm;
+        }
+
+        // A luva do modelo é uma mão meio aberta, sem dedos que dobrem: em vez de fechá-la, o braço
+        // inteiro é posto atrás da caneta, com ela presa entre o polegar e o indicador, saindo
+        // para a frente além dos dedos, como quem aponta com um marcador.
+        void PlaceModelArm(Mesh arm, Transform grip)
+        {
+            var go = new GameObject("Braco_Do_Traje");
+            go.transform.SetParent(transform, false);
+
+            Vector3 penAxis = transform.InverseTransformDirection(grip.up);
+            Vector3 penStart = transform.InverseTransformPoint(grip.position);
+            // O polegar fica para cima e para a esquerda; as costas da luva, para a direita.
+            Vector3 thumbUp = Quaternion.AngleAxis(sleeveRoll, penAxis) * new Vector3(-0.45f, 0.9f, 0f);
+            Quaternion turn = Quaternion.LookRotation(penAxis, thumbUp) * Quaternion.Inverse(Quaternion.LookRotation(Vector3.up, Vector3.forward));
+
+            // Na malha: dedos em +Y, polegar em +Z, palma em -X.
+            Vector3 gripInModel = new Vector3(-modelGrip.z, modelGrip.x, modelGrip.y) * sleeveScale;
+            go.transform.localRotation = turn;
+            go.transform.localScale = Vector3.one * sleeveScale;
+            go.transform.localPosition = penStart - turn * gripInModel;
+
+            go.AddComponent<MeshFilter>().sharedMesh = arm;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterials = suitModelMaterials;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+
+        static Mesh CutSleeve(CharacterModel.Data data)
+        {
+            int arm = System.Array.IndexOf(data.bones, "Braco_D");
+            int forearm = System.Array.IndexOf(data.bones, "Antebraco_D");
+            int hand = System.Array.IndexOf(data.bones, "Mao_D");
+            if (forearm < 0 || hand < 0) return null;
+
+            Mesh source = data.mesh;
+            Vector3[] positions = source.vertices;
+            Vector3[] normals = source.normals;
+            Vector2[] uv = source.uv;
+            BoneWeight[] weights = source.boneWeights;
+
+            // A junta que mais pesa em cada vértice.
+            var owner = new int[positions.Length];
+            Vector3 forearmSum = Vector3.zero, handSum = Vector3.zero;
+            int forearmCount = 0, handCount = 0;
+            for (int i = 0; i < positions.Length; i++)
+            {
+                BoneWeight w = weights[i];
+                int bone = w.boneIndex0;
+                float best = w.weight0;
+                if (w.weight1 > best) { best = w.weight1; bone = w.boneIndex1; }
+                if (w.weight2 > best) { best = w.weight2; bone = w.boneIndex2; }
+                if (w.weight3 > best) { bone = w.boneIndex3; }
+                owner[i] = bone;
+                if (bone == forearm) { forearmSum += positions[i]; forearmCount++; }
+                else if (bone == hand) { handSum += positions[i]; handCount++; }
+            }
+            if (forearmCount == 0 || handCount == 0) return null;
+
+            // Eixo do antebraço: do meio dele para o meio da mão. O punho é o vértice do antebraço
+            // mais adiante nesse eixo.
+            Vector3 middle = forearmSum / forearmCount;
+            Vector3 axis = (handSum / handCount - middle).normalized;
+            float reach = float.NegativeInfinity;
+            for (int i = 0; i < positions.Length; i++)
+                if (owner[i] == forearm) reach = Mathf.Max(reach, Vector3.Dot(positions[i] - middle, axis));
+            Vector3 wristPoint = middle + axis * reach;
+            // Dedos em +Y; o polegar (para a frente de quem veste, +Z no modelo) fica em +Z.
+            Vector3 thumbSide = (Vector3.forward - axis * Vector3.Dot(Vector3.forward, axis)).normalized;
+            Quaternion turn = Quaternion.Inverse(Quaternion.LookRotation(thumbSide, axis));
+            // Para o meio do corpo, perpendicular ao braço (no modelo, +X é a direita de quem veste).
+            Vector3 inward = (Vector3.left - axis * Vector3.Dot(Vector3.left, axis)).normalized;
+
+            var map = new Dictionary<int, int>();
+            var outPositions = new List<Vector3>();
+            var outNormals = new List<Vector3>();
+            var outUv = new List<Vector2>();
+            var mesh = new Mesh { name = "MangaDoTraje", hideFlags = HideFlags.DontSave };
+            var parts = new List<int[]>();
+
+            for (int s = 0; s < source.subMeshCount; s++)
+            {
+                int[] triangles = source.GetTriangles(s);
+                var kept = new List<int>();
+                for (int t = 0; t + 2 < triangles.Length; t += 3)
+                {
+                    // Corte reto no punho (e não pela junta que pesa mais, que deixa a borda em dentes):
+                    // entra o que é do braço e o pouco da luva que fica antes do plano do punho.
+                    bool inside = true;
+                    for (int k = 0; k < 3; k++)
+                    {
+                        int v = triangles[t + k];
+                        int o = owner[v];
+                        Vector3 fromWrist = positions[v] - wristPoint;
+                        float along = Vector3.Dot(fromWrist, axis);
+                        // Do punho até perto do ombro. No antebraço e no cotovelo vale tudo o que o
+                        // braço move (a manga é folgada); mais para cima, só o tubo do braço: o que a
+                        // junta do braço move no lado do tronco sobraria solto na tela.
+                        // O braço pende junto do corpo, e a lateral do tronco e do quadril também
+                        // segue as juntas do braço (os pesos são por distância): do lado de dentro
+                        // (para o meio do corpo) o corte é mais rente.
+                        Vector3 off = fromWrist - axis * along;
+                        bool tube = along > 0f
+                            ? o == hand && off.magnitude < 0.13f
+                            : along > -0.62f && off.magnitude < (along > -0.36f ? 0.16f : 0.13f) && Vector3.Dot(off, inward) < 0.085f;
+                        if (!tube || (o != forearm && o != arm && o != hand)) { inside = false; break; }
+                    }
+                    if (!inside) continue;
+
+                    for (int k = 0; k < 3; k++)
+                    {
+                        int v = triangles[t + k];
+                        if (!map.TryGetValue(v, out int index))
+                        {
+                            index = outPositions.Count;
+                            map[v] = index;
+                            outPositions.Add(turn * (positions[v] - wristPoint));
+                            outNormals.Add(turn * normals[v]);
+                            outUv.Add(uv[v]);
+                        }
+                        kept.Add(index);
+                    }
+                }
+                parts.Add(kept.ToArray());
+            }
+            if (outPositions.Count == 0) return null;
+            KeepLargestIsland(outPositions, parts);
+
+            mesh.indexFormat = outPositions.Count > 65000 ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
+            mesh.SetVertices(outPositions);
+            mesh.SetNormals(outNormals);
+            mesh.SetUVs(0, outUv);
+            mesh.subMeshCount = parts.Count;
+            for (int s = 0; s < parts.Count; s++) mesh.SetTriangles(parts[s], s, false);
+            mesh.RecalculateBounds();
+            mesh.RecalculateTangents();
+            return mesh;
+        }
+
+        // Fica só o maior pedaço ligado (a manga): bolsos, alças e sobras que o braço também move
+        // são ilhas à parte. Vértices no mesmo lugar contam como um só (o UV corta a malha).
+        static void KeepLargestIsland(List<Vector3> positions, List<int[]> parts)
+        {
+            var group = new int[positions.Count];
+            var byPlace = new Dictionary<Vector3Int, int>();
+            for (int i = 0; i < group.Length; i++)
+            {
+                var key = Vector3Int.RoundToInt(positions[i] * 2000f);
+                if (byPlace.TryGetValue(key, out int first)) group[i] = first;
+                else { byPlace[key] = i; group[i] = i; }
+            }
+
+            int Find(int i)
+            {
+                while (group[i] != i) { group[i] = group[group[i]]; i = group[i]; }
+                return i;
+            }
+
+            foreach (int[] triangles in parts)
+                for (int t = 0; t + 2 < triangles.Length; t += 3)
+                {
+                    int a = Find(triangles[t]), b = Find(triangles[t + 1]), c = Find(triangles[t + 2]);
+                    group[b] = a;
+                    group[Find(c)] = a;
+                }
+
+            var size = new Dictionary<int, int>();
+            foreach (int[] triangles in parts)
+                for (int t = 0; t + 2 < triangles.Length; t += 3)
+                {
+                    int root = Find(triangles[t]);
+                    size[root] = size.TryGetValue(root, out int n) ? n + 1 : 1;
+                }
+
+            int best = -1, bestSize = 0;
+            foreach (KeyValuePair<int, int> pair in size)
+                if (pair.Value > bestSize) { bestSize = pair.Value; best = pair.Key; }
+
+            for (int s = 0; s < parts.Count; s++)
+            {
+                var kept = new List<int>();
+                int[] triangles = parts[s];
+                for (int t = 0; t + 2 < triangles.Length; t += 3)
+                    if (Find(triangles[t]) == best) { kept.Add(triangles[t]); kept.Add(triangles[t + 1]); kept.Add(triangles[t + 2]); }
+                parts[s] = kept.ToArray();
+            }
+        }
+
+        /// <summary>Monta as peças. Pode ser chamado mais de uma vez; só a primeira constrói.</summary>
+        public void Build()
+        {
+            if (_built) return;
+            _built = true;
+
+            Material glove = gloveMaterial != null ? gloveMaterial : suitMaterial;
+            Mesh arm = ModelArm();
+
+            // Neste objeto, +Z é para a frente (para longe do olho), +Y para cima e +X para a
+            // direita. A mão fica perto da origem, com a caneta apontando para a frente.
+            Transform hand = FigureKit.Joint(transform, "Mao", new Vector3(-0.005f, 0.012f, 0.03f), new Vector3(-12f, -24f, -38f));
             Transform grip = FigureKit.Joint(hand, "Caneta", new Vector3(-0.022f, -0.022f, 0.012f));
             grip.localRotation = Quaternion.FromToRotation(Vector3.up, new Vector3(-0.10f, 0.30f, 0.95f).normalized);
-            Transform nib = FigureKit.Limb(grip, "Caneta_Ponta", 0.155f, 0.0058f, false, penMaterial, false);
+            Transform nib = FigureKit.Limb(grip, "Caneta_Ponta", 0.155f, arm != null ? modelPenRadius : 0.0058f, false, penMaterial, false);
             PenRenderer = grip.Find("Caneta_Peca").GetComponent<Renderer>();
             FigureKit.Ball(nib, "Bico", new Vector3(0f, 0.006f, 0f), new Vector3(0.006f, 0.018f, 0.006f), glove, false);
+
+            if (arm != null) PlaceModelArm(arm, grip);
+            else BuildCodeHand(hand, glove);
 
             // A ponta é o fim do bico (esfera de 18 mm de altura, 6 mm acima da junta).
             _tip = transform.InverseTransformPoint(nib.TransformPoint(0f, 0.015f, 0f));
