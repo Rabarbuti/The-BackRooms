@@ -130,6 +130,10 @@ namespace BackRooms.Entities
         readonly NetworkVariable<int> _shaft = new NetworkVariable<int>(-1);
         readonly NetworkVariable<bool> _listening = new NetworkVariable<bool>();
         readonly NetworkVariable<bool> _taking = new NetworkVariable<bool>();
+        readonly NetworkVariable<bool> _holding = new NetworkVariable<bool>();
+
+        /// <summary>Verdadeiro enquanto leva alguém pelo pescoço (em todas as máquinas: o braço erguido).</summary>
+        public bool Holding => _holding.Value;
 
         readonly List<ElevatorDoors> _shafts = new List<ElevatorDoors>();
         readonly List<Transform> _indicators = new List<Transform>();
@@ -446,6 +450,13 @@ namespace BackRooms.Entities
 
             if (Phase == AttendantPhase.Out)
             {
+                // Levando alguém: não escuta nem vai embora antes de entregar.
+                if (Deliver(now))
+                {
+                    _listening.Value = false;
+                    return false;
+                }
+
                 if (now >= _leaveAt && !_taking.Value && State != EntityState.Feed)
                 {
                     _listening.Value = false;
@@ -577,7 +588,96 @@ namespace BackRooms.Entities
 
         // ---------------------------------------------------------------- Levar para a cabine
 
-        protected override void Catch(PlayerNetwork player) => Take(player);
+        /// <summary>Quantas vezes pegou alguém longe da cabine e o levou andando até ela (host).</summary>
+        public int Carries { get; private set; }
+
+        /// <summary>Verdadeiro (no host) enquanto leva alguém para o elevador.</summary>
+        public bool Carrying => _carried.Count > 0;
+
+        [Tooltip("Tempo máximo levando alguém até o elevador; passado isso, a vítima vai direto para a cabine.")]
+        public float carrySeconds = 70f;
+
+        readonly List<PlayerNetwork> _carried = new List<PlayerNetwork>();
+        float _carryUntil;
+
+        // No andar, quem ele pega é levado pelo pescoço, na mão erguida, até perto dos elevadores, e
+        // é lá que o sinal cai. Na cabine ou saindo dela, vai direto para dentro.
+        protected override void Catch(PlayerNetwork player)
+        {
+            if (Phase == AttendantPhase.Out) Carry(player);
+            else Take(player);
+        }
+
+        void Carry(PlayerNetwork player)
+        {
+            if (player == null || Shaft < 0 || _carried.Contains(player)) return;
+            _carried.Add(player);
+            Carries++;
+            _carryUntil = Time.time + carrySeconds;
+            _carryMoved = Time.time;
+            _carryFrom = transform.position;
+            _holding.Value = true;
+            CarryRpc(player.OwnerClientId, carrySeconds + 15f);
+        }
+
+        float _carryMoved;
+        Vector3 _carryFrom;
+
+        [Rpc(SendTo.Everyone)]
+        void CarryRpc(ulong clientId, float seconds)
+        {
+            PlayerNetwork local = PlayerNetwork.Local;
+            if (local == null || local.OwnerClientId != clientId) return;
+            AttendantBody body = GetComponent<AttendantBody>();
+            local.controller.GetCarried(transform, body != null ? body.HoldHand : null, seconds);
+        }
+
+        [Rpc(SendTo.Everyone)]
+        void DropRpc(ulong clientId)
+        {
+            PlayerNetwork local = PlayerNetwork.Local;
+            if (local == null || local.OwnerClientId != clientId) return;
+            local.controller.EndCarry();
+        }
+
+        // Host, com alguém na mão: anda até perto dos elevadores e lá o sinal da vítima cai.
+        // Verdadeiro enquanto está ocupado com isso. Chegou é: perto da porta dele, ou o caminho
+        // acabou, ou parou de andar (a frente da porta pode ter móvel no caminho).
+        bool Deliver(float now)
+        {
+            if (_carried.Count == 0) return false;
+            if (State == EntityState.Feed)
+            {
+                _carryMoved = now;
+                _carryFrom = transform.position;
+                return true;
+            }
+
+            Vector3 front = FrontPoint(Shaft);
+            float away = Flat(transform.position - front).magnitude;
+            if (Flat(transform.position - _carryFrom).magnitude > 0.4f)
+            {
+                _carryFrom = transform.position;
+                _carryMoved = now;
+            }
+            bool stopped = now - _carryMoved > 1.5f;
+
+            if (away < 2.5f || ((Arrived || stopped) && away < 9f) || now - _carryMoved > 6f || now >= _carryUntil)
+            {
+                foreach (PlayerNetwork player in _carried)
+                    if (player != null && player.IsSpawned) DropRpc(player.OwnerClientId);
+                Takes += _carried.Count;
+                _carried.Clear();
+                _holding.Value = false;
+                _listenUntil = 0f;
+                _nextListen = now + listenEvery;
+                return false;
+            }
+
+            if (Flat(Goal - front).sqrMagnitude > 0.25f || State != EntityState.Investigate)
+                GoTo(front, EntityState.Investigate, carrySeconds);
+            return true;
+        }
 
         void Take(PlayerNetwork player)
         {

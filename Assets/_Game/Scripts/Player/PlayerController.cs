@@ -146,6 +146,19 @@ namespace BackRooms.Player
         /// </summary>
         public bool IsTaken { get; private set; }
 
+        /// <summary>
+        /// Pego pelo Ascensorista longe da cabine: ele o leva pelo pescoço, na mão erguida, até perto
+        /// dos elevadores, e lá cai o sinal (<see cref="EndCarry"/>). Sem controle, pendurado na mão
+        /// dele e de frente para ele. Vale junto com <see cref="IsTaken"/>.
+        /// </summary>
+        public bool IsCarried { get; private set; }
+
+        Transform _carrier, _carryHand;
+        /// <summary>Do chão até o pescoço do jogador, por onde ele é segurado, em metros.</summary>
+        const float NeckHeight = 1.42f;
+        /// <summary>O mais alto que os pés saem do chão pendurado, em metros.</summary>
+        const float CarryLift = 0.45f;
+
         /// <summary>Caindo, pego ou levado: sem controle, a caminho da sala inicial.</summary>
         public bool IsReturning => IsFalling || IsCaught || IsTaken;
 
@@ -197,8 +210,11 @@ namespace BackRooms.Player
         /// </summary>
         public void GetTaken(Vector3 into, float yaw, float seconds)
         {
-            if (IsReturning || !enabled) return;
+            // Quem vinha sendo levado chega aqui já sem controle: é o fim da viagem.
+            if ((IsReturning && !IsCarried) || !enabled) return;
 
+            IsCarried = false;
+            _carrier = _carryHand = null;
             _furniture = HideKind.None;
             Teleport(into, yaw);
             _pitch = 0f;
@@ -206,6 +222,40 @@ namespace BackRooms.Player
             _takenTimer = seconds;
             // Avisa a rede de que foi um salto (os outros não o veem deslizar até a cabine).
             Respawned?.Invoke();
+        }
+
+        /// <summary>
+        /// Chamado (no dono) quando o Ascensorista pega este jogador longe da cabine: perde o
+        /// controle e passa a ser puxado atrás de <paramref name="carrier"/>, olhando para as costas
+        /// dele, até o <see cref="GetTaken"/> da chegada. Se ele sumir, ou passados
+        /// <paramref name="maxSeconds"/>, cai o sinal como numa captura comum.
+        /// </summary>
+        public void GetCarried(Transform carrier, Transform hand, float maxSeconds)
+        {
+            if (IsReturning || !enabled || carrier == null) return;
+            _carryHand = hand;
+
+            _furniture = HideKind.None;
+            ClearSeat();
+            _horizontalVelocity = Vector3.zero;
+            _pitch = 0f;
+            IsTaken = true;
+            IsCarried = true;
+            _carrier = carrier;
+            _takenTimer = maxSeconds;
+        }
+
+        /// <summary>
+        /// Fim de ser levado (no dono): quem o levava chegou aonde ia e o sinal cai ali mesmo, como
+        /// numa captura comum.
+        /// </summary>
+        public void EndCarry()
+        {
+            if (!IsCarried) return;
+            IsCarried = false;
+            _carrier = _carryHand = null;
+            IsTaken = false;
+            GetCaught();
         }
 
         /// <summary>Água acima dos pés, em metros (0 fora d'água ou em nível sem água).</summary>
@@ -783,7 +833,22 @@ namespace BackRooms.Player
             if (IsTaken)
             {
                 _takenTimer -= dt;
-                if (_takenTimer > 0f) return;
+
+                // Sendo levado: pendurado pelo pescoço na mão erguida de quem o leva, de frente para
+                // ele. Sem a mão (corpo sem modelo), fica à frente dele, um pouco erguido.
+                if (IsCarried && _carrier != null && _takenTimer > 0f)
+                {
+                    float floor = _carrier.position.y;
+                    Vector3 neck = _carryHand != null ? _carryHand.position + _carrier.forward * 0.12f
+                                                      : _carrier.position + _carrier.forward * 0.8f + Vector3.up * (NeckHeight + 0.3f);
+                    float feet = Mathf.Clamp(neck.y - NeckHeight, floor + 0.05f, floor + CarryLift);
+                    Teleport(new Vector3(neck.x, feet, neck.z), _carrier.eulerAngles.y + 180f);
+                    return;
+                }
+
+                if (!IsCarried && _takenTimer > 0f) return;
+                IsCarried = false;
+                _carrier = _carryHand = null;
                 IsTaken = false;
                 GetCaught();
                 return;

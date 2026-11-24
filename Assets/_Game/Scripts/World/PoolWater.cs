@@ -51,9 +51,11 @@ namespace BackRooms.World
 
         [Header("Ondulação")]
         [Tooltip("Velocidade da ondulação grande (mapa de normais), em repetições por segundo.")]
-        public Vector2 rippleSpeed = new Vector2(0.016f, 0.012f);
+        // As duas camadas rolam em sentidos opostos (a grande devagar, a miúda mais depressa): com as
+        // duas indo para o mesmo lado a água inteira parecia escorregar, e o fundo junto, pela refração.
+        public Vector2 rippleSpeed = new Vector2(0.006f, 0.0045f);
         [Tooltip("Velocidade da ondulação miúda (mapa de detalhe), em repetições por segundo, para outro lado.")]
-        public Vector2 detailSpeed = new Vector2(-0.024f, 0.032f);
+        public Vector2 detailSpeed = new Vector2(-0.022f, -0.017f);
 
         [Header("Cáustica")]
         [Tooltip("Velocidade das duas redes de linhas, em repetições por segundo.")]

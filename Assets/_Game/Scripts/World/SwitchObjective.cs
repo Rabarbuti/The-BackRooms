@@ -479,6 +479,9 @@ namespace BackRooms.World
 
         // Uma parede lisa daquele lado: o raio do meio da célula bate de frente nela perto da linha
         // da grade, e dois raios 35 cm para os lados também (a peça cabe); nada na frente dela.
+        /// <summary>As válvulas das Piscinas ficam pelo menos a esta distância da porta de saída, em metros (no plano).</summary>
+        public const float ValveFromExit = 10f;
+
         static bool FindFace(LevelBuilder level, LevelData data, int x, int z, WallSide side, float height, out Vector3 point, out Vector3 normal)
         {
             point = normal = Vector3.zero;
@@ -515,6 +518,13 @@ namespace BackRooms.World
 
             normal = hit.normal;
             point = hit.point;
+            // Nas Piscinas, nenhuma válvula perto da porta de saída: abrir e sair seria um passo só.
+            if (data.HasPools)
+            {
+                Vector3 door = level.CellCenter(data.ExitX, data.ExitZ) +
+                               level.transform.TransformDirection(SideDirection(data.ExitSide)) * (LevelBuilder.Cell * 0.5f);
+                if (Vector3.ProjectOnPlane(point - door, Vector3.up).magnitude < ValveFromExit) return false;
+            }
             Vector3 front = point + normal * 0.45f;
             Quaternion turn = Quaternion.LookRotation(normal, Vector3.up);
             if (Blocked(front, new Vector3(0.45f, 0.5f, 0.35f), turn)) return false;

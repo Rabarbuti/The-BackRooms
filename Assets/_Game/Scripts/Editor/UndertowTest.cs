@@ -98,6 +98,8 @@ namespace BackRooms.EditorTools
             Run(false, SoloRole);
         }
 
+        static bool _crawlStarted;
+
         public static void BatchRun() => Run(true, SoloRole);
         public static void BatchHost() => Run(true, HostRole);
         public static void BatchJoin() => Run(true, JoinRole);
@@ -655,11 +657,32 @@ namespace BackRooms.EditorTools
                         _point = _creature.transform.position;
                         _stageStart = Now;
                         _step = 2;
+                        _crawlStarted = false;
                         break;
                     }
                     Press(InStage % 1.4f < 0.7f ? Key.W : Key.S);
                     if (_step == 2)
                     {
+                        // Ele acorda (Waking) e vira para o barulho antes de sair do lugar: a velocidade
+                        // se mede a partir do primeiro palmo andado, não do instante em que ouviu.
+                        if (!_crawlStarted)
+                        {
+                            if (Flat(_creature.transform.position - _point).magnitude > 0.1f)
+                            {
+                                _crawlStarted = true;
+                                _point = _creature.transform.position;
+                                _stageStart = Now;
+                            }
+                            else if (InStage > 15f) { Finish(false, $"drenada, ouviu e não saiu do lugar em 15 s ({_creature.State})"); return; }
+                            break;
+                        }
+                        // Pegou antes de dar tempo de medir (a cabeça fica 1,7 m à frente): arrastou-se, e chega.
+                        if (_creature.Catches > _catches)
+                        {
+                            Notes.Add($"drenada: arrastou-se {Flat(_creature.transform.position - _point).magnitude:F1} m até quem andava no fundo");
+                            _step = 3;
+                            break;
+                        }
                         if (InStage < 3f) break;
                         float speed = Flat(_creature.transform.position - _point).magnitude / InStage;
                         if (!_creature.Crawling) { Finish(false, "drenada, no fundo seco ele não se arrasta"); return; }

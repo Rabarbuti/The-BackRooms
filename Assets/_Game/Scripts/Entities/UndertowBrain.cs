@@ -82,10 +82,10 @@ namespace BackRooms.Entities
         public static bool RoamPaused;
 
         [Header("Velocidade na água funda (m/s). O jogador nada a 1,26.")]
-        public float returnSpeed = 1.4f;
-        public float investigateSpeed = 2.3f;
+        public float returnSpeed = 1.8f;
+        public float investigateSpeed = 2.9f;
         [Tooltip("Ouviu alguém há pouco e de perto: arranca.")]
-        public float huntSpeed = 3.3f;
+        public float huntSpeed = 4f;
         [Tooltip("Arrastando-se no fundo de uma piscina drenada (o jogador anda a 2,8).")]
         public float crawlSpeed = 0.9f;
         public float acceleration = 5f;
@@ -93,13 +93,13 @@ namespace BackRooms.Entities
         [Tooltip("Graus por segundo. Giro suave: o corpo tem 3,4 m e não pode varrer parede.")]
         public float turnSpeed = 150f;
 
-        [Header("Maré alta, fora da água funda (o jogador vadeia o seco alagado a 1,54 m/s)")]
-        public float floodInvestigateSpeed = 1.6f;
-        public float floodHuntSpeed = 2.2f;
+        [Header("Maré alta, fora da água funda (o jogador vadeia o seco alagado a 1,54 m/s): é quando ele é mais perigoso")]
+        public float floodInvestigateSpeed = 2.6f;
+        public float floodHuntSpeed = 3.4f;
         [Tooltip("O bote, nos últimos metros, ouvindo a presa agora.")]
-        public float lungeSpeed = 3f;
+        public float lungeSpeed = 4.4f;
         public float lungeRange = 2.5f;
-        public float prowlSpeed = 1.2f;
+        public float prowlSpeed = 2f;
         [Tooltip("Rondando: vai a um ponto a esta distância (m) de um jogador...")]
         public float prowlNear = 8f;
         public float prowlFar = 18f;

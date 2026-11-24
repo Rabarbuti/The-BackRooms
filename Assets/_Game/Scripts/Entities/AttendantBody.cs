@@ -112,9 +112,11 @@ namespace BackRooms.Entities
 
             bool listening = _brain != null && _brain.IsSpawned && _brain.Listening;
             _listen = Mathf.MoveTowards(_listen, listening ? 1f : 0f, dt * 2.5f);
+            bool holding = _brain != null && _brain.IsSpawned && _brain.Holding;
+            _hold = Mathf.MoveTowards(_hold, holding ? 1f : 0f, dt * 3f);
 
             float still = Mathf.Clamp01(1f - _speed / 0.3f);
-            Pose(_phase, _speed, still, _listen, Time.time);
+            Pose(_phase, _speed, still, _listen, Time.time, _hold);
         }
 
         void SetShown(bool shown)
@@ -135,7 +137,7 @@ namespace BackRooms.Entities
         /// <paramref name="listen"/> de 0 a 1 (cabeça inclinada de lado, escutando). Público para a
         /// ferramenta de prévia, que fotografa fora do Play.
         /// </summary>
-        public void Pose(float phase, float speed, float still, float listen, float time)
+        public void Pose(float phase, float speed, float still, float listen, float time, float hold = 0f)
         {
             if (!_built) Build();
 
@@ -177,7 +179,21 @@ namespace BackRooms.Entities
             _upperArm[1].localRotation = Quaternion.Euler(-(10f + 10f * still + 50f * rush - swing * 10f * walk + drift), 6f * still, -(12f + 4f * listen));
             _forearm[1].localRotation = Quaternion.Euler(-(18f + 10f * still + 30f * rush), -10f * still, 0f);
             _hand[1].localRotation = Quaternion.Euler(-10f * still, -20f * still, -6f);
+
+            // Levando alguém pelo pescoço: o braço esquerdo erguido à frente, quase esticado, acima
+            // do ombro (o tronco vai curvado, então o braço sobe mais que 90° em relação a ele).
+            if (hold > 0f)
+            {
+                _upperArm[1].localRotation = Quaternion.Slerp(_upperArm[1].localRotation, Quaternion.Euler(-(118f + lean * 0.5f), 0f, -4f), hold);
+                _forearm[1].localRotation = Quaternion.Slerp(_forearm[1].localRotation, Quaternion.Euler(-14f, 0f, 0f), hold);
+                _hand[1].localRotation = Quaternion.Slerp(_hand[1].localRotation, Quaternion.Euler(20f, 0f, 0f), hold);
+            }
         }
+
+        float _hold;
+
+        /// <summary>A mão que segura a vítima pelo pescoço (a esquerda; a direita leva a bengala).</summary>
+        public Transform HoldHand => _built ? _hand[1] : null;
 
         // ---------------------------------------------------------------- Montagem
 

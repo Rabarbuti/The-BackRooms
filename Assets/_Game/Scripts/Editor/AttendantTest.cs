@@ -73,7 +73,10 @@ namespace BackRooms.EditorTools
         static Vector3 _mark, _spot, _spotAxis;
         static float _closest, _subStart;
         static int _heardBefore, _takesBefore, _capturesBefore, _sub;
-        static bool _sawTaken, _sawInCab, _sawDoorShut;
+        static bool _sawTaken, _sawInCab, _sawDoorShut, _sawCarried;
+        static float _carriedTo;
+        // Quanto a mais os prazos dão para ele levar a vítima andando até o elevador.
+        const float CarryTime = 90f;
         static Vector2Int _room;
         static int _cabUsed;
 
@@ -386,7 +389,7 @@ namespace BackRooms.EditorTools
                             Press(Key.LeftCtrl);
                             _capturesBefore = _local.controller.Captures;
                             _takesBefore = _brain.Takes;
-                            _sawTaken = _sawInCab = _sawDoorShut = false;
+                            _sawTaken = _sawInCab = _sawDoorShut = _sawCarried = false;
                             Notes.Add($"correndo a {Flat(_mark - _spot).magnitude:F1} m, ele ouviu em {Now - _subStart:F1} s");
                             _sub = 2;
                             _subStart = Now;
@@ -404,7 +407,7 @@ namespace BackRooms.EditorTools
                         break;
                     }
                     if (why != null) { Finish(false, why); return; }
-                    if (Now - _subStart > 25f) Finish(false, "ouviu a corrida, mas não pegou o jogador agachado no caminho em 25 s" + Status());
+                    if (Now - _subStart > 25f + CarryTime) Finish(false, "ouviu a corrida, mas não pegou o jogador agachado no caminho a tempo" + Status());
                     break;
                 }
 
@@ -423,7 +426,7 @@ namespace BackRooms.EditorTools
                         _mark = outside;
                         _takesBefore = _brain.Takes;
                         _capturesBefore = _local.controller.Captures;
-                        _sawTaken = _sawInCab = _sawDoorShut = false;
+                        _sawTaken = _sawInCab = _sawDoorShut = _sawCarried = false;
                         _sub = 1;
                         _subStart = Now;
                         break;
@@ -448,7 +451,7 @@ namespace BackRooms.EditorTools
                         break;
                     }
                     if (why != null) { Finish(false, why); return; }
-                    if (Now - _subStart > 30f) Finish(false, "entrou na salinha e não pegou o jogador" + Status());
+                    if (Now - _subStart > 30f + CarryTime) Finish(false, "entrou na salinha e não pegou o jogador" + Status());
                     break;
                 }
 
@@ -464,9 +467,9 @@ namespace BackRooms.EditorTools
                         _director.SpawnAt(_brain.FrontPoint(_brain.Shaft), Vector3.forward);
                         _heardBefore = _brain.WorldNoisesHeard;
                         int emitted = WorldNoise.Emitted;
-                        objective.HostArm(0, null);
-                        objective.HostArm(1, null);
-                        if (!objective.Complete) { Finish(false, "dois acionadores armados e o alarme não disparou"); return; }
+                        // O alarme pede todos os acionadores da fase.
+                        for (int point = 0; point < objective.Count; point++) objective.HostArm(point, null);
+                        if (!objective.Complete) { Finish(false, "todos os acionadores armados e o alarme não disparou"); return; }
                         if (WorldNoise.Emitted == emitted) { Finish(false, "o alarme disparou sem barulho no mundo (WorldNoise)"); return; }
                         _spot = WorldNoise.LastAt;
                         _mark = _brain.transform.position;
@@ -561,7 +564,7 @@ namespace BackRooms.EditorTools
                         if (door.Openness > 0.02f) { Finish(false, "a cabine trancada abriu sozinha"); return; }
                         _capturesBefore = _local.controller.Captures;
                         _takesBefore = _brain.Takes;
-                        _sawTaken = _sawInCab = _sawDoorShut = false;
+                        _sawTaken = _sawInCab = _sawDoorShut = _sawCarried = false;
                         _brain.ForceArrival(cab);
                         if (_brain.Shaft != cab) { Finish(false, "não aceitou chegar pela cabine trancada com o jogador dentro"); return; }
                         _sub = 4;
@@ -633,10 +636,10 @@ namespace BackRooms.EditorTools
                             Finish(true, string.Join("; ", Notes) + $"; o cliente voltou ao início; chegadas {_brain.Arrivals}, levados {_brain.Takes}");
                             return;
                         }
-                        if (Now - _subStart > 20f) Finish(false, "pegou o cliente, mas ele não voltou ao início em 20 s");
+                        if (Now - _subStart > 20f) Finish(false, "levou o cliente para a cabine, mas ele não voltou ao início em 20 s");
                         break;
                     }
-                    if (Now - _subStart > 20f) Finish(false, "não pegou o cliente em 20 s" + Status());
+                    if (Now - _subStart > 20f + CarryTime) Finish(false, "não pegou o cliente e o levou à cabine a tempo" + Status());
                     break;
                 }
             }
@@ -652,6 +655,11 @@ namespace BackRooms.EditorTools
             if (c.IsTaken)
             {
                 _sawTaken = true;
+                if (c.IsCarried)
+                {
+                    _sawCarried = true;
+                    _carriedTo = Vector3.ProjectOnPlane(_brain.transform.position - _brain.FrontPoint(shaft), Vector3.up).magnitude;
+                }
                 if (_brain.InCab(_local.transform.position, shaft)) _sawInCab = true;
                 if (_brain.Shafts[shaft].Openness < 0.1f) _sawDoorShut = true;
                 if (c.Captures != _capturesBefore) { why = "o sinal caiu antes de terminar a ida para a cabine"; return false; }
@@ -662,13 +670,15 @@ namespace BackRooms.EditorTools
                 if (c.Captures != _capturesBefore) why = "foi pego do jeito comum, sem ser levado para a cabine";
                 return false;
             }
-            if (!_sawInCab) { why = "levado, mas não apareceu dentro da cabine dele"; return false; }
-            if (!_sawDoorShut) { why = "levado para a cabine, mas a porta não fechou com ele dentro"; return false; }
+            // Levado pelo pescoço, o sinal cai perto dos elevadores, sem passar pela cabine.
+            if (!_sawCarried && !_sawInCab) { why = "levado, mas não apareceu dentro da cabine dele"; return false; }
+            if (!_sawCarried && !_sawDoorShut) { why = "levado para a cabine, mas a porta não fechou com ele dentro"; return false; }
             if (c.Captures == _capturesBefore) { why = "saiu da cabine sem cair o sinal"; return false; }
             if (c.IsReturning) return false;
             Vector2Int cell = Cell(_local.transform.position);
             if (!_level.Data.InRoom(cell.x, cell.y)) { why = "depois do sinal, não voltou para a cabine do início"; return false; }
-            why = "apareceu na cabine dele, a porta fechou, caiu o sinal e voltou ao início";
+            why = _sawCarried ? $"foi levado pelo pescoço até {_carriedTo:F1} m da porta do elevador dele, caiu o sinal lá e voltou ao início"
+                              : "apareceu na cabine dele, a porta fechou, caiu o sinal e voltou ao início";
             return true;
         }
 
@@ -737,7 +747,7 @@ namespace BackRooms.EditorTools
                         // Vai para o lugar mais longe do saguão e espera parado.
                         _local.controller.Teleport(FarSpot(), 0f);
                         _capturesBefore = _local.controller.Captures;
-                        _sawTaken = _sawInCab = _sawDoorShut = false;
+                        _sawTaken = _sawInCab = _sawDoorShut = _sawCarried = false;
                         Next();
                     }
                     break;

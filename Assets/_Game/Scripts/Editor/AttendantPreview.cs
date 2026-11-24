@@ -223,6 +223,13 @@ namespace BackRooms.EditorTools
                 body.Pose(0.25f, 3.4f, 0f, 0f, 0.3f);
                 Shot("correndo", front + toLobby * 3.2f, front, -8f, true);
 
+                // 3b. Levando alguém pelo pescoço: o braço esquerdo erguido à frente, de lado e de frente.
+                figure.rotation = Quaternion.LookRotation(Vector3.Cross(Vector3.up, toLobby), Vector3.up);
+                body.Pose(0.3f, 1.1f, 0f, 0f, 0.3f, 1f);
+                Shot("levando_lado", front + toLobby * 4.2f, front, -10f, true);
+                figure.rotation = Quaternion.LookRotation(toLobby, Vector3.up);
+                Shot("levando_frente", front + toLobby * 3.2f, front, -12f, true);
+
                 // 4. No fim do corredor mais comprido, no claro e (com as luzes apagadas) só na lanterna.
                 if (Level0Preview.FindStretch(builder, out Vector3 from, out Vector3 to))
                 {

@@ -142,18 +142,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BackRooms.Entities.UndertowBrain
   ShowTopMostFoldoutHeaderGroup: 1
-  returnSpeed: 1.4
-  investigateSpeed: 2.3
-  huntSpeed: 3.3
+  returnSpeed: 1.8
+  investigateSpeed: 2.9
+  huntSpeed: 4
   crawlSpeed: 0.9
   acceleration: 5
   verticalSpeed: 2.2
   turnSpeed: 150
-  floodInvestigateSpeed: 1.6
-  floodHuntSpeed: 2.2
-  lungeSpeed: 3
+  floodInvestigateSpeed: 2.6
+  floodHuntSpeed: 3.4
+  lungeSpeed: 4.4
   lungeRange: 2.5
-  prowlSpeed: 1.2
+  prowlSpeed: 2
   prowlNear: 8
   prowlFar: 18
   prowlKeepAway: 7
